@@ -208,6 +208,11 @@ test("v0.5: after a compaction, the images from before it go back right after th
   assert.deepEqual(all.messages[0].content.map((b: any) => b.type === "image" ? "image" : b.text), ["summary", includedLabel(a, "en"), "image", includedLabel(c, "en"), "image"]);
   assert.ok(all.messages[1].content.startsWith("Context management note (from the context asset manager the user installed): "));
   assert.doesNotMatch(all.messages[1].content, /Not included this time/);
+  // Without the full note, this one says where an image checked again comes back: not in the user's new message.
+  assert.match(all.messages[1].content, /or one you asked for: an image the user checks again comes back there, not in the user's new message/);
+  assert.doesNotMatch(note, /comes back there, not in the user's new message/);
+  // Either way: saying earlier that it could not see one was no mistake.
+  for (const text of [note, all.messages[1].content]) assert.match(text, /that was because it was left out then; it was not a mistake/);
   // Claude Code's own system message after the summary (an effort change): the note joins it, keeping its fields.
   const marked = [request[0], { role: "system", content: [], output_config: { effort: "low" } }, ...request.slice(1)];
   const joined = addCompacted(marked, "summary", [a, c], [{ image: c, block: block(pngC) }], { lang: "en" });
