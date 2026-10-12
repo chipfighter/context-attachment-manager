@@ -359,3 +359,49 @@ test("v0.5: after a compaction, the images from before it go back after the summ
   assert.deepEqual(partsOf(sent(auto)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
   assert.match(sent(auto)[0].content[1].text, /cam_view_image/);
 });
+
+test("v0.5: the request writing a second summary is rewritten as usual; after it, the images from before both go back", async () => {
+  const { image, pngA, pngB, text, transcript } = await import("./claude-fixtures.ts");
+  const { rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
+  const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
+  const session = "11111111-2222-4333-8444-666666666666";
+  mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+  const t = transcript();
+  const save = () => writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  const body = (messages: any[]) => Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", tools: [{ name: "Read", input_schema: { type: "object" } }], messages }));
+  const sent = (out: any) => JSON.parse(out.body.toString("utf8")).messages;
+  const partsOf = (message: any) => message.content.map((block: any) =>
+    block.type === "image" ? `image:${block.source.data === pngA ? "A" : "B"}` : /^\[图片 (IMG-\d+) 已提供/.exec(block.text)?.[1] ?? block.text);
+  t.prompt([image(pngA), text("first")]);
+  t.assistant(text("A red square."));
+  t.boundary();
+  t.summary("first summary");
+  t.prompt([image(pngB), text("second")]);
+  t.assistant(text("A blue disc."));
+  save();
+  // Writing the second summary: the history since the first one, with B as Claude Code sends it; A goes back after the
+  // first summary, so the model writing it sees what the conversation saw.
+  const writing = rewriteClaudeBody(body([
+    { role: "user", content: "first summary" },
+    { role: "assistant", content: [text("A red square.")] },
+    { role: "user", content: [image(pngB), text("second")] },
+    { role: "assistant", content: [text("A blue disc.")] },
+    { role: "user", content: [text("CRITICAL: Respond with TEXT ONLY.")] },
+  ]), undefined, session, dir, home, {});
+  assert.deepEqual(writing.report.compacted, { at: 0, listed: 1, resent: ["IMG-001"] });
+  assert.deepEqual(partsOf(sent(writing)[0]), ["first summary", "IMG-001", "image:A"]);
+  assert.deepEqual(partsOf(sent(writing)[3]), ["image:B", "second"]);
+  // After the second compaction both are from before it: listed, and sent again after the new summary.
+  t.boundary();
+  t.summary("second summary");
+  t.prompt("And now?");
+  save();
+  const after = rewriteClaudeBody(body([
+    { role: "user", content: "second summary" },
+    { role: "assistant", content: [text("A blue disc.")] },
+    { role: "user", content: [text("And now?")] },
+  ]), undefined, session, dir, home, {});
+  assert.deepEqual(after.report.compacted, { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] });
+  assert.deepEqual(partsOf(sent(after)[0]), ["second summary", "IMG-001", "image:A", "IMG-002", "image:B"]);
+});

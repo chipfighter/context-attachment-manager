@@ -2,6 +2,24 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.5.0] - Unreleased
+
+Your choice survives compaction in Claude Code.
+
+### Features
+
+- When Claude Code compacts a conversation (`/compact`, or on its own when the context fills up), it replaces the history with a summary and stops sending the images from before it. The plugin now keeps your selection: the images you checked still go to the model, right after the summary and marked with their IDs, and the ones you unchecked stay out, with a placeholder there. With Auto-select on, pinned images go out and the model fetches the others by ID when it needs them. Change the selection any time; it applies from the next message.
+- The model is told which images came before the compaction and how to get one back (`need IMG-xxx`, or `cam_view_image` with Auto-select on), and that what it said about them while it could see them still stands.
+- The panel marks these images *Before compaction*, counts the checked ones in the request estimate, and the last-request line says how many it sent again.
+- The images come from Claude Code's own session record on your machine; nothing is copied.
+- In Codex, the panel and the requests it sends work as in 0.4.0.
+
+### Notes
+
+- Tested on Windows in Claude Desktop with Claude Code 2.1.295 and Claude Haiku 5.5, in Chinese and English, in sessions compacted with `/compact`: after the compaction the model answered from the images sent again; with one unchecked, it said it could not see it now, kept its earlier answers and asked with `need IMG-xxx`; checked again, it answered from the image. With Auto-select on, images from before the compaction can be fetched; in our test session, which had asked with `need IMG-xxx` many times before, the model kept asking that way until told it could fetch. A newer account was simulated as in 0.4, and the conversation went on.
+- Images sent again take up context like any other, and Claude Code's own context meter doesn't count them. If requests get large, uncheck some or switch on Auto-select: the plugin doesn't decide this for you. Anthropic limits each request to 100 images for models with a 200k-token context window (600 for others), each up to 8000 px (stricter with more than 20 images; under 2000 px is safe), and 32 MB in all.
+- After an image is checked again, the model sometimes says that its earlier "I can't see it" was a mistake. Its answer is right; the remark isn't, since the image really was left out then.
+
 ## [0.4.0] - 2026-10-11
 
 Now in Claude Desktop too, under a new name: Context Attachment Manager.
