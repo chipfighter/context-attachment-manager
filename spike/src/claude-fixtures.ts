@@ -32,7 +32,7 @@ export function transcript() {
     toolResult: (toolUseId: string, content: Json[], extra: Json = {}, parent?: string | null) => add({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseId, content }] }, toolUseResult: {}, ...extra }, parent),
     attachment: () => add({ type: "attachment", attachment: { type: "x" } }),
     boundary: () => add({ type: "system", subtype: "compact_boundary", compactMetadata: {}, logicalParentUuid: last }, null),
-    summary: () => add({ type: "user", isCompactSummary: true, message: { role: "user", content: "summary" } }),
+    summary: (content = "summary") => add({ type: "user", isCompactSummary: true, message: { role: "user", content } }),
     get last() { return last; },
   };
 }

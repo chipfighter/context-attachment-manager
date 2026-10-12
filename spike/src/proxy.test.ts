@@ -298,3 +298,110 @@ test("Anthropic refusing the thinking after an edited history is told apart from
   assert.equal(thinkingRejected(400, JSON.stringify({ error: { message: "max_tokens: too large" } })), false);
   assert.equal(thinkingRejected(500, rejected), false);
 });
+
+test("v0.5: after a compaction, the images from before it go back after the summary: sent again when kept, else placeholders", async () => {
+  const { image, pngA, pngB, pngC, text, transcript } = await import("./claude-fixtures.ts");
+  const { claudeNeedsRewrite, rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
+  const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
+  const session = "11111111-2222-4333-8444-555555555555";
+  const t = transcript();
+  const p1 = t.prompt([image(pngA), text("first")]);
+  t.assistant(text("A red square."));
+  t.prompt("Read c.png");
+  t.assistant({ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "C:\\work\\c.png" } });
+  t.toolResult("toolu_1", [image(pngC)]);
+  t.assistant(text("A white rectangle."));
+  mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+  const file = join(home, "projects", "D--work", `${session}.jsonl`);
+  writeFileSync(file, t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  // Before the compaction, with nothing unchecked: nothing to look at.
+  assert.equal(claudeNeedsRewrite(session, dir, home), false);
+  t.boundary();
+  t.summary();
+  const p3 = t.prompt([image(pngB), text("And now?")]);
+  writeFileSync(file, t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  assert.equal(claudeNeedsRewrite(session, dir, home), true);
+  const request = Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", thinking: { type: "adaptive" }, tools: [{ name: "Read", input_schema: { type: "object" } }], messages: [
+    { role: "user", content: "summary" },
+    { role: "assistant", content: [text("A white rectangle.")] },
+    { role: "user", content: [image(pngB), text("And now?")] },
+  ] }));
+  const sent = (out: any) => JSON.parse(out.body.toString("utf8")).messages;
+  const partsOf = (message: any) => message.content.map((block: any) =>
+    block.type === "image" ? `image:${block.source.data === pngA ? "A" : block.source.data === pngB ? "B" : "C"}`
+      : /^\[图片 (IMG-\d+) 已提供/.exec(block.text)?.[1] ?? /^\[图片 (IMG-\d+) 已省略/.exec(block.text)?.[1].replace(/^/, "omitted:") ?? block.text);
+  // Nothing unchecked: every image from before the compaction goes out again, and a short note follows.
+  const all = rewriteClaudeBody(request, undefined, session, dir, home, {});
+  assert.deepEqual(all.report.compacted, { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] });
+  assert.deepEqual(partsOf(sent(all)[0]), ["summary", "IMG-001", "image:A", "IMG-002", "image:C"]);
+  assert.equal(sent(all)[1].role, "system");
+  assert.match(sent(all)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：上面这条消息里，摘要之前的对话中有这些图片/);
+  assert.equal(all.report.noteAt, undefined);
+  // An unchecked one stays out: its placeholder after the summary, and the full note naming it.
+  writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" } } }, dir);
+  const some = rewriteClaudeBody(request, undefined, session, dir, home, {});
+  assert.deepEqual(some.report.compacted.resent, ["IMG-002"]);
+  assert.deepEqual(partsOf(sent(some)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
+  assert.match(sent(some)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：为了节省上下文/);
+  assert.match(sent(some)[1].content, /这次没有提供的是 IMG-001/);
+  assert.equal(some.report.noteAt, 1);
+  // One unchecked after the compaction too: its message gets only the short note, the full one being after the summary.
+  writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" }, [`${p3}#0`]: { id: "IMG-003", at: "2026-10-12T00:00:00Z" } } }, dir);
+  const both = sent(rewriteClaudeBody(request, undefined, session, dir, home, {}));
+  assert.deepEqual(both.map((message: any) => message.role), ["user", "system", "assistant", "user", "system"]);
+  assert.deepEqual(partsOf(both[3]), ["omitted:IMG-003", "And now?"]);
+  assert.match(both[4].content, /^上下文管理说明：上面这条消息里的 IMG-003/);
+  // Automatic selection: only the pinned ones go out again; the others are placeholders in its words.
+  writeSelection({ threadId: session, unchecked: {}, auto: true, autoSince: "2026-10-12T00:00:00Z", pinned: { "tool:toolu_1#0": { id: "IMG-002", at: "2026-10-12T00:00:00Z" } } } as any, dir);
+  const auto = rewriteClaudeBody(request, undefined, session, dir, home, {});
+  assert.deepEqual(auto.report.compacted.resent, ["IMG-002"]);
+  assert.deepEqual(partsOf(sent(auto)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
+  assert.match(sent(auto)[0].content[1].text, /cam_view_image/);
+});
+
+test("v0.5: the request writing a second summary is rewritten as usual; after it, the images from before both go back", async () => {
+  const { image, pngA, pngB, text, transcript } = await import("./claude-fixtures.ts");
+  const { rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
+  const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
+  const session = "11111111-2222-4333-8444-666666666666";
+  mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+  const t = transcript();
+  const save = () => writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  const body = (messages: any[]) => Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", tools: [{ name: "Read", input_schema: { type: "object" } }], messages }));
+  const sent = (out: any) => JSON.parse(out.body.toString("utf8")).messages;
+  const partsOf = (message: any) => message.content.map((block: any) =>
+    block.type === "image" ? `image:${block.source.data === pngA ? "A" : "B"}` : /^\[图片 (IMG-\d+) 已提供/.exec(block.text)?.[1] ?? block.text);
+  t.prompt([image(pngA), text("first")]);
+  t.assistant(text("A red square."));
+  t.boundary();
+  t.summary("first summary");
+  t.prompt([image(pngB), text("second")]);
+  t.assistant(text("A blue disc."));
+  save();
+  // Writing the second summary: the history since the first one, with B as Claude Code sends it; A goes back after the
+  // first summary, so the model writing it sees what the conversation saw.
+  const writing = rewriteClaudeBody(body([
+    { role: "user", content: "first summary" },
+    { role: "assistant", content: [text("A red square.")] },
+    { role: "user", content: [image(pngB), text("second")] },
+    { role: "assistant", content: [text("A blue disc.")] },
+    { role: "user", content: [text("CRITICAL: Respond with TEXT ONLY.")] },
+  ]), undefined, session, dir, home, {});
+  assert.deepEqual(writing.report.compacted, { at: 0, listed: 1, resent: ["IMG-001"] });
+  assert.deepEqual(partsOf(sent(writing)[0]), ["first summary", "IMG-001", "image:A"]);
+  assert.deepEqual(partsOf(sent(writing)[3]), ["image:B", "second"]);
+  // After the second compaction both are from before it: listed, and sent again after the new summary.
+  t.boundary();
+  t.summary("second summary");
+  t.prompt("And now?");
+  save();
+  const after = rewriteClaudeBody(body([
+    { role: "user", content: "second summary" },
+    { role: "assistant", content: [text("A blue disc.")] },
+    { role: "user", content: [text("And now?")] },
+  ]), undefined, session, dir, home, {});
+  assert.deepEqual(after.report.compacted, { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] });
+  assert.deepEqual(partsOf(sent(after)[0]), ["second summary", "IMG-001", "image:A", "IMG-002", "image:B"]);
+});
