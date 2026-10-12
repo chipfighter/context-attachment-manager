@@ -2,7 +2,7 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2026-10-13
 
 Your choice survives compaction in Claude Code.
 
