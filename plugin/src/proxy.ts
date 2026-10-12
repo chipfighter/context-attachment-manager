@@ -26,7 +26,7 @@ import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import { claudeHome, claudeImageData, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
-import { addCompacted, findRequestImages, rewriteMessages, type RequestImage, type Resend } from "./claude-rewrite.ts";
+import { addCompacted, findRequestImages, rewriteMessages, summaryAt, type RequestImage, type Resend } from "./claude-rewrite.ts";
 import { chainOf, fitThinking, readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./claude-thinking.ts";
 import { codexHome } from "./codexconfig.ts";
 import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForCodex } from "./engine.ts";
@@ -358,21 +358,27 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   }
   const pixels = (ref: RequestImage) => (ref.key ? index.byKey.get(ref.key)?.pixelSha256 : undefined) ?? pixelHashOfData(ref, ref.block.source.data);
   const lang = currentLang();
-  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  // v0.5: after a compaction, the images from before it go back right after the summary (claude-rewrite.ts): the ones
+  // the user keeps sending (checked, or pinned with automatic selection) read from the transcript, the others as
+  // placeholders. With any of those, the full note follows the summary, and later messages get only their short notes.
+  const compactedImages = index.images.filter((image) => image.compacted);
+  const summaryIn = index.summary && compactedImages.length ? summaryAt(json.messages, index.summary) : null;
+  const resend: Resend[] = summaryIn === null ? [] : compactedImages.filter((image) => !leaveOut.has(image.key)).flatMap((image) => {
+    const data = claudeImageData(index, image);
+    return data && image.mime ? [{ image, block: { type: "image", source: { type: "base64", media_type: image.mime, data } } }] : [];
+  });
+  const compactedOut = summaryIn !== null && resend.length < compactedImages.length;
+  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, noted: compactedOut, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
   const report = rewrote.report;
   let messages = rewrote.messages;
-  // v0.5: after a compaction, the images from before it that the user keeps sending (checked, or pinned with automatic
-  // selection) go out again right after the summary, read from the transcript.
-  const compactedImages = index.images.filter((image) => image.compacted);
   let compacted: Json | null = null;
-  if (index.summary && compactedImages.length) {
-    const resend: Resend[] = compactedImages.filter((image) => !leaveOut.has(image.key)).flatMap((image) => {
-      const data = claudeImageData(index, image);
-      return data && image.mime ? [{ image, block: { type: "image", source: { type: "base64", media_type: image.mime, data } } }] : [];
-    });
-    const added = addCompacted(messages, index.summary, compactedImages, resend, { lang, auto: !!selection.auto });
+  if (summaryIn !== null) {
+    const added = addCompacted(messages, index.summary!, compactedImages, resend, { lang, auto: !!selection.auto });
     if (added.at !== null) {
       messages = added.messages;
+      // The note's place: after the summary when it holds placeholders; a later one moves down with a message added.
+      if (compactedOut) report.noteAt = added.at + 1;
+      else if (added.inserted && report.noteAt !== undefined && report.noteAt > added.at) report.noteAt += 1;
       compacted = { at: added.at, listed: compactedImages.length, resent: resend.map(({ image }) => image.id) };
     }
   }

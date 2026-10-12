@@ -33,8 +33,9 @@ type Words = {
   // v0.4, Claude Code only (claude-rewrite.ts): what the note adds about tool results, and the short note that follows
   // each message holding omitted images, naming them.
   toolNote: string; here: (list: string) => string; hereAuto: (list: string) => string; listItem: (id: string, name: string | null, kind: string) => string;
-  // v0.5, Claude Code only: after a compaction summary, the images from before it, and how to get one not sent again.
-  compacted: (list: string, auto: boolean) => string;
+  // v0.5, Claude Code only: after a compaction summary, the images from before it, which of them are not sent this
+  // time, and how to get one back.
+  compacted: (list: string, missing: string | null, auto: boolean) => string;
 };
 
 // The image sits in the history, so the model concludes it never saw it and takes back what it said about it (user
@@ -80,11 +81,18 @@ const WORDS: Record<Lang, Words> = {
     here: (list) => `上下文管理说明：上面这条消息里的 ${list} 当时是原图，你当时看过；你之前对它们的描述和据此做出的判断仍然有效，不要收回，也不要说成是猜测或编造。那里的占位文字是这次请求才换上的，不是当时的内容。现在你看不到它们：被问到时，如实说现在看不到（被用户省略了），不要补充之前没说过的细节。问题得看其中某张图才能回答时，不要只说答不了，在回复里单独写一行“需要 IMG-xxx”（写出编号，几张就都写上）：用户看到这一行才知道该勾回哪张图，勾回后原图回到原处，你就能看着回答。`,
     hereAuto: (list) => `上下文管理说明：上面这条消息里的 ${list} 当时是原图，你当时看过；你之前对它们的描述和据此做出的判断仍然有效，不要收回，也不要说成是猜测或编造。那里的占位文字是这次请求才换上的（自动选图），不是当时的内容。之前说过的内容不够用时，调用 cam_view_image 取回原图；不要补充之前没说过的细节。`,
     listItem: (id, name, kind) => `${id}（${[name, kind].filter(Boolean).join("，")}）`,
-    compacted: (list, auto) => [
-      `上下文管理说明（来自用户安装的上下文素材管理工具）：上面这段摘要之前的对话里有这些图片：${list}。压缩对话时它们被移出了上下文；用户勾选要发送的那几张照样提供，就在下面，每张前面标着“[图片 IMG-xxx 已提供…]”，紧接着是原图。它们就是摘要里说到的那些图，现在就在你面前：被问到时直接看图回答。`,
-      auto
-        ? "没提供的现在看不到：摘要里说过的内容仍然有效；不够用时调用 cam_view_image 工具，传入编号取回原图；不要猜测看不到的细节。"
-        : "没提供的现在看不到：摘要里说过的内容仍然有效；问题得看其中某张图才能回答时，不要只说答不了，在回复里单独写一行“需要 IMG-xxx”，用户勾选后它会出现在这里；不要猜测看不到的细节，也不要让用户重新上传。",
+    // 2026-10-12, Haiku 5.5: while this note sat inside the user message holding the summary, unchecking an image that
+    // had been sent again made the model take back what it had said looking at it ("没有依据的数字，应当撤回") and ask
+    // for it to be provided again, also once the note named it and said not to. Like v0.4's notes, it now follows that
+    // message as a system message, after the full note when something is left out (compactedNote).
+    compacted: (list, missing, auto) => [
+      `${missing === null ? "上下文管理说明（来自用户安装的上下文素材管理工具）：" : "上下文管理说明："}上面这条消息里，摘要之前的对话中有这些图片：${list}。压缩对话时它们被移出了上下文；这个工具把用户${auto ? "固定发送" : "勾选要发送"}的那些放回了摘要后面，前面标着“[图片 IMG-xxx 已提供…]”，紧接着就是原图：它们现在就在你面前，被问到时直接看图回答，不要说看不到。`,
+      ...(missing === null ? [] : [
+        `这次没有提供的是 ${missing}（${auto ? "自动选图开着，之前各轮的图默认不发" : "用户取消了勾选"}，为了节省上下文）：摘要后面它们的位置换成了“[图片 IMG-xxx 已省略…]”这样的占位文字，那是这次请求才换上的。你之前看过它们的原图：在压缩之前的对话里，有的在压缩之后也提供过；你对它们的描述和据此做出的判断，不管是在摘要里还是在后面的回复里，都是看着原图做出的，仍然有效，不要收回，也不要说成是猜测或编造。${auto ? "现在你看不到它们，不要补充之前没说过的细节。" : "现在你看不到它们：被问到时，如实说现在看不到（被用户省略了），不要补充之前没说过的细节。"}`,
+        auto
+          ? "之前说过的内容不够用时，调用 cam_view_image 工具，传入编号取回原图；不要让用户重新上传。"
+          : "问题得看其中某张图才能回答时，不要只说答不了，在回复里单独写一行“需要 IMG-xxx”（写出编号，几张就都写上）：用户看到这一行才知道该勾回哪张图，勾回后原图回到它的位置，你就能看着回答；不要让用户重新上传或重新提供。",
+      ]),
     ].join("\n"),
     fetch: {
       title: "查看被省略的图片",
@@ -126,11 +134,14 @@ const WORDS: Record<Lang, Words> = {
     here: (list) => `Context management note: in the message above, ${list} were original images at the time, and you looked at them then; what you said about them and the judgments you based on it remain valid, so do not take them back or call them guesses or made up. The placeholder text there was put in only for this request; it is not what was there at the time. You cannot see them now: if asked, say so truthfully (the user left them out), and do not add details you did not mention before. When a question can only be answered by looking at one of them, do not just say you cannot answer; write a line "need IMG-xxx" in your reply (with its number; list each one needed): that line is how the user learns which image to check again, and once they do, the original comes back in its place and you can answer from it.`,
     hereAuto: (list) => `Context management note: in the message above, ${list} were original images at the time, and you looked at them then; what you said about them and the judgments you based on it remain valid, so do not take them back or call them guesses or made up. The placeholder text there was put in only for this request (automatic image selection); it is not what was there at the time. When what you said before is not enough, fetch the original with cam_view_image; do not add details you did not mention before.`,
     listItem: (id, name, kind) => `${id} (${[name, kind].filter(Boolean).join(", ")})`,
-    compacted: (list, auto) => [
-      `Context management note (from the context asset manager the user installed): the conversation before the summary above had these images: ${list}. Compacting the conversation took them out of context; the ones the user checked to send are included again right below, each marked "[Image IMG-xxx included…]" with the original image right after it. They are the images the summary speaks of, and they are in front of you now: when asked about one, look at it and answer from it.`,
-      auto
-        ? "The others are not visible now: what the summary says about them remains valid; when that is not enough, call the cam_view_image tool with an id to fetch the original; do not guess details you cannot see."
-        : "The others are not visible now: what the summary says about them remains valid. When a question can only be answered by looking at one of them, do not just say you cannot answer; write a line \"need IMG-xxx\" in your reply, and once the user checks it, it appears here. Do not guess details you cannot see, and do not ask the user to upload it again.",
+    compacted: (list, missing, auto) => [
+      `${missing === null ? "Context management note (from the context asset manager the user installed): " : "Context management note: "}in the message above, the conversation before the summary had these images: ${list}. Compacting the conversation took them out of context; this tool put the ones the user ${auto ? "pinned" : "checked to send"} back right after the summary, each marked "[Image IMG-xxx included…]" with the original image right after it. They are in front of you now: when asked about one, look at it and answer from it, and do not say you cannot see it.`,
+      ...(missing === null ? [] : [
+        `Not included this time: ${missing} (${auto ? "automatic image selection is on, so images from earlier turns are left out by default" : "the user unchecked them"}, to save context). After the summary, where they would be, there is placeholder text such as "[Image IMG-xxx omitted…]", put in only for this request. You saw their originals: in the conversation before the compaction, and some also after it. What you said about them and the judgments you based on it, in the summary or in your later replies, were made looking at the original images and remain valid; do not take them back or call them guesses or made up. ${auto ? "You cannot see them now, so do not add details you did not mention before." : "You cannot see them now: if asked, say so truthfully (the user left them out), and do not add details you did not mention before."}`,
+        auto
+          ? "When what you said before is not enough, call the cam_view_image tool with the id to fetch the original; do not ask the user to upload it again."
+          : "When a question can only be answered by looking at one of them, do not just say you cannot answer; write a line \"need IMG-xxx\" in your reply (with its number; list each one needed): that line is how the user learns which image to check again, and once they do, the original comes back in its place and you can answer from it. Do not ask the user to upload or provide it again.",
+      ]),
     ].join("\n"),
     fetch: {
       title: "View omitted images",
@@ -189,10 +200,15 @@ export function hereNote(images: Described[], lang: Lang = "zh", auto = false): 
   return auto ? words.hereAuto(list) : words.here(list);
 }
 
-// v0.5, Claude Code only: the note after a compaction summary, listing the images from before it.
-export function compactedNote(images: Described[], lang: Lang = "zh", auto = false): string {
+// v0.5, Claude Code only: the note after the message holding a compaction summary, listing the images from before it
+// and naming the ones not sent this time. Their placeholders are the first in the request, so the full note comes
+// first, as it does after the first message holding placeholders (claude-rewrite.ts).
+export function compactedNote(images: Described[], sent: Set<string>, lang: Lang = "zh", auto = false): string {
   const words = WORDS[lang];
-  return words.compacted(images.map((image) => words.listItem(image.id, image.name, words.kind[image.kind])).join(words.separator), auto);
+  const list = (some: Described[]) => some.map((image) => words.listItem(image.id, image.name, words.kind[image.kind])).join(words.separator);
+  const missing = images.filter((image) => !sent.has(image.id));
+  const own = words.compacted(list(images), missing.length ? list(missing) : null, auto);
+  return missing.length ? `${claudeNote(lang, auto)}\n${own}` : own;
 }
 
 export function autoPlaceholder(image: Described, lang: Lang = "zh"): string {

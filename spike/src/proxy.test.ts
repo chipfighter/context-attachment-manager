@@ -299,8 +299,8 @@ test("Anthropic refusing the thinking after an edited history is told apart from
   assert.equal(thinkingRejected(500, rejected), false);
 });
 
-test("v0.5: after a compaction, the images from before it the user keeps sending go out again after the summary", async () => {
-  const { image, pngA, pngC, text, transcript } = await import("./claude-fixtures.ts");
+test("v0.5: after a compaction, the images from before it go back after the summary: sent again when kept, else placeholders", async () => {
+  const { image, pngA, pngB, pngC, text, transcript } = await import("./claude-fixtures.ts");
   const { claudeNeedsRewrite, rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
@@ -319,28 +319,43 @@ test("v0.5: after a compaction, the images from before it the user keeps sending
   assert.equal(claudeNeedsRewrite(session, dir, home), false);
   t.boundary();
   t.summary();
-  t.prompt("And now?");
+  const p3 = t.prompt([image(pngB), text("And now?")]);
   writeFileSync(file, t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
   assert.equal(claudeNeedsRewrite(session, dir, home), true);
   const request = Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", thinking: { type: "adaptive" }, tools: [{ name: "Read", input_schema: { type: "object" } }], messages: [
     { role: "user", content: "summary" },
     { role: "assistant", content: [text("A white rectangle.")] },
-    { role: "user", content: [text("And now?")] },
+    { role: "user", content: [image(pngB), text("And now?")] },
   ] }));
-  const sentOf = (out: any) => JSON.parse(out.body.toString("utf8")).messages[0].content.map((block: any) =>
-    block.type === "image" ? `image:${block.source.data === pngA ? "A" : "C"}`
-      : block.text.startsWith("上下文管理说明") ? "note"
-      : /^\[图片 (IMG-\d+) 已提供/.exec(block.text)?.[1] ?? block.text);
-  // Nothing unchecked: every image from before the compaction goes out again.
+  const sent = (out: any) => JSON.parse(out.body.toString("utf8")).messages;
+  const partsOf = (message: any) => message.content.map((block: any) =>
+    block.type === "image" ? `image:${block.source.data === pngA ? "A" : block.source.data === pngB ? "B" : "C"}`
+      : /^\[图片 (IMG-\d+) 已提供/.exec(block.text)?.[1] ?? /^\[图片 (IMG-\d+) 已省略/.exec(block.text)?.[1].replace(/^/, "omitted:") ?? block.text);
+  // Nothing unchecked: every image from before the compaction goes out again, and a short note follows.
   const all = rewriteClaudeBody(request, undefined, session, dir, home, {});
   assert.deepEqual(all.report.compacted, { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] });
-  assert.deepEqual(sentOf(all), ["summary", "note", "IMG-001", "image:A", "IMG-002", "image:C"]);
-  // An unchecked one stays out; the note still lists it.
+  assert.deepEqual(partsOf(sent(all)[0]), ["summary", "IMG-001", "image:A", "IMG-002", "image:C"]);
+  assert.equal(sent(all)[1].role, "system");
+  assert.match(sent(all)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：上面这条消息里，摘要之前的对话中有这些图片/);
+  assert.equal(all.report.noteAt, undefined);
+  // An unchecked one stays out: its placeholder after the summary, and the full note naming it.
   writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" } } }, dir);
   const some = rewriteClaudeBody(request, undefined, session, dir, home, {});
   assert.deepEqual(some.report.compacted.resent, ["IMG-002"]);
-  assert.deepEqual(sentOf(some).filter((part: string) => part.startsWith("image:")), ["image:C"]);
-  // Automatic selection: only the pinned ones go out again.
+  assert.deepEqual(partsOf(sent(some)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
+  assert.match(sent(some)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：为了节省上下文/);
+  assert.match(sent(some)[1].content, /这次没有提供的是 IMG-001/);
+  assert.equal(some.report.noteAt, 1);
+  // One unchecked after the compaction too: its message gets only the short note, the full one being after the summary.
+  writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" }, [`${p3}#0`]: { id: "IMG-003", at: "2026-10-12T00:00:00Z" } } }, dir);
+  const both = sent(rewriteClaudeBody(request, undefined, session, dir, home, {}));
+  assert.deepEqual(both.map((message: any) => message.role), ["user", "system", "assistant", "user", "system"]);
+  assert.deepEqual(partsOf(both[3]), ["omitted:IMG-003", "And now?"]);
+  assert.match(both[4].content, /^上下文管理说明：上面这条消息里的 IMG-003/);
+  // Automatic selection: only the pinned ones go out again; the others are placeholders in its words.
   writeSelection({ threadId: session, unchecked: {}, auto: true, autoSince: "2026-10-12T00:00:00Z", pinned: { "tool:toolu_1#0": { id: "IMG-002", at: "2026-10-12T00:00:00Z" } } } as any, dir);
-  assert.deepEqual(rewriteClaudeBody(request, undefined, session, dir, home, {}).report.compacted.resent, ["IMG-002"]);
+  const auto = rewriteClaudeBody(request, undefined, session, dir, home, {});
+  assert.deepEqual(auto.report.compacted.resent, ["IMG-002"]);
+  assert.deepEqual(partsOf(sent(auto)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
+  assert.match(sent(auto)[0].content[1].text, /cam_view_image/);
 });

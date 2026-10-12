@@ -87,6 +87,8 @@ export type ClaudeRewriteOptions = {
   copies?: Map<string, string>;
   // Automatic selection: its wording; placeholders point to, and labels mark, only earlier turns' (pinned) images.
   auto?: { currentTurn: number };
+  // v0.5: the full note is given before these messages already (after a compaction summary holding placeholders).
+  noted?: boolean;
 };
 
 export function rewriteMessages(
@@ -96,7 +98,7 @@ export function rewriteMessages(
   pixelHash: (image: RequestImage) => string | null,
   options: ClaudeRewriteOptions = {},
 ): { messages: Json[]; report: RewriteReport } {
-  const { lang = "zh", copies = new Map<string, string>(), auto } = options;
+  const { lang = "zh", copies = new Map<string, string>(), auto, noted = false } = options;
   const refs = findRequestImages(messages, index);
   const describe = (ref: RequestImage): ClaudeImage | undefined => (ref.key ? index.byKey.get(ref.key) : undefined);
   const report: RewriteReport = { images: refs.length, replaced: [], locked: [], sentContentIds: [], copies: [] };
@@ -165,40 +167,57 @@ export function rewriteMessages(
   // Only plain placeholders need a note (a duplicate's content is still in view). Each message holding one is followed
   // by a short note naming its omitted images, and the first of them also by the full note: Claude does not believe
   // what a tool result says about itself, and a note far from the placeholder was not enough (desktop tests,
-  // 2026-10-09). A note goes right after the user message, the only place Anthropic allows a system message; when
-  // Claude Code put a system message there already, the note joins it, since two may not follow each other. Later
-  // messages first, so the earlier positions stay as they are.
+  // 2026-10-09). Later messages first, so the earlier positions stay as they are. v0.5: after a compaction summary
+  // holding placeholders, the full note is there already (`noted`).
   const holding = [...plainBy.keys()].sort((a, b) => a - b);
   for (const msg of [...holding].reverse()) {
-    const text = `${msg === holding[0] ? `${claudeNote(lang, auto !== undefined)}\n` : ""}${hereNote(plainBy.get(msg)!, lang, auto !== undefined)}`;
-    const after = next[msg + 1];
-    if (after?.role === "system") {
-      const content = typeof after.content === "string" ? [{ type: "text", text: after.content }] : after.content;
-      next[msg + 1] = { ...after, content: [{ type: "text", text }, ...content] };
-    } else {
-      next.splice(msg + 1, 0, { role: "system", content: text });
-    }
+    noteAfter(next, msg, `${msg === holding[0] && !noted ? `${claudeNote(lang, auto !== undefined)}\n` : ""}${hereNote(plainBy.get(msg)!, lang, auto !== undefined)}`);
   }
-  if (holding.length) report.noteAt = holding[0] + 1;
+  if (holding.length && !noted) report.noteAt = holding[0] + 1;
   return { messages: next, report };
 }
 
+// A note goes right after a user message, the only place Anthropic allows a system message; when Claude Code put a
+// system message there already, the note joins it, since two may not follow each other. True when a message was added.
+function noteAfter(messages: Json[], msg: number, text: string): boolean {
+  const after = messages[msg + 1];
+  if (after?.role === "system") {
+    const content = typeof after.content === "string" ? [{ type: "text", text: after.content }] : after.content;
+    messages[msg + 1] = { ...after, content: [{ type: "text", text }, ...content] };
+    return false;
+  }
+  messages.splice(msg + 1, 0, { role: "system", content: text });
+  return true;
+}
+
 // v0.5: after a compaction Claude Code starts each request with the summary and sends no image from before it
-// (2.1.295: the user message holding the summary as a string, then the last reply kept). The images from before it
-// that the user keeps sending go right after the summary, each with its label, after a note listing all of them. The
-// same selection gives the same messages, so the cached prefix holds. No summary in the request: nothing changes.
+// (2.1.295: the user message holding the summary as a string, then the last reply kept). The engine puts them back
+// right after the summary, in their order: the ones the user keeps sending with their labels, the others as
+// placeholders, as anywhere else in a request. The note follows that message, as v0.4's notes do: the model did not
+// believe it inside the message (desktop test, 2026-10-12). The same selection gives the same messages, so the cached
+// prefix holds. No summary in the request: nothing changes.
 export type Resend = { image: Described; block: Json };
-export function addCompacted(messages: Json[], summary: string, listed: Described[], resend: Resend[], options: { lang?: Lang; auto?: boolean } = {}): { messages: Json[]; at: number | null } {
-  const { lang = "zh", auto = false } = options;
-  const isSummary = (block: Json) => block?.type === "text" && block.text === summary;
+const holdsSummary = (summary: string) => (block: Json) => block?.type === "text" && block.text === summary;
+export function summaryAt(messages: Json[], summary: string): number | null {
+  const isSummary = holdsSummary(summary);
   const at = messages.findIndex((message) => message?.role === "user" && (message.content === summary || (Array.isArray(message.content) && message.content.some(isSummary))));
-  if (at < 0) return { messages, at: null };
+  return at < 0 ? null : at;
+}
+export function addCompacted(messages: Json[], summary: string, listed: Described[], resend: Resend[], options: { lang?: Lang; auto?: boolean } = {}): { messages: Json[]; at: number | null; inserted: boolean } {
+  const { lang = "zh", auto = false } = options;
+  const at = summaryAt(messages, summary);
+  if (at === null) return { messages, at: null, inserted: false };
   const message = messages[at];
   const content: Json[] = typeof message.content === "string" ? [{ type: "text", text: message.content }] : [...message.content];
-  const added: Json[] = [{ type: "text", text: compactedNote(listed, lang, auto) }];
-  for (const { image, block } of resend) added.push({ type: "text", text: includedLabel(image, lang) }, block);
-  content.splice(content.findIndex(isSummary) + 1, 0, ...added);
+  const sent = new Map(resend.map(({ image, block }) => [image.id, block]));
+  const added = listed.flatMap((image): Json[] => {
+    const block = sent.get(image.id);
+    if (block) return [{ type: "text", text: includedLabel(image, lang) }, block];
+    return [{ type: "text", text: auto ? autoPlaceholder(image, lang) : plainPlaceholder(image, lang) }];
+  });
+  content.splice(content.findIndex(holdsSummary(summary)) + 1, 0, ...added);
   const next = [...messages];
   next[at] = { ...message, content };
-  return { messages: next, at };
+  const inserted = noteAfter(next, at, compactedNote(listed, new Set(sent.keys()), lang, auto));
+  return { messages: next, at, inserted };
 }
