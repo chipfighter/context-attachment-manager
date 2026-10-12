@@ -36,6 +36,8 @@ export type ClaudeIndex = ThreadIndex & {
   // The text of the latest finished assistant reply (its turn), for the ids the model asked for.
   replies: string[];
   transcript: string | null;
+  // v0.5: the latest compaction summary's text: Claude Code starts each request after the compaction with it.
+  summary: string | null;
 };
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -242,12 +244,15 @@ export function buildClaudeIndex(sessionId: string, records: ClaudeRecord[], tra
   });
   // A turn with no reply yet falls back to the one before.
   const replies = current.length ? current : previous;
+  const summaryRecord = lastBoundary < 0 ? undefined : chain.slice(lastBoundary + 1).find((record) => record.type === "user" && record.isCompactSummary);
+  const summaryContent = summaryRecord?.message?.content;
+  const summary = typeof summaryContent === "string" ? summaryContent : Array.isArray(summaryContent) ? summaryContent.map(textOf).filter((text) => text !== null).join("\n") || null : null;
   for (const entry of images) {
     if (entry.name) continue;
     const twin = images.find((other) => other.name && (other.contentId === entry.contentId || (entry.pixelSha256 !== null && other.pixelSha256 === entry.pixelSha256)));
     if (twin) entry.name = twin.name;
   }
-  return { threadId: sessionId, images, byKey, turns: turn, turnNumbers, copies, uploads, chain, title: titleOf(records, chain), replies, transcript };
+  return { threadId: sessionId, images, byKey, turns: turn, turnNumbers, copies, uploads, chain, title: titleOf(records, chain), replies, transcript, summary };
 }
 
 // The session's name as Claude Code shows it: the latest custom title, else the start of the first prompt.

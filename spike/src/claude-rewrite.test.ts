@@ -1,13 +1,14 @@
 // Purpose: v0.4 — the rewrite of a Claude Code request (claude-rewrite.ts): matching request images to the index,
 // placeholders in user messages and inside tool results, "included" labels, the note as a system message right after
 // the first omitted image's message, cache breakpoints kept, thinking untouched, automatic selection and copies.
+// v0.5: after a compaction, the images from before it the user keeps sending go right after the summary.
 // Input: synthetic transcripts and requests (claude-fixtures.ts); output: Node test assertions only.
 
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildClaudeIndex } from "../../plugin/src/claude-index.ts";
-import { findRequestImages, rewriteMessages } from "../../plugin/src/claude-rewrite.ts";
-import { claudeNote } from "../../plugin/src/rewrite.ts";
+import { addCompacted, findRequestImages, rewriteMessages } from "../../plugin/src/claude-rewrite.ts";
+import { claudeNote, compactedNote, includedLabel } from "../../plugin/src/rewrite.ts";
 import { image, pngA, pngB, pngC, text, transcript, usualRequest, usualSession } from "./claude-fixtures.ts";
 
 const noPixels = () => null;
@@ -162,4 +163,39 @@ test("a copy the model fetched in an earlier turn is left out, in either mode", 
   // The original stays, labelled; no plain placeholder, so no note.
   assert.match(messages[0].content[0].text, /IMG-001 included/);
   assert.equal(report.noteAt, undefined);
+});
+
+test("v0.5: after a compaction, the images from before it go right after the summary, listed and labelled", () => {
+  const t = transcript();
+  t.prompt([image(pngA), text("first")]);
+  t.assistant(text("A red square."));
+  t.prompt("Read c.png");
+  t.assistant({ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "C:\\work\\c.png" } });
+  t.toolResult("toolu_1", [image(pngC)]);
+  t.assistant(text("A white rectangle."));
+  t.boundary();
+  t.summary();
+  const index = buildClaudeIndex("s", t.records);
+  const [a, c] = index.images;
+  // As Claude Code sends it after the compaction: the summary as a string, then the last reply, then the new turn.
+  const request = [{ role: "user", content: "summary" }, { role: "assistant", content: [text("A white rectangle.")] }, { role: "user", content: [text("And now?")] }];
+  const block = (data: string) => ({ type: "image", source: { type: "base64", media_type: "image/png", data } });
+  const out = addCompacted(request, "summary", [a, c], [{ image: c, block: block(pngC) }], { lang: "en" });
+  assert.equal(out.at, 0);
+  assert.deepEqual(out.messages[0].content, [
+    { type: "text", text: "summary" },
+    { type: "text", text: compactedNote([a, c], "en") },
+    { type: "text", text: includedLabel(c, "en") },
+    block(pngC),
+  ]);
+  assert.match(compactedNote([a, c], "en"), /IMG-001 \(uploaded by the user\), IMG-002 \(c\.png, viewed with a tool\)/);
+  assert.deepEqual(out.messages.slice(1), request.slice(1));
+  // The same request twice: the same messages, so the cache goes on.
+  assert.deepEqual(addCompacted(request, "summary", [a, c], [{ image: c, block: block(pngC) }], { lang: "en" }).messages, out.messages);
+  // The summary as a block, with other blocks after it in the same message: inserted right after the summary.
+  const blocks = [{ role: "user", content: [text("summary"), text("<system-reminder>x</system-reminder>")] }];
+  assert.deepEqual(addCompacted(blocks, "summary", [a], [], { lang: "zh", auto: true }).messages[0].content.map((b: any) => b.text), ["summary", compactedNote([a], "zh", true), "<system-reminder>x</system-reminder>"]);
+  // No summary in the request (before the compaction, or another request): nothing changes.
+  const before = [{ role: "user", content: [text("hello")] }];
+  assert.deepEqual(addCompacted(before, "summary", [a], [], {}), { messages: before, at: null });
 });

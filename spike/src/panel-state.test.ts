@@ -8,7 +8,7 @@ import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { decodePng } from "../../plugin/src/png.ts";
-import { applySelection, imageFor, loadPanelState, requestedIds, sendInfo } from "../../plugin/src/panel-state.ts";
+import { applySelection, imageFor, loadPanelState, panelStateOf, requestedIds, sendInfo } from "../../plugin/src/panel-state.ts";
 import { requestStatsDirOf } from "../../plugin/src/paths.ts";
 import { recordRequest } from "../../plugin/src/request-stats.ts";
 import { readSelection, writeSelection } from "../../plugin/src/selection.ts";
@@ -102,7 +102,7 @@ test("the size baseline: images the last request carried, images added since, an
   ]);
   assert.deepEqual(state.send, {
     baseline: { at: "2026-09-24T12:00:00Z", bytes: 5000 },
-    last: { at: "2026-09-24T12:00:00Z", bytesBefore: 5000, bytesAfter: 4500, replaced: 1, skipped: false },
+    last: { at: "2026-09-24T12:00:00Z", bytesBefore: 5000, bytesAfter: 4500, replaced: 1, resent: 0, skipped: false },
     notice: null,
   });
 });
@@ -120,12 +120,32 @@ test("the panel is told when the engine could not rewrite, or a WebSocket turn k
 test("v0.4: the panel is told when the engine left out thinking that no longer fits, or had to send the original", () => {
   const sent = { at: "t4", transport: "http", decodedBytes: 900, rewrite: { replaced: [{ id: "IMG-001" }], thinking: { kept: 1, left: 2 }, decodedAfter: 700 } };
   assert.deepEqual(sendInfo({ latest: sent, lastHttp: sent }).notice, { kind: "thinking", at: "t4", count: 2 });
-  assert.deepEqual(sendInfo({ latest: sent, lastHttp: sent }).last, { at: "t4", bytesBefore: 900, bytesAfter: 700, replaced: 1, skipped: false });
+  assert.deepEqual(sendInfo({ latest: sent, lastHttp: sent }).last, { at: "t4", bytesBefore: 900, bytesAfter: 700, replaced: 1, resent: 0, skipped: false });
   // All of it fitted: nothing to tell.
   const fitted = { ...sent, rewrite: { ...sent.rewrite, thinking: { kept: 3, left: 0 } } };
   assert.equal(sendInfo({ latest: fitted, lastHttp: fitted }).notice, null);
   const original = { ...sent, rewrite: { replaced: [{ id: "IMG-001" }], fallback: "thinking-signature" } };
   assert.deepEqual(sendInfo({ latest: original, lastHttp: original }).notice, { kind: "fallback", at: "t4" });
+});
+
+test("v0.5: images from before a Claude Code compaction go out again when checked, and are marked as such", async () => {
+  const { image, pngA, text, transcript } = await import("./claude-fixtures.ts");
+  const { buildClaudeIndex } = await import("../../plugin/src/claude-index.ts");
+  const t = transcript();
+  const p1 = t.prompt([image(pngA), text("first")]);
+  t.assistant(text("ok"));
+  t.boundary();
+  t.summary();
+  t.prompt("after the compaction, no image");
+  const index = buildClaudeIndex("s", t.records);
+  // The latest request, as Claude Code built it, carried no image: the one from before is still sent next time.
+  const carriedNone: any = { latest: { at: "t", transport: "http" }, lastHttp: { at: "t", transport: "http", decodedBytes: 100, imageSizes: {} } };
+  const row = (unchecked: Set<string>) => panelStateOf("s", index, unchecked, carriedNone, null, false, [], true).images.map((image) => [image.id, image.compacted, image.checked, image.inNextRequest]);
+  assert.deepEqual(row(new Set()), [["IMG-001", true, true, true]]);
+  assert.deepEqual(row(new Set([`${p1}#0`])), [["IMG-001", true, false, true]]);
+  // How many the last request sent again.
+  const resent = { at: "t5", transport: "http", decodedBytes: 900, rewrite: { replaced: [], compacted: { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] }, decodedAfter: 1500 } };
+  assert.deepEqual(sendInfo({ latest: resent, lastHttp: resent }).last, { at: "t5", bytesBefore: 900, bytesAfter: 1500, replaced: 0, resent: 2, skipped: false });
 });
 
 test("check and uncheck are kept per thread and validated", () => {

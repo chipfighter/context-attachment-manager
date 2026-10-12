@@ -35,6 +35,8 @@
   v0.4: under Claude Code, when Anthropic refused the rewritten history under its thinking and the engine sent the
   original request, the panel says so as for any request it could not rewrite. On an account that checks thinking, it
   also says how many thinking records the last request left out to keep the selection (user 2026-10-11).
+  v0.5 (user 2026-10-12): under Claude Code, images from before a compaction stay in the list as they were, marked
+  “压缩前”; checked ones go out again from the engine, and the last request's line says how many.
 -->
 <style>
   /* Fallbacks follow Codex's own widget palette; inside Codex its theme variables (MCP Apps host styles) win. */
@@ -312,6 +314,7 @@
       "last.skipped": "上一次请求 {time}：没能替换，原样发出 {bytes}",
       "last.replaced": "上一次请求 {time}：替换了 {count} 张，少发 {saved}，实际发出 {after}",
       "last.none": "上一次请求 {time}：没有替换，发出 {bytes}",
+      "last.resent": "上一次请求 {time}：补回压缩前的图 {resent} 张，替换了 {count} 张，实际发出 {after}",
       "kind.upload": "用户上传",
       "kind.view": "查看的图片",
       "kind.generated": "生成的图片",
@@ -320,6 +323,7 @@
       "kind.browser": "网页截图",
       "tag.locked": "无法取消",
       "tag.gone": "已不在上下文",
+      "tag.compacted": "压缩前",
       "tag.requested": "模型需要这张",
       "needs.title": "模型需要 {count} 张没发送的图：",
       "needs.jump": "在列表里定位到 {id}",
@@ -421,6 +425,7 @@
       "last.replaced": "Last request {time}: {count} images replaced, {saved} less, {after} sent",
       "last.replaced_one": "Last request {time}: {count} image replaced, {saved} less, {after} sent",
       "last.none": "Last request {time}: nothing replaced, {bytes} sent",
+      "last.resent": "Last request {time}: sent again from before the compaction: {resent}; replaced: {count}; {after} sent",
       "kind.upload": "Uploaded",
       "kind.view": "Viewed",
       "kind.generated": "Generated",
@@ -429,6 +434,7 @@
       "kind.browser": "Web page",
       "tag.locked": "Can't uncheck",
       "tag.gone": "No longer in context",
+      "tag.compacted": "Before compaction",
       "tag.requested": "The model needs this",
       "needs.title": "The model needs {count} unsent images:",
       "needs.title_one": "The model needs {count} unsent image:",
@@ -848,6 +854,8 @@
   function tagsOf(image) {
     const tags = [];
     if (!image.replaceable) tags.push([t("tag.locked"), ""]);
+    // v0.5: from before a Claude Code compaction, sent again by the engine when checked.
+    if (image.compacted) tags.push([t("tag.compacted"), ""]);
     // Compacted out of the history: it is not sent either way.
     if (!image.inNextRequest) { tags.push([t("tag.gone"), ""]); return tags; }
     const checked = isChecked(image);
@@ -1006,6 +1014,7 @@
     const last = S.data.send?.last;
     $("last").textContent = !last ? (f.whole ? "" : t("last.noBaseline"))
       : last.skipped ? t("last.skipped", { time: timeOf(last.at), bytes: formatBytes(last.bytesBefore) })
+      : last.resent ? t("last.resent", { time: timeOf(last.at), resent: last.resent, count: last.replaced, after: formatBytes(last.bytesAfter) })
       : last.replaced ? t("last.replaced", { time: timeOf(last.at), count: last.replaced, saved: formatBytes(last.bytesBefore - last.bytesAfter), after: formatBytes(last.bytesAfter) })
       : t("last.none", { time: timeOf(last.at), bytes: formatBytes(last.bytesBefore) });
   }

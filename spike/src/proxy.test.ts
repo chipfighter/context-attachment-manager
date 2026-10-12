@@ -298,3 +298,49 @@ test("Anthropic refusing the thinking after an edited history is told apart from
   assert.equal(thinkingRejected(400, JSON.stringify({ error: { message: "max_tokens: too large" } })), false);
   assert.equal(thinkingRejected(500, rejected), false);
 });
+
+test("v0.5: after a compaction, the images from before it the user keeps sending go out again after the summary", async () => {
+  const { image, pngA, pngC, text, transcript } = await import("./claude-fixtures.ts");
+  const { claudeNeedsRewrite, rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
+  const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
+  const session = "11111111-2222-4333-8444-555555555555";
+  const t = transcript();
+  const p1 = t.prompt([image(pngA), text("first")]);
+  t.assistant(text("A red square."));
+  t.prompt("Read c.png");
+  t.assistant({ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "C:\\work\\c.png" } });
+  t.toolResult("toolu_1", [image(pngC)]);
+  t.assistant(text("A white rectangle."));
+  mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+  const file = join(home, "projects", "D--work", `${session}.jsonl`);
+  writeFileSync(file, t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  // Before the compaction, with nothing unchecked: nothing to look at.
+  assert.equal(claudeNeedsRewrite(session, dir, home), false);
+  t.boundary();
+  t.summary();
+  t.prompt("And now?");
+  writeFileSync(file, t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  assert.equal(claudeNeedsRewrite(session, dir, home), true);
+  const request = Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", thinking: { type: "adaptive" }, tools: [{ name: "Read", input_schema: { type: "object" } }], messages: [
+    { role: "user", content: "summary" },
+    { role: "assistant", content: [text("A white rectangle.")] },
+    { role: "user", content: [text("And now?")] },
+  ] }));
+  const sentOf = (out: any) => JSON.parse(out.body.toString("utf8")).messages[0].content.map((block: any) =>
+    block.type === "image" ? `image:${block.source.data === pngA ? "A" : "C"}`
+      : block.text.startsWith("上下文管理说明") ? "note"
+      : /^\[图片 (IMG-\d+) 已提供/.exec(block.text)?.[1] ?? block.text);
+  // Nothing unchecked: every image from before the compaction goes out again.
+  const all = rewriteClaudeBody(request, undefined, session, dir, home, {});
+  assert.deepEqual(all.report.compacted, { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] });
+  assert.deepEqual(sentOf(all), ["summary", "note", "IMG-001", "image:A", "IMG-002", "image:C"]);
+  // An unchecked one stays out; the note still lists it.
+  writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" } } }, dir);
+  const some = rewriteClaudeBody(request, undefined, session, dir, home, {});
+  assert.deepEqual(some.report.compacted.resent, ["IMG-002"]);
+  assert.deepEqual(sentOf(some).filter((part: string) => part.startsWith("image:")), ["image:C"]);
+  // Automatic selection: only the pinned ones go out again.
+  writeSelection({ threadId: session, unchecked: {}, auto: true, autoSince: "2026-10-12T00:00:00Z", pinned: { "tool:toolu_1#0": { id: "IMG-002", at: "2026-10-12T00:00:00Z" } } } as any, dir);
+  assert.deepEqual(rewriteClaudeBody(request, undefined, session, dir, home, {}).report.compacted.resent, ["IMG-002"]);
+});

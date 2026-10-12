@@ -31,12 +31,14 @@ export type PanelImage = {
   // Whether the last full request carried it (null: no such request recorded yet), and whether the next one will
   // (carried last time, or added since; images compacted out of the history will not come back).
   inLastRequest: boolean | null; inNextRequest: boolean;
+  // v0.5: from before a Claude Code compaction: Claude Code no longer sends it, the engine sends it again if checked.
+  compacted: boolean;
 };
 export type SendInfo = {
   // The last full HTTP request as Codex built it, before any rewrite: the baseline of the estimate.
   baseline: { at: string; bytes: number } | null;
-  // What the engine sent for that request.
-  last: { at: string; bytesBefore: number; bytesAfter: number; replaced: number; skipped: boolean } | null;
+  // What the engine sent for that request; resent: images from before a compaction it sent again (v0.5).
+  last: { at: string; bytesBefore: number; bytesAfter: number; replaced: number; resent: number; skipped: boolean } | null;
   // v0.4: "fallback": Anthropic refused the rewritten history under its thinking, so the engine sent the original
   // (claude-rewrite.ts): what the user unchecked went out that time. "thinking": the account checks thinking, and the
   // engine left out `count` thinking records that no longer fit the history as sent (claude-thinking.ts); the model may
@@ -78,7 +80,11 @@ export function sendInfo(stats: RequestStats | null): SendInfo {
   else if (latest?.transport === "http" && rewrite?.thinking?.left > 0) notice = { kind: "thinking", at: http!.at, count: rewrite.thinking.left };
   return {
     baseline: http && bytes !== null && http.imageSizes ? { at: http.at, bytes } : null,
-    last: http && bytes !== null ? { at: http.at, bytesBefore: bytes, bytesAfter: rewrite?.fallback ? bytes : rewrite?.decodedAfter ?? bytes, replaced: rewrite?.fallback ? 0 : rewrite?.replaced?.length ?? 0, skipped: !!rewrite?.skipped || !!rewrite?.fallback } : null,
+    last: http && bytes !== null ? {
+      at: http.at, bytesBefore: bytes, bytesAfter: rewrite?.fallback ? bytes : rewrite?.decodedAfter ?? bytes,
+      replaced: rewrite?.fallback ? 0 : rewrite?.replaced?.length ?? 0, resent: rewrite?.fallback ? 0 : rewrite?.compacted?.resent?.length ?? 0,
+      skipped: !!rewrite?.skipped || !!rewrite?.fallback,
+    } : null,
     notice,
   };
 }
@@ -148,6 +154,8 @@ export function panelStateOf(threadId: string, index: ThreadIndex, unchecked: Se
   const lastTurn = stats?.lastHttp?.turnId ? index.turnNumbers.get(stats.lastHttp.turnId) ?? null : null;
   const images = index.images.map((image, position): PanelImage => {
     const inLast = carried ? image.key in carried : null;
+    // v0.5: Claude Code's images from before a compaction (claude-index.ts) go out again from the engine when checked.
+    const compacted = "compacted" in image && image.compacted === true;
     return {
       id: image.id, kind: image.kind, name: image.name, label: image.label, turn: image.turn,
       source: image.source, pdfPage: image.pdfPage, pdfName: image.pdfName,
@@ -158,7 +166,8 @@ export function panelStateOf(threadId: string, index: ThreadIndex, unchecked: Se
       requested: requested.includes(image.id),
       fetched: fetched.includes(image.id),
       inLastRequest: inLast,
-      inNextRequest: inLast !== false || position > lastCarried || (lastTurn !== null && image.turn !== null && image.turn > lastTurn),
+      inNextRequest: compacted || inLast !== false || position > lastCarried || (lastTurn !== null && image.turn !== null && image.turn > lastTurn),
+      compacted,
     };
   });
   return {

@@ -25,8 +25,8 @@ import type { Duplex } from "node:stream";
 import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
-import { claudeHome, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
-import { findRequestImages, rewriteMessages, type RequestImage } from "./claude-rewrite.ts";
+import { claudeHome, claudeImageData, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
+import { addCompacted, findRequestImages, rewriteMessages, type RequestImage, type Resend } from "./claude-rewrite.ts";
 import { chainOf, fitThinking, readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./claude-thinking.ts";
 import { codexHome } from "./codexconfig.ts";
 import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForCodex } from "./engine.ts";
@@ -302,13 +302,15 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
 }
 
 // v0.4: a Claude Code session's requests are rewritten once something is unchecked there, or automatic selection was
-// used (copies the model fetched may be in its history from then on).
-export function claudeNeedsRewrite(sessionId: string | null, dir = claudeSelectionDirOf()): boolean {
+// used (copies the model fetched may be in its history from then on). v0.5: or once it was compacted with images
+// before the compaction, which the user may keep sending.
+export function claudeNeedsRewrite(sessionId: string | null, dir = claudeSelectionDirOf(), home = claudeHome()): boolean {
   if (!sessionId) return false;
   try {
     const selection = readSelection(sessionId, dir);
-    return Object.keys(selection.unchecked).length > 0 || !!selection.autoSince;
-  } catch { return false; }
+    if (Object.keys(selection.unchecked).length > 0 || selection.autoSince) return true;
+  } catch { /* the transcript still decides */ }
+  try { return loadClaudeIndex(sessionId, home).images.some((image) => image.compacted); } catch { return false; }
 }
 
 // The images a Claude Code request carried, by index key, with the base64 characters each took (the panel's
@@ -355,7 +357,25 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
     leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key]).map((image) => image.key));
   }
   const pixels = (ref: RequestImage) => (ref.key ? index.byKey.get(ref.key)?.pixelSha256 : undefined) ?? pixelHashOfData(ref, ref.block.source.data);
-  const { messages, report } = rewriteMessages(json.messages, index, leaveOut, pixels, { lang: currentLang(), copies, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  const lang = currentLang();
+  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  const report = rewrote.report;
+  let messages = rewrote.messages;
+  // v0.5: after a compaction, the images from before it that the user keeps sending (checked, or pinned with automatic
+  // selection) go out again right after the summary, read from the transcript.
+  const compactedImages = index.images.filter((image) => image.compacted);
+  let compacted: Json | null = null;
+  if (index.summary && compactedImages.length) {
+    const resend: Resend[] = compactedImages.filter((image) => !leaveOut.has(image.key)).flatMap((image) => {
+      const data = claudeImageData(index, image);
+      return data && image.mime ? [{ image, block: { type: "image", source: { type: "base64", media_type: image.mime, data } } }] : [];
+    });
+    const added = addCompacted(messages, index.summary, compactedImages, resend, { lang, auto: !!selection.auto });
+    if (added.at !== null) {
+      messages = added.messages;
+      compacted = { at: added.at, listed: compactedImages.length, resent: resend.map(({ image }) => image.id) };
+    }
+  }
   const summary: Json = {
     images: report.images,
     replaced: report.replaced.map(({ key: _key, ...rest }) => rest),
@@ -365,8 +385,9 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
     ...(report.noteAt !== undefined ? { noteAt: report.noteAt } : {}),
     ...(selection.auto ? { auto: true } : {}),
     ...(report.copies.length ? { copies: report.copies } : {}),
+    ...(compacted ? { compacted } : {}),
   };
-  const changed = report.replaced.length > 0 || report.copies.length > 0;
+  const changed = report.replaced.length > 0 || report.copies.length > 0 || compacted !== null;
   // Once the engine has sent the session a changed history, thinking made after it may be in every later request, even
   // with nothing left out now (an image checked again).
   if (!changed && !thinking?.edited) return { body: original, report: summary, attempts: [] };

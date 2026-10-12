@@ -14,7 +14,7 @@
 import type { ClaudeIndex, ClaudeImage } from "./claude-index.ts";
 import { imageDigest, type ImageDigest, type ImageKind } from "./images.ts";
 import type { Lang } from "./language.ts";
-import { autoPlaceholder, claudeNote, copyNote, duplicatePlaceholder, hereNote, includedLabel, newImageWord, plainPlaceholder, type Described, type RewriteReport } from "./rewrite.ts";
+import { autoPlaceholder, claudeNote, compactedNote, copyNote, duplicatePlaceholder, hereNote, includedLabel, newImageWord, plainPlaceholder, type Described, type RewriteReport } from "./rewrite.ts";
 
 type Json = Record<string, any>;
 // msg: the message; part: the block in its content; sub: for an image in a tool result, its position in that result.
@@ -181,4 +181,24 @@ export function rewriteMessages(
   }
   if (holding.length) report.noteAt = holding[0] + 1;
   return { messages: next, report };
+}
+
+// v0.5: after a compaction Claude Code starts each request with the summary and sends no image from before it
+// (2.1.295: the user message holding the summary as a string, then the last reply kept). The images from before it
+// that the user keeps sending go right after the summary, each with its label, after a note listing all of them. The
+// same selection gives the same messages, so the cached prefix holds. No summary in the request: nothing changes.
+export type Resend = { image: Described; block: Json };
+export function addCompacted(messages: Json[], summary: string, listed: Described[], resend: Resend[], options: { lang?: Lang; auto?: boolean } = {}): { messages: Json[]; at: number | null } {
+  const { lang = "zh", auto = false } = options;
+  const isSummary = (block: Json) => block?.type === "text" && block.text === summary;
+  const at = messages.findIndex((message) => message?.role === "user" && (message.content === summary || (Array.isArray(message.content) && message.content.some(isSummary))));
+  if (at < 0) return { messages, at: null };
+  const message = messages[at];
+  const content: Json[] = typeof message.content === "string" ? [{ type: "text", text: message.content }] : [...message.content];
+  const added: Json[] = [{ type: "text", text: compactedNote(listed, lang, auto) }];
+  for (const { image, block } of resend) added.push({ type: "text", text: includedLabel(image, lang) }, block);
+  content.splice(content.findIndex(isSummary) + 1, 0, ...added);
+  const next = [...messages];
+  next[at] = { ...message, content };
+  return { messages: next, at };
 }

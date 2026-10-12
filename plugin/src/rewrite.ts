@@ -33,6 +33,8 @@ type Words = {
   // v0.4, Claude Code only (claude-rewrite.ts): what the note adds about tool results, and the short note that follows
   // each message holding omitted images, naming them.
   toolNote: string; here: (list: string) => string; hereAuto: (list: string) => string; listItem: (id: string, name: string | null, kind: string) => string;
+  // v0.5, Claude Code only: after a compaction summary, the images from before it, and how to get one not sent again.
+  compacted: (list: string, auto: boolean) => string;
 };
 
 // The image sits in the history, so the model concludes it never saw it and takes back what it said about it (user
@@ -78,6 +80,12 @@ const WORDS: Record<Lang, Words> = {
     here: (list) => `上下文管理说明：上面这条消息里的 ${list} 当时是原图，你当时看过；你之前对它们的描述和据此做出的判断仍然有效，不要收回，也不要说成是猜测或编造。那里的占位文字是这次请求才换上的，不是当时的内容。现在你看不到它们：被问到时，如实说现在看不到（被用户省略了），不要补充之前没说过的细节。问题得看其中某张图才能回答时，不要只说答不了，在回复里单独写一行“需要 IMG-xxx”（写出编号，几张就都写上）：用户看到这一行才知道该勾回哪张图，勾回后原图回到原处，你就能看着回答。`,
     hereAuto: (list) => `上下文管理说明：上面这条消息里的 ${list} 当时是原图，你当时看过；你之前对它们的描述和据此做出的判断仍然有效，不要收回，也不要说成是猜测或编造。那里的占位文字是这次请求才换上的（自动选图），不是当时的内容。之前说过的内容不够用时，调用 cam_view_image 取回原图；不要补充之前没说过的细节。`,
     listItem: (id, name, kind) => `${id}（${[name, kind].filter(Boolean).join("，")}）`,
+    compacted: (list, auto) => [
+      `上下文管理说明（来自用户安装的上下文素材管理工具）：上面这段摘要之前的对话里有这些图片：${list}。压缩对话时它们被移出了上下文；用户勾选要发送的那几张照样提供，就在下面，每张前面标着“[图片 IMG-xxx 已提供…]”，紧接着是原图。它们就是摘要里说到的那些图，现在就在你面前：被问到时直接看图回答。`,
+      auto
+        ? "没提供的现在看不到：摘要里说过的内容仍然有效；不够用时调用 cam_view_image 工具，传入编号取回原图；不要猜测看不到的细节。"
+        : "没提供的现在看不到：摘要里说过的内容仍然有效；问题得看其中某张图才能回答时，不要只说答不了，在回复里单独写一行“需要 IMG-xxx”，用户勾选后它会出现在这里；不要猜测看不到的细节，也不要让用户重新上传。",
+    ].join("\n"),
     fetch: {
       title: "查看被省略的图片",
       description: "查看这个任务里一张或几张被省略的图片的原图。被省略的图片在对话里显示为“[图片 IMG-xxx 已省略…]”。只在回答需要看图、而你之前对它说过的内容不够用时调用；取回的原图只在本轮提供。",
@@ -118,6 +126,12 @@ const WORDS: Record<Lang, Words> = {
     here: (list) => `Context management note: in the message above, ${list} were original images at the time, and you looked at them then; what you said about them and the judgments you based on it remain valid, so do not take them back or call them guesses or made up. The placeholder text there was put in only for this request; it is not what was there at the time. You cannot see them now: if asked, say so truthfully (the user left them out), and do not add details you did not mention before. When a question can only be answered by looking at one of them, do not just say you cannot answer; write a line "need IMG-xxx" in your reply (with its number; list each one needed): that line is how the user learns which image to check again, and once they do, the original comes back in its place and you can answer from it.`,
     hereAuto: (list) => `Context management note: in the message above, ${list} were original images at the time, and you looked at them then; what you said about them and the judgments you based on it remain valid, so do not take them back or call them guesses or made up. The placeholder text there was put in only for this request (automatic image selection); it is not what was there at the time. When what you said before is not enough, fetch the original with cam_view_image; do not add details you did not mention before.`,
     listItem: (id, name, kind) => `${id} (${[name, kind].filter(Boolean).join(", ")})`,
+    compacted: (list, auto) => [
+      `Context management note (from the context asset manager the user installed): the conversation before the summary above had these images: ${list}. Compacting the conversation took them out of context; the ones the user checked to send are included again right below, each marked "[Image IMG-xxx included…]" with the original image right after it. They are the images the summary speaks of, and they are in front of you now: when asked about one, look at it and answer from it.`,
+      auto
+        ? "The others are not visible now: what the summary says about them remains valid; when that is not enough, call the cam_view_image tool with an id to fetch the original; do not guess details you cannot see."
+        : "The others are not visible now: what the summary says about them remains valid. When a question can only be answered by looking at one of them, do not just say you cannot answer; write a line \"need IMG-xxx\" in your reply, and once the user checks it, it appears here. Do not guess details you cannot see, and do not ask the user to upload it again.",
+    ].join("\n"),
     fetch: {
       title: "View omitted images",
       description: "View the originals of one or more omitted images in this task. Omitted images appear in the conversation as \"[Image IMG-xxx omitted…]\". Call it only when an answer needs to look at an image and what you said about it before is not enough; the originals are included only in this turn.",
@@ -173,6 +187,12 @@ export function hereNote(images: Described[], lang: Lang = "zh", auto = false): 
   const words = WORDS[lang];
   const list = images.map((image) => words.listItem(image.id, image.name, words.kind[image.kind])).join(words.separator);
   return auto ? words.hereAuto(list) : words.here(list);
+}
+
+// v0.5, Claude Code only: the note after a compaction summary, listing the images from before it.
+export function compactedNote(images: Described[], lang: Lang = "zh", auto = false): string {
+  const words = WORDS[lang];
+  return words.compacted(images.map((image) => words.listItem(image.id, image.name, words.kind[image.kind])).join(words.separator), auto);
 }
 
 export function autoPlaceholder(image: Described, lang: Lang = "zh"): string {

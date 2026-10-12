@@ -84,6 +84,12 @@ test("compaction: the chain goes on across the boundary, and images before it ar
   const index = buildClaudeIndex("s", t.records);
   assert.deepEqual(index.images.map((entry) => [entry.id, entry.key, entry.compacted, entry.turn]), [["IMG-001", `${p1}#0`, true, 1], ["IMG-002", `${p2}#0`, false, 2]]);
   assert.deepEqual(index.uploads.map((upload) => upload.compacted), [true, false]);
+  // v0.5: the latest summary's text, which starts the request after the compaction.
+  assert.equal(index.summary, "summary");
+  assert.equal(buildClaudeIndex("s", transcript().records).summary, null);
+  t.boundary();
+  t.records.push({ type: "user", isCompactSummary: true, message: { role: "user", content: [{ type: "text", text: "second summary" }] }, uuid: "00000000-0000-4000-8000-0000000000ff", parentUuid: t.last, sessionId: "s", isSidechain: false });
+  assert.equal(buildClaudeIndex("s", t.records).summary, "second summary");
 });
 
 test("an image our fetch tool returned is a copy of the original: no id, recorded with its turn", () => {
