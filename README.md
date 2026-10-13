@@ -17,7 +17,7 @@
 
 <p align="center"><b>English</b> · <a href="README_CN.md">简体中文</a></p>
 
-> **New in 0.5: your choice survives compaction in Claude Code.** When Claude Code compacts a conversation, it stops sending the images from before; the plugin keeps sending the ones you checked, right after the summary. **Since 0.4** it works in Claude Desktop: in the Code tab, install the plugin and type `/cam` in a session, and the same panel opens in the built-in browser, next to the conversation. Formerly *Codex Attachment Manager*; the project was renamed because it no longer works with Codex alone.
+> **New in 0.6: Auto-select is on by default, and in Claude Desktop the panel opens by itself.** New tasks and sessions start with Auto-select on, so images from earlier turns stay out unless the model needs them, even if you never open the panel; tasks and sessions you already have keep their setting. In Claude Desktop the panel opens next to the conversation once a session has images. **Earlier:** since 0.5 your selection survives compaction in Claude Code, and since 0.4 it works in Claude Desktop. Formerly *Codex Attachment Manager*; the project was renamed because it no longer works with Codex alone.
 
 <p align="center">
   <img src="docs/images/demo.gif" alt="The panel's filter shows only the PDF page, then every image again, and the uploads are unchecked a turn at a time. Asked about the chat button in the v1 desktop mockup, the model replies need IMG-001; the panel points to IMG-001, the user checks it, and the model answers from the image: orange." width="100%">
@@ -37,7 +37,7 @@ So I wanted to keep the long conversation going and decide, turn by turn, which 
 - **Duplicates handled**: when an identical image is still being sent, the placeholder points to it.
 - **The model knows why**: a note tells the model the images were left out by you to save context, so its earlier answers still stand and it doesn't make up details it can't see.
 - **The model asks, you decide**: when it needs an image, it replies `need IMG-xxx`. The panel lists what it asked for and jumps to it in one click. A checked image goes back to its place in the conversation, marked with its ID.
-- **Or let the model pick** (new in 0.3): switch on *Auto-select* at the bottom of the panel, per task or session. Images from earlier turns are then left out by default, and the model fetches the ones it needs by ID, for that turn only. Images you check are pinned and go every turn. The panel shows what the model fetched in the latest turn.
+- **Or let the model pick** (new in 0.3, on by default since 0.6): *Auto-select* at the bottom of the panel, per task or session. Images from earlier turns are then left out by default, and the model fetches the ones it needs by ID, for that turn only, several at once if it needs several. Images you check are pinned and go every turn. New tasks and sessions start with it on; switch it off to choose yourself. The panel shows what the model fetched in the latest turn.
 - **Keeps your choice through compaction** (new in 0.5, Claude Code): when Claude Code compacts a conversation, it stops sending the images from before it. The plugin keeps sending the ones you checked, right after the summary and marked with their IDs, and tells the model about the others, so it can still ask for them or fetch them. The panel marks these images *Before compaction*.
 - **See the savings**: the panel estimates the size of the next request and how much you save compared with sending every image, and warns you when a request could not be rewritten.
 - **English and Simplified Chinese**: the panel, the tab name and the note for the model follow Codex's language, or your system's language when Codex isn't installed.
@@ -110,15 +110,15 @@ Then start a new session in the Code tab. There is nothing to set up: the plugin
 ### In Codex
 
 1. Open **Context Assets** in the side panel of a task. On a new chat you can open it before the first message; it switches to the task once you send.
-2. Uncheck the images you don't want to send anymore. Each change is saved at once and applies from the next message.
-3. When the model replies `need IMG-xxx` for an unchecked image, a bar at the top of the panel lists it. Click the ID to jump to the image and check it.
+2. New tasks start with **Auto-select** on (at the bottom of the panel): images from earlier turns are left out, and the model fetches the ones it needs. Check the images that should go every turn, such as a reference image. Each change is saved at once and applies from the next message.
+3. To choose yourself, switch Auto-select off: every image then goes unless you uncheck it. When the model replies `need IMG-xxx` for an unchecked image, a bar at the top of the panel lists it; click the ID to jump to the image and check it. Switching Auto-select on again brings your pins back, and off again your own checks.
 4. With many images, click the filter button next to refresh and pick the sources to show. A turn's checkbox then covers only the images shown.
-5. To let the model pick, switch on **Auto-select** at the bottom of the panel. Check the images that should go every turn, such as a reference image; the model fetches the others when it needs them. Switch it off to get your own checks back.
+5. Tasks you had before installing 0.6 keep their setting.
 
 ### In Claude Desktop
 
-1. In a session in the Code tab, type `/cam` and send it. The panel opens in Claude Desktop's built-in browser, next to the conversation. If `/cam` is your first message in a new session, the prompt box may say the command doesn't exist: send it anyway. Claude Desktop starts the session when you send your first message, and the plugin adds `/cam` then.
-2. From there it works as in Codex: uncheck, check again, answer `need IMG-xxx`, filter, or switch on **Auto-select**. Changes apply from the next message.
+1. Once a session in the Code tab has images, the panel opens by itself in Claude Desktop's built-in browser, next to the conversation. When you have been away from a session for about 30 minutes, Claude Desktop closes its built-in browser; the panel opens again with your next message. If you close it yourself, it stays closed in that session until you type `/cam` and send it, which opens it any time. If `/cam` is your first message in a new session, the prompt box may say the command doesn't exist: send it anyway. Claude Desktop starts the session when you send your first message, and the plugin adds `/cam` then.
+2. From there it works as in Codex: new sessions start with **Auto-select** on; pin, filter, or switch it off to uncheck images yourself and answer `need IMG-xxx`. Changes apply from the next message.
 3. With Auto-select on, the model's `cam_view_image` calls don't ask for your permission, unless your own Claude Code settings or hooks say otherwise.
 
 If the built-in browser can't be used (in the terminal, for example), `/cam` shows a small pane with a link to the panel instead.

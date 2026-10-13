@@ -303,6 +303,25 @@ export function forkOrigin(sessionsDir: string, threadId: string): { parent: str
   return origin;
 }
 
+const starts = new Map<string, string | null>();
+
+// v0.6: when a thread started, from its session_meta; a fork counts from the thread it came from (followed to the
+// first one; the fork's own time when that one is gone). null while the thread has no rollout. Cached once known.
+export function threadStartedAt(sessionsDir: string, threadId: string, depth = 0): string | null {
+  const origin = forkOrigin(sessionsDir, threadId);
+  if (origin && depth < 16) return threadStartedAt(sessionsDir, origin.parent, depth + 1) ?? (origin.at || null);
+  const key = `${sessionsDir}\0${threadId}`;
+  if (starts.has(key)) return starts.get(key)!;
+  const meta = withSegments(sessionsDir, ({ segments }) => {
+    const first = segments.get(threadId);
+    return first ? { found: true, record: firstRecord(first) } : { found: false, record: null };
+  });
+  if (!meta.found) return null;
+  const at = (meta.record?.type === "session_meta" ? meta.record.payload.timestamp : null) ?? meta.record?.timestamp ?? null;
+  starts.set(key, typeof at === "string" ? at : null);
+  return starts.get(key)!;
+}
+
 // Whether the thread has a rollout at all: a thread Codex prepared for a new chat has none until its first message.
 export function hasRollout(sessionsDir: string, threadId: string): boolean {
   return allSegments(sessionsDir).segments.has(threadId);

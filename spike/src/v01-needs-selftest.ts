@@ -148,7 +148,8 @@ async function main(): Promise<void> {
       }
       if (!index) throw new Error(`thread ${threadId}: its screenshots never showed up in the index`);
       const unchecked = Object.fromEntries(index.images.map((image) => [image.key, { id: image.id, at: new Date().toISOString() }]));
-      writeSelection({ threadId, unchecked }, selectionDirOf(data));
+      // Manual mode on purpose: from v0.6 a new task has automatic selection on by default.
+      writeSelection({ threadId, unchecked, auto: false }, selectionDirOf(data));
       await sleep(2500);
       entry.images = index.images.map((image) => `${image.id}:${image.kind}:${image.name ?? "-"}`);
       for (const [name, prompt] of questions) entry.turns[name] = await runTurn(server, threadId, [text(prompt)]);
@@ -156,7 +157,7 @@ async function main(): Promise<void> {
       // asks again; the model must now answer from the image (GPT-6 Luna kept saying it could not see it).
       const asked = askedIn(String(entry.turns[questions[questions.length - 1][0]]?.reply ?? ""));
       if (recheck && asked.length) {
-        writeSelection({ threadId, unchecked: Object.fromEntries(Object.entries(unchecked).filter(([, value]) => !asked.includes(value.id))) }, selectionDirOf(data));
+        writeSelection({ threadId, unchecked: Object.fromEntries(Object.entries(unchecked).filter(([, value]) => !asked.includes(value.id))), auto: false }, selectionDirOf(data));
         await sleep(2500);
         entry.rechecked = asked;
         entry.turns.recheck = await runTurn(server, threadId, [text(words.recheck)]);

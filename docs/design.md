@@ -25,7 +25,7 @@
 | 改写 | `rewrite.ts`、`selection.ts`、`request-stats.ts` | 占位符、说明和标签；勾选状态；请求统计 |
 | 接入和安装 | `codexconfig.ts`、`setup.ts`、`install.ts`、`codexcli.ts`、`cam.ts` | 管理 Codex 配置里带标记的块；用 Codex 的命令行装卸插件；`cam` 命令行 |
 | 其他 | `language.ts`、`messages.ts`、`paths.ts`、`migrate-data.ts`、`binding.ts`、`entry.ts` | 语言、文字表、数据目录、旧数据迁移、新任务绑定 |
-| Claude 接入（v0.4） | `hooks/register.js`（Mod，不在 `plugin/src`） | 把会话的请求地址指向引擎；`/cam` 打开面板；取图工具免确认 |
+| Claude 接入（v0.4） | `hooks/register.js`（Mod，不在 `plugin/src`） | 把会话的请求地址指向引擎；`/cam` 打开面板（v0.6 起有图时自动打开）；取图工具免确认 |
 | Claude 会话索引和改写（v0.4） | `claude-index.ts`、`claude-rewrite.ts` | 从 Claude Code 的会话记录找图、编号；改写 Anthropic Messages 请求 |
 | Claude 思考记录（v0.4） | `claude-thinking.ts` | 账号校验思考记录时，去掉和实际发出的历史对不上的思考 |
 | 面板页（v0.4） | `panel-web.js` | 引擎把 `panel.html` 作为网页提供时，代替 MCP 应用的宿主 |
@@ -88,6 +88,7 @@
   - “重复”占位符只指向之前各轮仍在发送的图，也就是固定发送的；“已提供”标签也只加在这些图前面。这一轮的新图和取回的副本都不算：它们是这一轮中途才出现的，算进去的话，前面的占位符会在取图前后变样，缓存就断了。这样取图前后，这一轮前面的历史逐字节不变（有单元测试）。
   - 副本只在取回的那一轮发送；之后换成一句说明（“IMG-xxx 的原图：模型当时用 cam_view_image 取回，只在那一轮提供，现在已省略”）。关掉自动以后也这样，因为面板不单列副本，用户没法取消它。
   - 关着时，传给改写的参数和 v0.2 一样，输出逐字节相同：对照 v0.2 的改写代码，所有勾选组合（中英文、像素相同与否）都比过。
+  - v0.6 起新任务默认开着（`selection.ts`）：引擎和插件服务启动时，在勾选目录里写下这个版本第一次运行的时间（`auto-default.json`，只写一次，Codex 和 Claude 各一份）。任务没有自己的开关时，开始时间（会话记录第一条 `session_meta` 的时间，分叉的按来源任务算，`threadStartedAt`）不早于它，就当作开着，从开始时算起；还没有会话记录的算新的。默认值不写进勾选文件，面板里一改就写下来。读勾选的地方都经过它：改写、是否需要改写（所以新任务从一开始就走 HTTP）、面板、取图工具。
 - **切到 HTTP**：WebSocket 连接上 Codex 只发新增的条目，靠 `previous_response_id` 接上服务端保存的历史，已经发过的图去不掉。所以：
   - 任务一需要改写（有取消项，或者用过自动选图），引擎就对它的 WebSocket 握手回 426，Codex 在这个会话里改走 HTTP，每次都发完整历史；
   - 它已有的 WebSocket 连接，空闲 1.5 秒后由引擎关掉；
@@ -157,7 +158,7 @@
 
 - Windows 是 `%USERPROFILE%\.codex-attachment-manager`，macOS 是 `~/Library/Application Support/codex-attachment-manager`，Linux 按 XDG 是 `~/.local/share/codex-attachment-manager`；`CAM_DATA_DIR` 可以改（测试、开发用）。
 - Windows 上不放在 AppData 下：Codex 是微软商店应用，它启动的程序在 AppData 里新建的文件会被转存到应用的私有目录，Codex 外面的命令行和引擎就看不到了。
-- 里面有：`selection/`（勾选状态，每个任务一个文件，只记取消的识别键；v0.3 起还记自动选图的开关 `auto`、最近一次切换的时间 `autoAt`、第一次打开的时间 `autoSince` 和固定发送的识别键 `pinned`）、`bindings/`、`state/requests/`（请求统计）、`cache/pixels/`、`proxy/`（引擎日志）、`plugin-server.jsonl`、`language.json`、`config-backup/`。
+- 里面有：`selection/`（勾选状态，每个任务一个文件，只记取消的识别键；v0.3 起还记自动选图的开关 `auto`、最近一次切换的时间 `autoAt`、第一次打开的时间 `autoSince` 和固定发送的识别键 `pinned`；v0.6 起还有 `auto-default.json`，新任务默认开着自动选图的起始时间）、`bindings/`、`state/requests/`（请求统计）、`cache/pixels/`、`proxy/`（引擎日志）、`plugin-server.jsonl`、`language.json`、`config-backup/`。
 - 分叉任务沿用原任务在分叉那一刻的勾选，之后各管各的。v0.3：固定发送一样按时间继承；开关在分叉前打开、之后没再切换过才继承；分叉前用过自动选图的，分叉也记下 `autoSince`，以便省略历史里的副本。
 - `migrate-data.ts` 在第一次使用时，把旧位置（旧的 AppData 目录和各应用私有目录里的副本）的数据复制过来，用锁文件保证只有一个进程在复制。
 
@@ -184,6 +185,7 @@
 - **自动选图自测**（v0.3，`v03-auto-selftest.ts`）：同样起自己的引擎和 app-server，另把本仓库的插件服务挂成一个单独的 MCP 服务，提供 `cam_view_image`；开关写在测试自己的勾选文件里。测试图角落各藏一个数字，描述时不提：
   - A 组明确要求取图，检查取到、副本不另编号、下一轮被省略；
   - B 组问需要看图的（角落数字、按颜色找图、两个数字相加）和不需要看图的（复述、翻译）；
+  - D 组（v0.6）不设开关，检查新任务默认开着；一个问题同时要两张没取过的图，检查都取回、答对；
   - C 组只有一张图，排除上下文的干扰。
   - 2026-10-06 的结果：sol、astra 中英文全部通过；luna 取不取的判断基本都对（英文 C 组漏取一次），读取回的图偶尔读错数字（见第 11 节“模型的差别”）。
 
@@ -209,7 +211,7 @@
   - v0.3 查证：GPT-6 Luna（low）读工具结果里的图，比读用户消息里的图差。同一张图放在消息里问，四次都读对；经 `cam_view_image` 或 Codex 自带的 `view_image` 送来，常把角落的小数字读错（5 读成 3，7 读成 2），有时说看不到数字。把取回的图挪进紧跟着的一条用户消息也没改善，问题在“先调用工具再看图”这个过程，不在图放在哪里。Sol、Astra 没有这个问题。README 和发布说明写明了这一点。
 - **桌面版的上下文比自测多**：桌面版每轮还带着电脑操作、浏览器等插件的工具说明（约 1 万 token）。自测为了不让测试模型操作用户的电脑，没开这些插件，所以个别只在桌面版出现的模型行为，自测复现不出来。
 
-## 12. Claude Code 接入（v0.4、v0.5）
+## 12. Claude Code 接入（v0.4–v0.6）
 
 方案、关卡和任务见 [v0.4/plan.md](v0.4/plan.md)。做法是把上面的机制逐块移植，这里写对应的做法和平台逼迫的改动。
 
@@ -248,6 +250,8 @@
   - 页面和接口只接受用本机名字（`localhost`、`127.0.0.1`、`[::1]`）访问、不带其他网站 Origin 的请求；接口还要带 `x-cam-panel` 请求头；页面带严格的 CSP。
   - `/cam` 用桌面版给每个 Code 会话的浏览器工具（`Claude_Browser` 的 `preview_start`），在自带的浏览器里打开页面。这个工具不是公开给插件的接口，调用失败或者没有时，Mod 弹出小面板给链接。Mod 面板里的链接，点开会交给系统浏览器。
   - 小面板上的图片数，在打开时、每轮结束后，以及 `/clear`、`/resume` 之后重新读取。
+  - v0.6 自动打开（Mod）：桌面版的浏览器工具能用（终端和 VS Code 里没有）、请求经过引擎时，在进程启动、每轮开始和结束时检查：会话有图（引擎的面板接口）、面板没开（`tabs_context` 里没有引擎来源的标签页）、用户没在这个会话里关过，就 `preview_start` 打开。检查一次只做一个，免得开出两个标签页。
+  - 谁关的按时间分：桌面版最早在一轮结束 30 分钟后关会话的自带浏览器（用户看着这个会话时还要更晚），Claude Code 进程不停。这个进程开过的面板在那之前没了，是用户关的，记在插件自己的存储里（`closedPanels`，按会话，留最近 200 个），之后不再自动打开；停了 30 分钟以上，下一轮开始时不在，就重新打开。一轮结束 25 分钟后再看一次，认出停顿里被用户关掉的。`/cam` 清掉这个记录，打开新标签页并关掉旧的；`/clear`、`/resume` 后，开着的面板换到新会话。
   - 页面语言跟着引擎（`CAM_LANG` 或系统语言），不看浏览器。
 - **取图工具**：插件服务以 `CAM_HOST=claude` 运行，只给模型 `cam_view_image`。Mod 把调用它的会话 id 补进参数（插件服务可能比 `/clear`、`/resume` 活得久），并在 `classic.PreToolUse` 里放行这一个工具：先让下面的钩子和设置判断，它们拒绝或要求询问时照旧。
 - **数据目录**：Claude 会话的勾选在 `claude/selection/`，请求统计在 `claude/requests/`，思考记录的哈希在 `claude/thinking/`，和 Codex 的分开。
@@ -259,5 +263,6 @@
 - **依赖的 Claude 行为**（都不是公开接口，Claude 更新后要重新验证）：
   - 会话记录的格式：`parentUuid`、`turnPosition`、压缩分界、并行工具结果的挂法；请求头 `x-claude-code-session-id`。v0.5：压缩后的请求以摘要开头，摘要文字和记录里 `isCompactSummary` 那条相同；会话记录只追加，压缩前的图一直在里面。
   - 桌面版启动会话的方式：启动时传入 `ANTHROPIC_BASE_URL`；新会话要到第一条输入才启动进程，所以 `/cam` 在那之前不在输入框的命令列表里。
-  - `Claude_Browser` 浏览器工具；Mod 面板里的链接交给系统浏览器；桌面版在会话里发的附带请求。
+  - `Claude_Browser` 浏览器工具（v0.6 还用 `tabs_context`、`tabs_close`、`navigate`）；Mod 面板里的链接交给系统浏览器；桌面版在会话里发的附带请求。
+  - v0.6：用户不在看这个会话、又 30 分钟没有新的一轮，桌面版就断开会话的自带浏览器、关掉它的标签页，Claude Code 进程照常运行（日志：一轮结束或用户离开会话时 `[WarmLifecycle:preview] Starting idle timeout … 1800s`，用户回来看时重新计时，到时 `Idle timeout reached`）；内存紧张时停掉闲置很久的进程，用到时再启动（`[CliGovernor] pressure evicting`）。时间变了，自动打开分不清谁关的。
   - 思考记录的前缀校验：替换历史里的一张图，之后的思考块就对不上了；2026-08-31 以后注册的账号直接拒绝。比较时不看 JSON 写法和键的顺序；去掉开头或末尾的思考可以，去掉中间的会让后面的失效，把去掉过的放回去，会让它不在期间产生的失效。

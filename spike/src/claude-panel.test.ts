@@ -11,8 +11,9 @@ import { join } from "node:path";
 import test from "node:test";
 import { claudeSelectionDirOf } from "../../plugin/src/paths.ts";
 import { callClaudeTool, claudeToolsFor } from "../../plugin/src/plugin-server.ts";
-import { claudePanelApi, claudePanelPage, ownRequest } from "../../plugin/src/proxy.ts";
-import { pngC, usualSession } from "./claude-fixtures.ts";
+import { claudeNeedsRewrite, claudePanelApi, claudePanelPage, ownRequest, rewriteClaudeBody } from "../../plugin/src/proxy.ts";
+import { ensureAutoDefault } from "../../plugin/src/selection.ts";
+import { pngC, usualRequest, usualSession } from "./claude-fixtures.ts";
 
 process.env.CAM_LANG = "zh";
 const session = "11111111-2222-4333-8444-555555555555";
@@ -84,6 +85,33 @@ test("cam_view_image works only with automatic selection on, and returns the ori
   assert.match(on.content[2].text, /没有 IMG-099/);
   // Without a session in the call, the one Claude Code started the service for.
   assert.equal(callClaudeTool("cam_view_image", { ids: ["IMG-003"] }, options, { CLAUDE_CODE_SESSION_ID: session }).isError, false);
+});
+
+// v0.6 (user 2026-10-13): automatic selection is on by default in a session started after this version first ran here.
+test("v0.6: a session started after the default began has automatic selection on; one from before keeps its own", () => {
+  const started = (at: string) => {
+    const { options } = setup();
+    // Claude Code stamps its records: the first one says when the session started.
+    const file = join(options.home, "projects", "D--work", `${session}.jsonl`);
+    const records = readFileSync(file, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    records[0].timestamp = at;
+    writeFileSync(file, records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+    ensureAutoDefault(claudeSelectionDirOf(options.dataRoot), new Date("2026-10-13T00:00:00Z"));
+    return options;
+  };
+  const request = Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", tools: [{ name: "Read", input_schema: { type: "object" } }], messages: usualRequest() }));
+  const fresh = started("2026-10-13T01:00:00Z");
+  const dir = claudeSelectionDirOf(fresh.dataRoot);
+  assert.equal(get(`/__cam/claude/panel?session=${session}`, fresh).body.auto, true);
+  assert.equal(claudeNeedsRewrite(session, dir, fresh.home), true);
+  assert.equal(rewriteClaudeBody(request, undefined, session, dir, fresh.home, {}).report.auto, true);
+  assert.equal(callClaudeTool("cam_view_image", { sessionId: session, ids: ["IMG-003"] }, fresh).isError, false);
+  // Switched off in the panel: written down, and it stays off.
+  assert.equal(post(`/__cam/claude/select?session=${session}`, { auto: false }, fresh).body.auto, false);
+  assert.equal(get(`/__cam/claude/panel?session=${session}`, fresh).body.auto, false);
+  const old = started("2026-10-12T23:00:00Z");
+  assert.equal(get(`/__cam/claude/panel?session=${session}`, old).body.auto, false);
+  assert.equal(claudeNeedsRewrite(session, claudeSelectionDirOf(old.dataRoot), old.home), false);
 });
 
 test("the panel page and API answer only requests naming the engine by a loopback name, from no other site", () => {

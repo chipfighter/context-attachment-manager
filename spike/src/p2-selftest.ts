@@ -19,7 +19,7 @@ type Json = Record<string, any>;
 const localRoot = join(resolve(dirname(fileURLToPath(import.meta.url)), "../.."), "local");
 
 function setChecked(threadId: string, keys: Record<string, string>, uncheck: string[]): void {
-  writeSelection({ threadId, unchecked: Object.fromEntries(uncheck.map((id) => [keys[id], { id, at: new Date().toISOString() }])) });
+  writeSelection({ threadId, unchecked: Object.fromEntries(uncheck.map((id) => [keys[id], { id, at: new Date().toISOString() }])), auto: false });
 }
 
 async function main(): Promise<void> {

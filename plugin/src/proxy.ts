@@ -25,7 +25,7 @@ import type { Duplex } from "node:stream";
 import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
-import { claudeHome, claudeImageData, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
+import { claudeHome, claudeImageData, claudeStartedAt, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
 import { addCompacted, findRequestImages, rewriteMessages, summaryAt, type RequestImage, type Resend } from "./claude-rewrite.ts";
 import { chainOf, fitThinking, readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./claude-thinking.ts";
 import { codexHome } from "./codexconfig.ts";
@@ -35,11 +35,11 @@ import { isEntryPoint } from "./entry.ts";
 import { currentLang } from "./language.ts";
 import { migrateDataOnce } from "./migrate-data.ts";
 import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type ClaudePanelOptions } from "./panel-state.ts";
-import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, proxyLogDirOf } from "./paths.ts";
+import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, proxyLogDirOf, selectionDirOf } from "./paths.ts";
 import { recordRequest } from "./request-stats.ts";
 import { rewriteItems, type Described } from "./rewrite.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./setup.ts";
-import { effectiveSelection, readSelection, selectionDir } from "./selection.ts";
+import { claudeSelection, effectiveSelection, ensureAutoDefault, selectionDir } from "./selection.ts";
 import { loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
@@ -306,11 +306,13 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
 // before the compaction, which the user may keep sending.
 export function claudeNeedsRewrite(sessionId: string | null, dir = claudeSelectionDirOf(), home = claudeHome()): boolean {
   if (!sessionId) return false;
+  let index: ClaudeIndex | null = null;
+  try { index = loadClaudeIndex(sessionId, home); } catch { /* the selection still decides */ }
   try {
-    const selection = readSelection(sessionId, dir);
+    const selection = claudeSelection(sessionId, dir, index ? claudeStartedAt(index) : null);
     if (Object.keys(selection.unchecked).length > 0 || selection.autoSince) return true;
   } catch { /* the transcript still decides */ }
-  try { return loadClaudeIndex(sessionId, home).images.some((image) => image.compacted); } catch { return false; }
+  return !!index?.images.some((image) => image.compacted);
 }
 
 // The images a Claude Code request carried, by index key, with the base64 characters each took (the panel's
@@ -348,7 +350,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   if (hasUnsafeInteger(text)) return asIs({ skipped: "integer beyond 2^53 would change when re-serialized" });
   let index: ClaudeIndex;
   try { index = loadClaudeIndex(sessionId, home); } catch (error) { return asIs({ skipped: `thread index: ${String(error)}` }); }
-  const selection = readSelection(sessionId, dir);
+  const selection = claudeSelection(sessionId, dir, claudeStartedAt(index));
   const current = index.turns;
   const copies = new Map([...index.copies.values()].filter((copy) => copy.turn === null || copy.turn < current).map((copy) => [copy.key, copy.of]));
   let leaveOut = new Set(Object.keys(selection.unchecked));
@@ -480,6 +482,9 @@ export function claudePanelApi(method: string, url: string, headers: IncomingHtt
 
 async function main(): Promise<void> {
   migrateDataOnce(); // v0.1-15: Windows moved the data folder
+  // v0.6: tasks and sessions started from now on have automatic selection on by default (selection.ts).
+  ensureAutoDefault(selectionDirOf());
+  ensureAutoDefault(claudeSelectionDirOf());
   const portIndex = process.argv.indexOf("--port");
   const port = Number(portIndex >= 0 ? process.argv[portIndex + 1] : DEFAULT_PORT);
   // One engine per machine: a second start leaves the running one alone.

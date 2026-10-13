@@ -6,13 +6,17 @@
 // the manual checks, which come back as they were when it is switched off. `autoAt` is when it was last switched,
 // `autoSince` when it was first switched on: from then on the history may hold copies the model fetched, which the
 // engine leaves out of later turns even with the switch off.
+// v0.6 — automatic selection is on by default in a thread started after this version first ran here (user
+// 2026-10-13: every new task and session, in Codex and Claude Code; the ones from before keep what they had). That
+// time is written once next to the selections (auto-default.json); a thread's own switch always wins, and the default
+// itself is never written down.
 // Input/Output: <data dir>/selection/<thread id>.json, e.g. { "threadId": "…", "unchecked": { "<key>": { "id": "IMG-003", "at": "…" } } },
 // plus "auto", "autoAt", "autoSince" and "pinned" (same shape as "unchecked") once automatic selection has been used.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { selectionDirOf } from "./paths.ts";
-import { forkOrigin } from "./thread-index.ts";
+import { forkOrigin, threadStartedAt } from "./thread-index.ts";
 
 export type Mark = { id: string; at: string };
 export type Selection = { threadId: string; unchecked: Record<string, Mark>; auto?: boolean; autoAt?: string; autoSince?: string; pinned?: Record<string, Mark>; inheritedFrom?: string };
@@ -45,10 +49,54 @@ export function writeSelection(selection: Selection, dir = selectionDir): void {
   renameSync(`${file}.tmp`, file);
 }
 
+// v0.6: written by the engine and the plugin service when they start; the first one wins.
+const AUTO_DEFAULT = "auto-default.json";
+const sinceOf = new Map<string, string>();
+export function ensureAutoDefault(dir = selectionDir, now = new Date()): void {
+  mkdirSync(dir, { recursive: true });
+  try {
+    writeFileSync(join(dir, AUTO_DEFAULT), JSON.stringify({ since: now.toISOString() }, null, 2), { flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+}
+
+// null until this version has run here: then nothing is on by default.
+export function autoDefaultSince(dir = selectionDir): string | null {
+  const known = sinceOf.get(dir);
+  if (known) return known;
+  try {
+    const since = JSON.parse(readFileSync(join(dir, AUTO_DEFAULT), "utf8")).since;
+    if (typeof since === "string") sinceOf.set(dir, since);
+    return typeof since === "string" ? since : null;
+  } catch {
+    return null;
+  }
+}
+
+// A thread with no switch of its own that started at or after `since` has automatic selection on, from its start;
+// one with no history yet (startedAt null) is just starting.
+export function withAutoDefault(selection: Selection, startedAt: string | null, since: string | null): Selection {
+  if (typeof selection.auto === "boolean" || !since) return selection;
+  const started = startedAt ?? new Date().toISOString();
+  if (Date.parse(started) < Date.parse(since)) return selection;
+  return { ...selection, auto: true, autoSince: selection.autoSince ?? started };
+}
+
+// v0.6: a Claude Code session's selection with the default applied, given when it started (claudeStartedAt).
+export function claudeSelection(sessionId: string, dir: string, startedAt: string | null): Selection {
+  return withAutoDefault(readSelection(sessionId, dir), startedAt, autoDefaultSince(dir));
+}
+
 // The thread's own selection; a fork without one takes the images its parent had unchecked by the time of the fork
 // (a fork of a fork asks its own parent in turn) and keeps them as its own file from then on. v0.3: likewise the
-// pinned images and the switch, when it was turned on before the fork.
+// pinned images and the switch, when it was turned on before the fork. v0.6: then the default applies, a fork
+// counting from the thread it came from.
 export function effectiveSelection(threadId: string, sessionsDir: string, dir = selectionDir, depth = 0): Selection {
+  return withAutoDefault(ownSelection(threadId, sessionsDir, dir, depth), threadStartedAt(sessionsDir, threadId), autoDefaultSince(dir));
+}
+
+function ownSelection(threadId: string, sessionsDir: string, dir: string, depth: number): Selection {
   if (existsSync(fileFor(threadId, dir)) || depth > 16) return readSelection(threadId, dir);
   const origin = forkOrigin(sessionsDir, threadId);
   if (!origin) return { threadId, unchecked: {} };
