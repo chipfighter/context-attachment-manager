@@ -26,31 +26,11 @@ import { requestStatsDirOf, selectionDirOf } from "../../plugin/src/paths.ts";
 import { readRequestStats } from "../../plugin/src/request-stats.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
 import { loadThreadIndex } from "../../plugin/src/thread-index.ts";
-import { archiveThreads, png, runTurn, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
+import { archiveThreads, CORNER_IMAGES, runTurn, says, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
 const localRoot = join(resolve(here, "../.."), "local");
-
-// ---- test images: a background, a shape in the middle, and a digit in one corner
-const FONT: Record<string, string[]> = {
-  "3": ["11111", "00010", "00100", "00010", "00001", "10001", "01110"],
-  "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
-  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
-};
-const digit = (ch: string, left: number, top: number, scale = 8) => (x: number, y: number) => {
-  const col = Math.floor((x - left) / scale);
-  const row = Math.floor((y - top) / scale);
-  return x >= left && y >= top && col < 5 && row < 7 && FONT[ch][row][col] === "1";
-};
-const IMAGES: Record<string, () => Buffer> = {
-  // White, a red square in the middle, a black 7 in the bottom-right corner.
-  "a.png": () => { const seven = digit("7", 440, 420); return png(512, 512, (x, y) => (seven(x, y) ? [0, 0, 0] : x >= 136 && x < 376 && y >= 136 && y < 376 ? [220, 30, 30] : [255, 255, 255])); },
-  // Yellow, a blue disc in the middle, a green 3 in the top-left corner.
-  "b.png": () => { const three = digit("3", 30, 30); return png(512, 512, (x, y) => (three(x, y) ? [20, 120, 40] : (x - 256) ** 2 + (y - 256) ** 2 < 130 ** 2 ? [40, 70, 210] : [250, 220, 60])); },
-  // Purple, a white triangle pointing up, an orange 5 in the top-right corner.
-  "c.png": () => { const five = digit("5", 442, 30); return png(512, 512, (x, y) => (five(x, y) ? [250, 140, 20] : y > 120 && y < 400 && Math.abs(x - 256) < (y - 120) * 0.6 ? [255, 255, 255] : [120, 50, 160])); },
-};
 
 const SCRIPT = {
   zh: {
@@ -89,13 +69,6 @@ const SCRIPT = {
   },
 };
 
-// A number in the reply, as a numeral or a word, ignoring image ids.
-const NUMBER_WORDS: Record<number, RegExp> = { 3: /三|three/i, 5: /五|five/i, 7: /七|seven/i, 10: /十|ten\b/i, 12: /十二|twelve/i };
-const says = (reply: string, n: number) => {
-  const clean = reply.replace(/IMG-\d{3}/g, "");
-  return new RegExp(`(^|[^0-9])${n}([^0-9]|$)`).test(clean) || NUMBER_WORDS[n].test(clean);
-};
-
 async function main(): Promise<void> {
   const option = (name: string, fallback: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : fallback);
   const label = option("--label", "run1");
@@ -108,7 +81,7 @@ async function main(): Promise<void> {
   // A folder per run, so runs side by side never rewrite an image another one is uploading.
   const work = join(root, "work", label);
   mkdirSync(work, { recursive: true });
-  for (const [name, draw] of Object.entries(IMAGES)) writeFileSync(join(work, name), draw());
+  for (const [name, draw] of Object.entries(CORNER_IMAGES)) writeFileSync(join(work, name), draw());
   // What the panel would have told the plugin: Codex shows this language.
   rememberLang(lang, "codex", languageFileOf(data));
   const sessionsDir = join(codexHome(), "sessions");
