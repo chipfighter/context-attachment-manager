@@ -186,6 +186,24 @@ async function openInBrowser($, url) {
   }
 }
 
+// v0.6: the JSON object a text answer starts with. The browser tools add a line of text after it, which may hold braces
+// of its own (tabs_context while the pane is not open: '… navigate with {"url": …} to open it.').
+function leadingJson(text) {
+  const start = text.indexOf('{')
+  let depth = 0
+  let inString = false
+  for (let i = Math.max(start, 0); start >= 0 && i < text.length; i++) {
+    const c = text[i]
+    if (inString) {
+      if (c === '\\') i++
+      else if (c === '"') inString = false
+    } else if (c === '"') inString = true
+    else if (c === '{') depth++
+    else if (c === '}' && --depth === 0) return JSON.parse(text.slice(start, i + 1))
+  }
+  return null
+}
+
 // v0.6: the session's tabs in Claude's browser (tabs_context answers JSON, then a line of text), the page's told apart
 // by the engine's origin; null when the browser tools are not there or fail.
 const PAGE_ORIGIN = `http://localhost:${ENGINE_PORT}`
@@ -193,8 +211,7 @@ async function pageTabs($) {
   try {
     const result = await $.mcp.call('Claude_Browser', 'tabs_context', {})
     if (result?.isError) return null
-    const text = (result?.content ?? []).map((block) => block?.text ?? '').join('\n')
-    const tabs = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)).tabs
+    const tabs = leadingJson((result?.content ?? []).map((block) => block?.text ?? '').join('\n'))?.tabs
     return Array.isArray(tabs) ? tabs.filter((tab) => tab?.origin === PAGE_ORIGIN) : null
   } catch {
     return null
