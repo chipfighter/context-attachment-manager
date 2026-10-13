@@ -17,7 +17,7 @@
 
 <p align="center"><b>English</b> · <a href="README_CN.md">简体中文</a></p>
 
-> **New in 0.6: Auto-select is on by default, and in Claude Desktop the panel opens by itself.** New tasks and sessions start with Auto-select on, so images from earlier turns stay out unless the model needs them, even if you never open the panel; tasks and sessions you already have keep their setting. In Claude Desktop the panel opens next to the conversation once a session has images. **Earlier:** since 0.5 your selection survives compaction in Claude Code, and since 0.4 it works in Claude Desktop. Formerly *Codex Attachment Manager*; the project was renamed because it no longer works with Codex alone.
+> **New in 0.7: subagents and side chats in Codex follow Auto-select too.** A side chat no longer resends the task's images, and a subagent leaves out the images of its own earlier turns; both fetch the ones they need by ID. The task's panel lists them, with a switch to turn this off. **Earlier:** since 0.6 Auto-select is on by default and the panel opens by itself in Claude Desktop, since 0.5 your selection survives compaction in Claude Code, and since 0.4 it works in Claude Desktop. Formerly *Codex Attachment Manager*; the project was renamed because it no longer works with Codex alone.
 
 <p align="center">
   <img src="docs/images/demo.gif" alt="The panel's filter shows only the PDF page, then every image again, and the uploads are unchecked a turn at a time. Asked about the chat button in the v1 desktop mockup, the model replies need IMG-001; the panel points to IMG-001, the user checks it, and the model answers from the image: orange." width="100%">
@@ -38,6 +38,7 @@ So I wanted to keep the long conversation going and decide, turn by turn, which 
 - **The model knows why**: a note tells the model the images were left out by you to save context, so its earlier answers still stand and it doesn't make up details it can't see.
 - **The model asks, you decide**: when it needs an image, it replies `need IMG-xxx`. The panel lists what it asked for and jumps to it in one click. A checked image goes back to its place in the conversation, marked with its ID.
 - **Or let the model pick** (new in 0.3, on by default since 0.6): *Auto-select* at the bottom of the panel, per task or session. Images from earlier turns are then left out by default, and the model fetches the ones it needs by ID, for that turn only, several at once if it needs several. Images you check are pinned and go every turn. New tasks and sessions start with it on; switch it off to choose yourself. The panel shows what the model fetched in the latest turn.
+- **Subagents and side chats too** (new in 0.7, Codex): a side chat you open in a task carries the task's whole history, images included; it now goes out with those images as placeholders, except the ones you pinned, and the model fetches one from the task when the answer needs it. Subagents the model starts without the task's history leave out the images of their own earlier turns and fetch them back the same way. The task's panel lists both, with an *Auto-select too* switch, on by default.
 - **Keeps your choice through compaction** (new in 0.5, Claude Code): when Claude Code compacts a conversation, it stops sending the images from before it. The plugin keeps sending the ones you checked, right after the summary and marked with their IDs, and tells the model about the others, so it can still ask for them or fetch them. The panel marks these images *Before compaction*.
 - **See the savings**: the panel estimates the size of the next request and how much you save compared with sending every image, and warns you when a request could not be rewritten.
 - **English and Simplified Chinese**: the panel, the tab name and the note for the model follow Codex's language, or your system's language when Codex isn't installed.
@@ -49,6 +50,7 @@ So I wanted to keep the long conversation going and decide, turn by turn, which 
 - In Codex, installing points Codex at the engine. In Claude Desktop, the plugin points each Claude Code session at the engine when the session starts, and puts it back when the session ends.
 - With Auto-select on, the engine does the same for the images of earlier turns you haven't pinned, and the plugin gives the model one tool, `cam_view_image`, to fetch an image back into the current turn. The placeholders before it stay as they were, so the cached part of the request isn't broken.
 - Selections and the Auto-select switch are saved per task or session. Only you can change them; the model can only fetch an image for one turn, and only with Auto-select on.
+- Codex sends the task a side chat or subagent came from with each of its requests, so the engine applies the task's switch for them; a side chat's images are looked up in the task it came from.
 - The panel doesn't go through the model and costs no tokens. In Codex it's an MCP app in the side panel; in Claude Desktop the engine serves the same page to the built-in browser, on your machine only.
 
 ## Requirements
@@ -113,7 +115,8 @@ Then start a new session in the Code tab. There is nothing to set up: the plugin
 2. New tasks start with **Auto-select** on (at the bottom of the panel): images from earlier turns are left out, and the model fetches the ones it needs. Check the images that should go every turn, such as a reference image. Each change is saved at once and applies from the next message.
 3. To choose yourself, switch Auto-select off: every image then goes unless you uncheck it. When the model replies `need IMG-xxx` for an unchecked image, a bar at the top of the panel lists it; click the ID to jump to the image and check it. Switching Auto-select on again brings your pins back, and off again your own checks.
 4. With many images, click the filter button next to refresh and pick the sources to show. A turn's checkbox then covers only the images shown.
-5. Tasks you had before installing 0.6 keep their setting.
+5. Once the model starts subagents, or you open a side chat in the task, the panel shows them under the request size, folded to one line with an **Auto-select too** switch. Unfold it to see each one's last request; switch it off to let their requests go out as they are.
+6. Tasks you had before installing 0.6 keep their own Auto-select setting.
 
 ### In Claude Desktop
 
@@ -159,6 +162,7 @@ Your selections and logs stay in the data folder (see [Privacy](#privacy)); dele
 - **Claude accounts created on or after August 31, 2026** check the model's earlier thinking against the conversation before it. To leave an image out on such an account, the engine also leaves out the earlier thinking that no longer matches the conversation as sent, so the model may think again and use more tokens; the panel tells you each time. Thinking from after the change is kept, and checking the image again brings back the thinking from before. Older accounts aren't affected.
 - **After a compaction in Claude Code**, the images you keep checked from before it go out with every request and take up context like any other, but Claude Code's own context meter doesn't count them. If requests get large or Claude Code compacts again soon, uncheck some or switch on Auto-select: the plugin doesn't decide this for you. Anthropic limits each request to 100 images for models with a 200k-token context window (600 for others), each up to 8000 px (with more than 20 images a stricter limit applies; under 2000 px is safe), and 32 MB in all.
 - In Claude Code, the main conversation is managed; subagents keep their own history as it is. Sessions that use another API address or a cloud provider (Bedrock, Vertex, Foundry) are left alone.
+- In Codex, a subagent started with the task's history follows the task's checks, as a forked task does. Images a subagent reads during one long turn all stay in that turn, as Auto-select keeps the current turn's images; they are left out from its next turn.
 - If you uncheck an image while a Codex turn is still running over WebSocket, the rest of that turn still carries the original. The panel tells you; the change applies from the next message.
 - In Codex, enabling, disabling and upgrading take effect after you restart Codex. In Claude Desktop, a new plugin version takes effect in new sessions: upgrade with `claude plugin marketplace update codex-attachment-manager`, then `claude plugin update codex-attachment-manager@codex-attachment-manager`.
 - After you switch Codex's language, the panel changes right away and the note for the model changes from the next message, but the tab name in the side panel changes only after a restart.
@@ -177,7 +181,7 @@ Your selections and logs stay in the data folder (see [Privacy](#privacy)); dele
 - Install from source into your Codex: quit Codex, run `cam install` in the repository (`./cam install` on macOS and Linux), then start Codex. `cam status` shows the installation, `cam uninstall` removes it.
 - Run the tests with Node 24 or later: `cd spike && node --test`. CI runs them on Windows, macOS and Linux, then installs the plugin with Codex's CLI and runs the install and uninstall scripts.
 - Work on the panel without Codex: `node spike/scripts/panel-dev.ts`, then open `http://127.0.0.1:17895/?solo=1`. The page uses synthetic images and a temporary Codex folder, so your real data is never read or changed.
-- When you change the text the model sees (`plugin/src/rewrite.ts`), run the self-tests in `spike/src/v01-placeholder-selftest.ts` and `spike/src/v01-needs-selftest.ts`, and for Auto-select's wording `spike/src/v03-auto-selftest.ts`, in Chinese and with `--lang en`. They start their own engine and app-server, use your Codex account, and archive the test tasks they create.
+- When you change the text the model sees (`plugin/src/rewrite.ts`), run the self-tests in `spike/src/v01-placeholder-selftest.ts` and `spike/src/v01-needs-selftest.ts`, and for Auto-select's wording `spike/src/v03-auto-selftest.ts`, in Chinese and with `--lang en`; `spike/src/v07-children-selftest.ts` covers subagents and side chats. They start their own engine and app-server, use your Codex account, and archive the test tasks they create.
 - Release notes: [CHANGELOG.md](CHANGELOG.md).
 
 ## License

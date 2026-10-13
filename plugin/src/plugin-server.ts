@@ -18,6 +18,8 @@
 // engine running, and serves the Claude plugin's mod (its panel and its routing, hooks/register.js) and the model's
 // cam_view_image for a Claude Code session, read from that session's transcript (claude-index.ts). The session is the
 // one the call names (the mod passes it), else the one Claude Code started this service for (CLAUDE_CODE_SESSION_ID).
+// v0.7 — in a side chat (kept in memory only, so without a rollout) cam_view_image fetches from the task the chat was
+// forked from, which its calls name; the panel switches automatic selection for a task's subagents and side chats.
 // Input: MCP JSON-RPC over stdio. Env: CAM_ENGINE_PORT (default 17891), CAM_NO_ENGINE=1 (tests), CAM_DATA_DIR,
 // CAM_HOST. Output: tool results; <data dir>/plugin-server.jsonl (events and counts only, no conversation content).
 
@@ -36,9 +38,9 @@ import { migrateDataOnce } from "./migrate-data.ts";
 import { applySelection, claudeImageFor, imageFor, loadPanelState, type ClaudePanelOptions, type PanelState } from "./panel-state.ts";
 import { claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./paths.ts";
 import { fetchedLabel, fetchWords } from "./rewrite.ts";
-import { claudeSelection, effectiveSelection, ensureAutoDefault } from "./selection.ts";
+import { claudeSelection, effectiveSelection, ensureAutoDefault, sideChatSelection } from "./selection.ts";
 import { connectDirectly, useEngine, usesEngine } from "./setup.ts";
-import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, setPixelCache } from "./thread-index.ts";
+import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, setPixelCache, sideChatOrigin } from "./thread-index.ts";
 import { threadTitle } from "./thread-names.ts";
 
 type Json = Record<string, any>;
@@ -66,7 +68,7 @@ export function toolsFor(lang: Lang) {
       name: "cam_set_selection",
       title: say(lang, "tool.select.title"),
       description: say(lang, "tool.select.description"),
-      inputSchema: { type: "object", properties: { ...shared, uncheck: { type: "array", items: { type: "string" } }, check: { type: "array", items: { type: "string" } }, checkAll: { type: "boolean" }, auto: { type: "boolean" }, mode: { type: "string", enum: ["manual", "auto"] } } },
+      inputSchema: { type: "object", properties: { ...shared, uncheck: { type: "array", items: { type: "string" } }, check: { type: "array", items: { type: "string" } }, checkAll: { type: "boolean" }, auto: { type: "boolean" }, mode: { type: "string", enum: ["manual", "auto"] }, childrenAuto: { type: "boolean" } } },
       _meta: APP_ONLY,
     },
     {
@@ -187,7 +189,7 @@ export function callTool(name: string, args: Json, meta: Json | undefined, sessi
   }
   if (name === "cam_set_selection") {
     if (fromModel(meta)) throw new Error(say(lang, "call.modelSelect"));
-    const state = applySelection(threadId, { uncheck: args.uncheck, check: args.check, checkAll: args.checkAll, auto: typeof args.auto === "boolean" ? args.auto : undefined, mode: args.mode === "auto" ? "auto" : "manual" }, options);
+    const state = applySelection(threadId, { uncheck: args.uncheck, check: args.check, checkAll: args.checkAll, auto: typeof args.auto === "boolean" ? args.auto : undefined, mode: args.mode === "auto" ? "auto" : "manual", childrenAuto: typeof args.childrenAuto === "boolean" ? args.childrenAuto : undefined }, options);
     return { content: [{ type: "text", text: summary(lang, state) }], structuredContent: panel(state) };
   }
   if (name === "cam_bind") {
@@ -211,25 +213,29 @@ export function callTool(name: string, args: Json, meta: Json | undefined, sessi
   if (name === "cam_view_image") {
     const words = fetchWords(lang);
     const ids: string[] = Array.isArray(args.ids) ? args.ids.map(String) : typeof args.id === "string" ? [args.id] : [];
+    // v0.7: a side chat's images are those of the task it came from.
+    const origin = sideChatOrigin(threadId, meta?.["x-codex-turn-metadata"]?.forked_from_thread_id, sessionsDir);
+    const dir = selectionDirOf(dataDir());
     // Only where the user switched automatic selection on; otherwise images come back only when the user checks them.
-    if (!effectiveSelection(threadId, sessionsDir, selectionDirOf(dataDir())).auto) {
-      log({ event: "fetch", threadId, ids, refused: "automatic selection is off" });
+    if (origin ? !sideChatSelection(origin, sessionsDir, dir) : !effectiveSelection(threadId, sessionsDir, dir).auto) {
+      log({ event: "fetch", threadId, ...(origin ? { from: origin } : {}), ids, refused: "automatic selection is off" });
       return { content: [{ type: "text", text: words.off }], isError: true };
     }
-    const index = loadThreadIndex(sessionsDir, threadId);
+    const source = origin ?? threadId;
+    const index = loadThreadIndex(sessionsDir, source);
     const content: Json[] = [];
     const found: string[] = [];
     for (const asked of ids) {
       const id = asked.trim().toUpperCase();
       const image = index.images.find((candidate) => candidate.id === id);
       if (!image) { content.push({ type: "text", text: words.missing(asked) }); continue; }
-      const { dataUrl } = imageFor(threadId, id, Number.MAX_SAFE_INTEGER, options);
+      const { dataUrl } = imageFor(source, id, Number.MAX_SAFE_INTEGER, options);
       const parts = dataUrl ? /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl) : null;
       if (!parts) { content.push({ type: "text", text: words.unavailable(id) }); continue; }
       content.push({ type: "text", text: fetchedLabel(image, lang) }, { type: "image", data: parts[2], mimeType: parts[1] });
       found.push(id);
     }
-    log({ event: "fetch", threadId, ids, found });
+    log({ event: "fetch", threadId, ...(origin ? { from: origin } : {}), ids, found });
     return { content, isError: ids.length > 0 && !found.length };
   }
   if (name === "cam_image") {

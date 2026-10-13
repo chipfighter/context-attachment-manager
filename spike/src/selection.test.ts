@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { hasUnchecked, needsRewrite } from "../../plugin/src/proxy.ts";
-import { autoDefaultSince, effectiveSelection, ensureAutoDefault, readSelection, writeSelection } from "../../plugin/src/selection.ts";
+import { autoDefaultSince, effectiveSelection, ensureAutoDefault, mainTaskOf, readSelection, sideChatSelection, writeSelection } from "../../plugin/src/selection.ts";
 import { startThread } from "./testfixtures.ts";
 
 const PARENT = "01a0d301-0000-7000-8000-0000000000f0";
@@ -135,4 +135,64 @@ test("v0.6: a fork counts from the task it came from", () => {
   assert.equal(effectiveSelection(OLD_FORK, sessionsDir, dir).auto, undefined);
   // Forked from a task that started after: on, like it.
   assert.equal(effectiveSelection(NEW_FORK, sessionsDir, dir).auto, true);
+});
+
+// v0.7: subagents and side chats (docs/v0.7/plan.md). As Codex 0.162 records them: a subagent started without history
+// names its parent; one started with history is also a fork.
+const MAIN = "01a0d307-0000-7000-8000-0000000000a0";
+const CHILD = "01a0d307-0000-7000-8000-0000000000a1";
+const GRANDCHILD = "01a0d307-0000-7000-8000-0000000000a2";
+const FORKED_CHILD = "01a0d307-0000-7000-8000-0000000000a3";
+const REVIEW = "01a0d307-0000-7000-8000-0000000000a4";
+
+function family() {
+  const { sessionsDir, dir, rollout } = setup();
+  const spawned = (parent: string, depth: number) => ({ parent_thread_id: parent, source: { subagent: { thread_spawn: { parent_thread_id: parent, depth, agent_path: "/root/child", agent_nickname: "Franklin", agent_role: null } } }, thread_source: "subagent" });
+  rollout(MAIN, { timestamp: "2026-09-24T10:00:00Z" });
+  rollout(CHILD, { ...spawned(MAIN, 1), timestamp: "2026-09-24T10:05:00Z" });
+  rollout(GRANDCHILD, { ...spawned(CHILD, 2), timestamp: "2026-09-24T10:06:00Z" });
+  rollout(FORKED_CHILD, { ...spawned(MAIN, 1), forked_from_id: MAIN, timestamp: "2026-09-24T10:07:00Z" });
+  rollout(REVIEW, { parent_thread_id: MAIN, source: { subagent: "review" }, timestamp: "2026-09-24T10:08:00Z" });
+  return { sessionsDir, dir };
+}
+
+test("v0.7: a subagent started without history belongs to the task at the top of its parents", () => {
+  const { sessionsDir } = family();
+  assert.equal(mainTaskOf(sessionsDir, CHILD), MAIN);
+  assert.equal(mainTaskOf(sessionsDir, GRANDCHILD), MAIN);
+  // A fork follows the fork rules; the user's task, Codex's background tasks and unknown threads belong to none.
+  for (const other of [FORKED_CHILD, MAIN, REVIEW, "01a0d307-0000-7000-8000-0000000000af"]) assert.equal(mainTaskOf(sessionsDir, other), null, other);
+});
+
+test("v0.7: a subagent follows its task's switch for subagents and side chats, on unless the user turned it off", () => {
+  const { sessionsDir, dir } = family();
+  // No default for the task itself here (no auto-default.json): the subagents' switch is on regardless.
+  const child = effectiveSelection(CHILD, sessionsDir, dir);
+  assert.deepEqual([child.auto, child.autoSince], [true, "2026-09-24T10:05:00Z"], "from the subagent's start");
+  assert.equal(needsRewrite(CHILD, dir, sessionsDir), true);
+  assert.equal(effectiveSelection(GRANDCHILD, sessionsDir, dir).auto, true);
+  // The task's own switch is a different one.
+  writeSelection({ threadId: MAIN, unchecked: {}, auto: false, autoAt: "2026-09-24T10:01:00Z", autoSince: "2026-09-24T10:00:30Z" }, dir);
+  assert.equal(effectiveSelection(CHILD, sessionsDir, dir).auto, true);
+  // Turned off: nothing is managed, so the requests go out as they are.
+  writeSelection({ threadId: MAIN, unchecked: {}, childrenAuto: false }, dir);
+  assert.equal(effectiveSelection(CHILD, sessionsDir, dir).auto, false);
+  assert.equal(effectiveSelection(GRANDCHILD, sessionsDir, dir).auto, false);
+  assert.equal(needsRewrite(CHILD, dir, sessionsDir), false);
+  // A switch of the subagent's own wins.
+  writeSelection({ threadId: CHILD, unchecked: {}, auto: true, autoAt: "2026-09-24T10:10:00Z", autoSince: "2026-09-24T10:10:00Z" }, dir);
+  assert.equal(effectiveSelection(CHILD, sessionsDir, dir).auto, true);
+});
+
+test("v0.7: a side chat uses the selection of the task it came from, keeping what is pinned there; none with the switch off", () => {
+  const { sessionsDir, dir } = family();
+  const pinned = { "msg_9#0": { id: "IMG-009", at: "2026-09-24T10:02:00Z" } };
+  writeSelection({ threadId: MAIN, unchecked: {}, auto: true, autoAt: "2026-09-24T10:01:00Z", autoSince: "2026-09-24T10:01:00Z", pinned }, dir);
+  const side = sideChatSelection(MAIN, sessionsDir, dir);
+  assert.deepEqual([side?.threadId, side?.auto, side?.pinned], [MAIN, true, pinned]);
+  // Forked from a subagent: its images, its task's switch.
+  assert.deepEqual([sideChatSelection(CHILD, sessionsDir, dir)?.threadId, sideChatSelection(CHILD, sessionsDir, dir)?.auto], [CHILD, true]);
+  writeSelection({ threadId: MAIN, unchecked: {}, auto: true, autoAt: "2026-09-24T10:01:00Z", autoSince: "2026-09-24T10:01:00Z", pinned, childrenAuto: false }, dir);
+  assert.equal(sideChatSelection(MAIN, sessionsDir, dir), null);
+  assert.equal(sideChatSelection(CHILD, sessionsDir, dir), null);
 });

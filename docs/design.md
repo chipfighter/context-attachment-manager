@@ -89,6 +89,12 @@
   - 副本只在取回的那一轮发送；之后换成一句说明（“IMG-xxx 的原图：模型当时用 cam_view_image 取回，只在那一轮提供，现在已省略”）。关掉自动以后也这样，因为面板不单列副本，用户没法取消它。
   - 关着时，传给改写的参数和 v0.2 一样，输出逐字节相同：对照 v0.2 的改写代码，所有勾选组合（中英文、像素相同与否）都比过。
   - v0.6 起新任务默认开着（`selection.ts`）：引擎和插件服务启动时，在勾选目录里写下这个版本第一次运行的时间（`auto-default.json`，只写一次，Codex 和 Claude 各一份）。任务没有自己的开关时，开始时间（会话记录第一条 `session_meta` 的时间，分叉的按来源任务算，`threadStartedAt`）不早于它，就当作开着，从开始时算起；还没有会话记录的算新的。默认值不写进勾选文件，面板里一改就写下来。读勾选的地方都经过它：改写、是否需要改写（所以新任务从一开始就走 HTTP）、面板、取图工具。
+- **子代理和旁聊**（v0.7，`proxy.ts`、`selection.ts`、`thread-index.ts`、`children.ts`；Codex 的做法见第 11 节）：
+  - 认出来源：`x-codex-turn-metadata` 里除了 `thread_id`、`turn_id`，还读 `forked_from_thread_id`、`parent_thread_id`（没有时看请求头 `x-codex-parent-thread-id`）、`subagent_kind`，一起记进日志。
+  - 开关：主任务勾选文件里的 `childrenAuto`，没有就是开。
+  - 旁聊：请求所属的任务没有会话记录、请求里又有 `forked_from_thread_id`，就是旁聊（`sideChatOrigin`；用户自己分叉的任务有记录，照旧按分叉规则）。开关看原任务所属的主任务（原任务也可以是子代理）。开着时用原任务的索引改写：原任务的各轮都算之前的轮次，所以带过来的图都换成自动版占位符，原任务里固定发送的照发（`sideChatSelection`）；关着时原样转发，WebSocket 也不拦。
+  - 子代理：会话记录第一条 `session_meta` 里有 `source.subagent.thread_spawn`、没有 `forked_from_id` 的，是不带历史启动的子代理（`spawnParent`），顺着父任务一路找到最上面的主任务（`mainTaskOf`）。子代理自己没有开关时，开着就是自动选图，从子代理开始时算起；关着就关（`childSelection`）。带历史启动的子代理是分叉，照旧。子代理的第一个请求可能早于它的会话记录，这时按 v0.6 的默认算；它的第一个请求里没有之前各轮的图。
+  - 登记：引擎每次看到子代理或旁聊的请求（HTTP 和 WebSocket 都算），就把它记在主任务名下（数据目录 `state/children/<主任务>.json`：类型、来自哪个任务、第一次请求的时间），每个只写一次。旁聊没有会话记录，这是面板知道它的唯一来源。
 - **切到 HTTP**：WebSocket 连接上 Codex 只发新增的条目，靠 `previous_response_id` 接上服务端保存的历史，已经发过的图去不掉。所以：
   - 任务一需要改写（有取消项，或者用过自动选图），引擎就对它的 WebSocket 握手回 426，Codex 在这个会话里改走 HTTP，每次都发完整历史；
   - 它已有的 WebSocket 连接，空闲 1.5 秒后由引擎关掉；
@@ -111,9 +117,10 @@
 
 - **形态**：侧边面板里的 MCP 应用。工具 `cam_panel` 声明 `thread` 入口（`_meta["openai/ui"].entrypoints`），出现在“新建标签页 → 插件和 MCP”里。页面固定为 `ui://codex-attachment-manager/panel.html`，地址一变就可能白屏（上游 #47512）。
 - **不经过模型**：面板的调用不写进聊天记录，不占上下文。每次调用带着面板打开时所在任务的编号（`_meta.threadId`），之后不变。所有面板工具都只给面板用（`visibility: ["app"]`），改动状态的工具拒绝模型调用。
-- **工具**：`cam_panel`（面板数据）、`cam_set_selection`（勾选和取消，v0.3 起也开关自动选图）、`cam_image`（缩略图和预览）、`cam_setup`（启用和停用）、`cam_bind`（新任务绑定）；v0.3 加了给模型用的 `cam_view_image`，见下。
+- **工具**：`cam_panel`（面板数据）、`cam_set_selection`（勾选和取消，v0.3 起也开关自动选图，v0.7 起也开关子代理和旁聊的自动选图 `childrenAuto`）、`cam_image`（缩略图和预览）、`cam_setup`（启用和停用）、`cam_bind`（新任务绑定）；v0.3 加了给模型用的 `cam_view_image`，见下。
 - **取图工具 `cam_view_image`**（v0.3）：唯一一个模型能调用的工具（没有 app-only 的设置，标着只读）。
   - 只在开了自动选图的任务里工作，否则返回一句“这个任务没有开自动选图……需要时写‘需要 IMG-xxx’”。
+  - v0.7：子代理里按它自己的索引取。旁聊没有会话记录，调用的 `_meta["x-codex-turn-metadata"]` 里有 `forked_from_thread_id`，就去原任务的索引取；主任务的“也自动选图”关着时，和没开自动选图一样拒绝。
   - 按编号返回原图（不缩小），每张前面一行“[图片 IMG-xxx 取回的原图｜名称｜来源｜轮次｜尺寸]”，不带 Codex 自己的“[Image #N]”：那个编号只在原来那条消息里有意义，GPT-6 Luna 曾把它当成要读的数字。
   - 工具的标题、说明和返回的文字都是给模型看的，所以写在 `rewrite.ts`，跟着界面语言。
 - **拿数据**：页面访问不了 `localhost`（上游 #45913），所以一律经 Codex 回调插件服务；图片放在工具结果的 `_meta` 里，用 data URL。PNG 超过要求的尺寸就缩小；缩略图只缓存在内存里，不写磁盘。
@@ -132,6 +139,9 @@
   - 切换前，先把还没保存的勾选按原来的模式存完；切换进行中不接受勾选，免得记错地方。
   - “最近一轮模型取回”来自索引里最后一轮的副本；手动模式下不显示，提示条照旧是“模型需要”。
   - 预计请求只算固定发送的图，数字后面加“起”（英文把标签换成 At least），悬停说明模型取回的图不算在内。
+- **子代理和旁聊**（v0.7，`panel-state.ts`、`panel.html`）：
+  - 面板数据多两项：`childrenAuto`（主任务的开关）和 `children`：引擎登记的子代理和旁聊，按第一次请求的时间排，每个带名字（子代理的 `agent_nickname`，没有时用 `agent_path` 的最后一段）、现在管不管（旁聊看 `sideChatSelection`，子代理看它的有效勾选）、最近一次完整请求带了几张图，以及和主任务一样算出的上次请求（替换几张、前后大小）。
+  - 有子代理或旁聊时，请求大小下面显示一块。标题行（展开按钮和开关）只建一次，轮询不丢悬停和焦点；各行只在内容变了时重建。开关的保存方式和“自动选图”一样：先存完没保存的勾选，保存进行中不接受再点。
 - **任务名**：读 `<CODEX_HOME>/session_index.jsonl`，同一个任务以最后一行为准。
 - **新任务绑定**：在新任务页打开的面板，绑在 Codex 预先准备的任务上，发第一条消息后可能换成另一个任务。
   - 页面记下自己哪些时间段显示在屏幕上，读数据时带给插件服务。
@@ -158,7 +168,7 @@
 
 - Windows 是 `%USERPROFILE%\.codex-attachment-manager`，macOS 是 `~/Library/Application Support/codex-attachment-manager`，Linux 按 XDG 是 `~/.local/share/codex-attachment-manager`；`CAM_DATA_DIR` 可以改（测试、开发用）。
 - Windows 上不放在 AppData 下：Codex 是微软商店应用，它启动的程序在 AppData 里新建的文件会被转存到应用的私有目录，Codex 外面的命令行和引擎就看不到了。
-- 里面有：`selection/`（勾选状态，每个任务一个文件，只记取消的识别键；v0.3 起还记自动选图的开关 `auto`、最近一次切换的时间 `autoAt`、第一次打开的时间 `autoSince` 和固定发送的识别键 `pinned`；v0.6 起还有 `auto-default.json`，新任务默认开着自动选图的起始时间）、`bindings/`、`state/requests/`（请求统计）、`cache/pixels/`、`proxy/`（引擎日志）、`plugin-server.jsonl`、`language.json`、`config-backup/`。
+- 里面有：`selection/`（勾选状态，每个任务一个文件，只记取消的识别键；v0.3 起还记自动选图的开关 `auto`、最近一次切换的时间 `autoAt`、第一次打开的时间 `autoSince` 和固定发送的识别键 `pinned`；v0.6 起还有 `auto-default.json`，新任务默认开着自动选图的起始时间；v0.7 起主任务的文件里还记子代理和旁聊的开关 `childrenAuto`，改过才有）、`bindings/`、`state/requests/`（请求统计）、`state/children/`（v0.7，每个主任务的子代理和旁聊）、`cache/pixels/`、`proxy/`（引擎日志）、`plugin-server.jsonl`、`language.json`、`config-backup/`。
 - 分叉任务沿用原任务在分叉那一刻的勾选，之后各管各的。v0.3：固定发送一样按时间继承；开关在分叉前打开、之后没再切换过才继承；分叉前用过自动选图的，分叉也记下 `autoSince`，以便省略历史里的副本。
 - `migrate-data.ts` 在第一次使用时，把旧位置（旧的 AppData 目录和各应用私有目录里的副本）的数据复制过来，用锁文件保证只有一个进程在复制。
 
@@ -188,6 +198,11 @@
   - D 组（v0.6）不设开关，检查新任务默认开着；一个问题同时要两张没取过的图，检查都取回、答对；
   - C 组只有一张图，排除上下文的干扰。
   - 2026-10-06 的结果：sol、astra 中英文全部通过；luna 取不取的判断基本都对（英文 C 组漏取一次），读取回的图偶尔读错数字（见第 11 节“模型的差别”）。
+- **子代理和旁聊自测**（v0.7，`v07-children-selftest.ts`）：同样的引擎、app-server 和插件服务，另打开 Codex 的 `multi_agent_v2`（`spawn_agent` 的 `fork_turns`）。旁聊照 Codex 的做法开（`thread/fork`，`ephemeral: true`），带一句和 Codex 给旁聊的类似的说明。测试图和自动选图自测一样：
+  - S 组：主任务描述两张图后开旁聊，先问文字问题（图都换成占位，不取图），再问角落的数字（从原任务取回，答对）；
+  - C 组：子代理第一轮用 `view_image` 看图，主任务用 `followup_task` 给它第二轮，问角落的数字（前一轮的图换成占位，取回，答对）；
+  - O 组：主任务的开关关掉后，旁聊和子代理的请求原样发；
+  - 每组最后看主任务面板列出的子代理和旁聊。结果见 [v0.7/plan.md](v0.7/plan.md) 第 5 节。
 
 ## 11. 依赖的 Codex 行为和已知的坑
 
@@ -205,6 +220,11 @@
   - 工具返回的 MCP 图片，模型在代码里用 `image()` 交给自己；记录里是 `custom_tool_call_output` 里的 `input_image`，数据和原图逐字节相同，`detail` 是 `high`。
   - 模型调用插件工具时，`_meta` 带着 `threadId` 和 `x-codex-turn-metadata`（其中有 `thread_id`、`turn_id`）。插件的 `.mcp.json` 设了 `default_tools_approval_mode = "approve"`，不用逐次批准。
   - 同一个任务里第一次取图时，模型常先查一次 `ALL_TOOLS` 确认工具名，多一来回。
+- **子代理和旁聊**（v0.7 查证，Codex 0.162；源码 `codex-rs/core/src/responses_metadata.rs`、`turn_metadata.rs`、`mcp_tool_call.rs`）：
+  - 旁聊是 app-server 的 `thread/fork`（`ephemeral: true`，这个版本要求同时 `excludeTurns: true`；终端版的 `/side` 也是这样），不写会话记录。它的请求（包括 WebSocket 握手）和模型调用工具的 `_meta` 里，`x-codex-turn-metadata` 的 `thread_id` 是旁聊自己，`forked_from_thread_id` 是原任务。
+  - `spawn_agent` 开的子代理有自己的会话记录，`session_meta` 有 `parent_thread_id` 和 `source.subagent.thread_spawn`（`depth`、`agent_path`、`agent_nickname`）。它的请求里 `parent_thread_id` 是父任务，`subagent_kind` 是 `thread_spawn`，`session_id` 是主任务，另有请求头 `x-codex-parent-thread-id`、`x-openai-subagent: collab_spawn`。请求里有父任务时，Codex 不再写 `forked_from_thread_id`，所以带历史的子代理只能从会话记录认出。
+  - 子代理的会话记录文件先建好，第一行稍后才写，它的第一个请求可能落在中间（2026-10-13 自测里早了约 40 毫秒）。所以读到空文件时不当结论、不缓存（`spawnParent`、`forkOrigin`、`threadStartedAt`）。
+  - 子代理之后的轮次由父任务用 `followup_task` 发起；app-server 拒绝直接给 multi_agent_v2 子代理开新的一轮。归档主任务时，子代理一起归档。
 - **上游问题**：#47512（面板地址变化后白屏）、#45913（页面访问不了 `localhost`）。
 - **桌面版会在用户消息里附一段 “Files mentioned by the user”**，写着上传文件的完整路径。引擎不改用户消息的文字，靠说明里“不要自己用工具去读取”约束模型；模型偶尔仍会自己打开文件。
 - **模型的差别**：小模型在低推理强度下（例如 GPT-6 Luna Light）偶尔会要错图，或者拿到错图时不说“这张里没有”，而是猜一个答案（v0.1-25 的录屏里遇到过）。
