@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { zstdCompressSync } from "node:zlib";
-import { buildIndex, hasRollout, loadThreadIndex, readThreadHistory, setPixelCache, threadsStartedSince } from "../../plugin/src/thread-index.ts";
+import { buildIndex, forkOrigin, hasRollout, loadThreadIndex, readThreadHistory, setPixelCache, spawnParent, threadStartedAt, threadsStartedSince } from "../../plugin/src/thread-index.ts";
 import { startThread, todayFolder } from "./testfixtures.ts";
 import { png } from "./testkit.ts";
 
@@ -190,4 +190,26 @@ test("an image the model fetched with cam_view_image is a copy without an id, an
   assert.deepEqual(index.images.map((image) => [image.id, image.turn]), [["IMG-001", 1], ["IMG-002", 2], ["IMG-003", 3]]);
   assert.deepEqual([...index.copies.values()], [{ key: "custom_tool_call_output:c1#0", of: "IMG-001", turn: 2 }]);
   assert.equal(index.byKey.has("custom_tool_call_output:c1#0"), false);
+});
+
+// v0.7 (self-test 2026-10-13): Codex creates a subagent's rollout file a moment before it writes the first line, and
+// the subagent's first request can come in between. What is read from an empty file must not stick.
+test("a rollout whose first line is not written yet is read again later: who started it, what it was forked from, when", () => {
+  const root = mkdtempSync(join(tmpdir(), "cam-early-"));
+  const sessionsDir = join(root, "sessions");
+  const folder = todayFolder(sessionsDir);
+  const CHILD = "01a0d307-0000-7000-8000-0000000000f1";
+  const FORK = "01a0d307-0000-7000-8000-0000000000f2";
+  const PARENT = "01a0d307-0000-7000-8000-0000000000f0";
+  const childFile = join(folder, `rollout-2026-10-13T10-00-00-${CHILD}.jsonl`);
+  const forkFile = join(folder, `rollout-2026-10-13T10-00-00-${FORK}.jsonl`);
+  writeFileSync(childFile, "");
+  writeFileSync(forkFile, "");
+  assert.deepEqual([spawnParent(sessionsDir, CHILD), forkOrigin(sessionsDir, FORK), threadStartedAt(sessionsDir, CHILD)], [null, null, null]);
+  const meta = (id: string, extra: Record<string, unknown>) => `${JSON.stringify({ timestamp: "2026-10-13T10:00:01Z", type: "session_meta", payload: { id, timestamp: "2026-10-13T10:00:00Z", ...extra } })}\n`;
+  writeFileSync(childFile, meta(CHILD, { parent_thread_id: PARENT, source: { subagent: { thread_spawn: { parent_thread_id: PARENT, depth: 1 } } } }));
+  writeFileSync(forkFile, meta(FORK, { forked_from_id: PARENT }));
+  assert.equal(spawnParent(sessionsDir, CHILD), PARENT);
+  assert.deepEqual(forkOrigin(sessionsDir, FORK), { parent: PARENT, at: "2026-10-13T10:00:00Z" });
+  assert.equal(threadStartedAt(sessionsDir, CHILD), "2026-10-13T10:00:00Z");
 });

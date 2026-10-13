@@ -296,9 +296,10 @@ export function forkOrigin(sessionsDir: string, threadId: string): { parent: str
     const first = segments.get(threadId);
     return first ? { found: true, record: firstRecord(first) } : { found: false, record: null };
   });
-  // No rollout yet: do not cache, it may appear once the thread starts.
-  if (!meta.found) return null;
-  const origin = meta.record?.type === "session_meta" && meta.record.payload.forked_from_id ? { parent: meta.record.payload.forked_from_id, at: meta.record.payload.timestamp ?? "" } : null;
+  // No rollout yet: do not cache, it may appear once the thread starts. v0.7: nor while its first line is not written
+  // yet: Codex creates the file a moment before, and a request can come in between.
+  if (!meta.found || !meta.record) return null;
+  const origin = meta.record.type === "session_meta" && meta.record.payload.forked_from_id ? { parent: meta.record.payload.forked_from_id, at: meta.record.payload.timestamp ?? "" } : null;
   origins.set(threadId, origin);
   return origin;
 }
@@ -307,7 +308,7 @@ const spawners = new Map<string, string | null>();
 
 // v0.7: the thread that started a subagent without history (session_meta source.subagent.thread_spawn); null for
 // anything else: the user's tasks, forks (a subagent started with history is one), Codex's background tasks (review,
-// compaction, memory). Cached once the rollout exists: it never changes.
+// compaction, memory). Cached once the rollout's first line is there (as forkOrigin): it never changes.
 export function spawnParent(sessionsDir: string, threadId: string): string | null {
   const key = `${sessionsDir}\0${threadId}`;
   if (spawners.has(key)) return spawners.get(key)!;
@@ -315,8 +316,8 @@ export function spawnParent(sessionsDir: string, threadId: string): string | nul
     const first = segments.get(threadId);
     return first ? { found: true, record: firstRecord(first) } : { found: false, record: null };
   });
-  if (!meta.found) return null;
-  const payload = meta.record?.type === "session_meta" ? meta.record.payload : null;
+  if (!meta.found || !meta.record) return null;
+  const payload = meta.record.type === "session_meta" ? meta.record.payload : null;
   const spawn = payload?.source?.subagent?.thread_spawn;
   const parent = payload && !payload.forked_from_id && spawn ? spawn.parent_thread_id ?? payload.parent_thread_id : null;
   spawners.set(key, typeof parent === "string" ? parent : null);
@@ -326,7 +327,8 @@ export function spawnParent(sessionsDir: string, threadId: string): string | nul
 const starts = new Map<string, string | null>();
 
 // v0.6: when a thread started, from its session_meta; a fork counts from the thread it came from (followed to the
-// first one; the fork's own time when that one is gone). null while the thread has no rollout. Cached once known.
+// first one; the fork's own time when that one is gone). null while the thread has no rollout, or no first line yet.
+// Cached once known.
 export function threadStartedAt(sessionsDir: string, threadId: string, depth = 0): string | null {
   const origin = forkOrigin(sessionsDir, threadId);
   if (origin && depth < 16) return threadStartedAt(sessionsDir, origin.parent, depth + 1) ?? (origin.at || null);
@@ -336,8 +338,8 @@ export function threadStartedAt(sessionsDir: string, threadId: string, depth = 0
     const first = segments.get(threadId);
     return first ? { found: true, record: firstRecord(first) } : { found: false, record: null };
   });
-  if (!meta.found) return null;
-  const at = (meta.record?.type === "session_meta" ? meta.record.payload.timestamp : null) ?? meta.record?.timestamp ?? null;
+  if (!meta.found || !meta.record) return null;
+  const at = (meta.record.type === "session_meta" ? meta.record.payload.timestamp : null) ?? meta.record.timestamp ?? null;
   starts.set(key, typeof at === "string" ? at : null);
   return starts.get(key)!;
 }
