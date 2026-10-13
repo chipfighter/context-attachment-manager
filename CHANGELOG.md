@@ -2,6 +2,22 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.6.0] - Unreleased
+
+Auto-select on by default, and the panel opens by itself in Claude Desktop.
+
+### Features
+
+- New tasks in Codex and new sessions in Claude Code start with Auto-select on: images from earlier turns are left out, and the model fetches the ones it needs by ID, so long conversations stay small even if you never open the panel. Tasks and sessions you had before keep their setting, and switching Auto-select off in the panel sticks.
+- In Claude Desktop the panel opens by itself in the built-in browser once a session has images: when the model read an image, as that turn ends; when you paste one, as your message goes out. You no longer need to type `/cam`.
+- Claude Desktop closes a session's built-in browser after about 30 minutes without a turn; the panel then opens again with your next message. If you close it yourself, it stays closed in that session until you type `/cam`, which also leaves just one panel tab.
+- In Codex, tasks you had before work as in 0.5.0.
+
+### Notes
+
+- With Auto-select on, the model can fetch several images at once. Asked about two images it had not described, GPT-6 Sol, Luna and Astra in Codex and Claude Haiku 5.5 in Claude Desktop each fetched both in one call. GPT-6 Luna then misread a small digit in one of them, as in 0.3; pin images whose details matter, or use a larger model.
+- The plugin tells your close from Claude Desktop's by time: a panel gone within 30 minutes of the session's last turn was closed by you. If you close it more than 25 minutes into a pause, it may open again with your next message.
+
 ## [0.5.0] - 2026-10-13
 
 Your choice survives compaction in Claude Code.
