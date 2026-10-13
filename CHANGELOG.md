@@ -15,6 +15,7 @@ Auto-select on by default, and the panel opens by itself in Claude Desktop.
 
 ### Notes
 
+- Tested on Windows in Claude Desktop with Claude Code 2.1.295 and Claude Haiku 5.5: new sessions started with Auto-select on; the panel opened by itself once the model had read images; closed in the session, it stayed closed; closed by Claude Desktop after the session had been left for 30 minutes, it opened again with the next message. In Codex, new tasks started with Auto-select on with GPT-6 Sol, Luna and Astra.
 - With Auto-select on, the model can fetch several images at once. Asked about two images it had not described, GPT-6 Sol, Luna and Astra in Codex and Claude Haiku 5.5 in Claude Desktop each fetched both in one call. GPT-6 Luna then misread a small digit in one of them, as in 0.3; pin images whose details matter, or use a larger model.
 - The plugin tells your close from Claude Desktop's by time: a panel gone within 30 minutes of the session's last turn was closed by you. If you close it more than 25 minutes into a pause, it may open again with your next message.
 
