@@ -14,11 +14,13 @@
 // Also: the model's cam_view_image call gets this session's id (the service may outlive a /clear or /resume), and needs
 // no permission prompt: it is the plugin's own read-only tool, approved as in Codex (default_tools_approval_mode
 // "approve" there; user 2026-10-10 here). A deny or ask from the user's own hooks or settings still stands.
-// v0.6 (user 2026-10-13): in Claude Desktop the page opens by itself once the session has images, without /cam.
-// Claude Desktop stops an idle session's process after 30 minutes and closes the browser tabs it opened (its log:
-// "WarmLifecycle … Idle timeout reached"); the process starts again when the session is used, and the page opens
-// again then. Closed by the user, it stays closed in that session until /cam: a turn that ends without the tab, in the
-// process that had it open, means the user closed it, kept in the plugin's store for the session.
+// v0.6 (user 2026-10-13): in Claude Desktop the page opens by itself once the session has images, without /cam, and
+// again after Claude Desktop closed it; closed by the user, it stays closed in that session until /cam. Claude Desktop
+// closes a session's browser preview, the page's tab with it, after 30 minutes without a turn (its log: "WarmLifecycle
+// … Idle timeout reached"), while the Claude Code process goes on; under memory pressure it also stops a long-idle
+// session's process and starts it again when the session is used ("CliGovernor … evicting"). So a tab gone before
+// that limit was closed by the user, kept in the plugin's store for the session; one gone over a longer pause opens
+// again with the next turn.
 // Input: mod events. Output: env changes for this process, a pane, requests to the engine on 127.0.0.1, the page in
 // Claude Desktop's browser.
 
@@ -32,6 +34,9 @@ const FETCH_TOOL = 'mcp__plugin_codex-attachment-manager_codex_attachment_manage
 // v0.6: the sessions where the user closed the page ($.store: session id → when), the newest kept.
 const CLOSED = 'closedPanels'
 const CLOSED_KEPT = 200
+// v0.6: Claude Desktop's idle limit for a session's browser preview, and the check made a little before it.
+const DESKTOP_IDLE_MS = 30 * 60 * 1000
+const PAUSE_CHECK_MS = 25 * 60 * 1000
 
 const WORDS = {
   zh: {
@@ -76,8 +81,13 @@ let inBrowser = false
 let overview = null
 let paneOpened = false
 let copied = false
-// v0.6: the session whose page this process had open in Claude's browser (null: none).
+// v0.6: the session whose page this process had open in Claude's browser (null: none); when the last turn ended
+// (Claude Desktop's idle timer starts then; null while a turn runs); the check before its limit; the page's work,
+// one step at a time (two checks at once could open two tabs).
 let pageFor = null
+let quietSince = null
+let pauseCheck = null
+let pageWork = Promise.resolve()
 
 // The engine's panel API answers in JSON; the header marks a request as the panel's (a browser page cannot send it).
 async function api($, path) {
@@ -205,34 +215,45 @@ async function markClosed($, sessionId, isClosed) {
   await $.store.set(CLOSED, Object.fromEntries(newest))
 }
 
+// The page's work, after whatever is under way.
+function pageStep(work) {
+  const step = pageWork.then(work)
+  pageWork = step.catch(() => {})
+  return step
+}
+
 // /cam: the user asked, so a close before no longer counts. One tab of the page: the new one replaces any open.
 async function openPanel($) {
   routingState = (await readRouting($)) ?? routingState
   const sessionId = await $.session.id()
-  await markClosed($, sessionId, false).catch(() => {})
-  const before = (await pageTabs($)) ?? []
-  inBrowser = await openInBrowser($, panelUrl(sessionId))
-  if (inBrowser) {
+  await pageStep(async () => {
+    await markClosed($, sessionId, false).catch(() => {})
+    const before = (await pageTabs($)) ?? []
+    inBrowser = await openInBrowser($, panelUrl(sessionId))
+    if (!inBrowser) return
     pageFor = sessionId
     for (const tab of before) await $.mcp.call('Claude_Browser', 'tabs_close', { tabId: tab.tabId }).catch(() => {})
-  }
+  })
   if (!inBrowser || !routingState?.active) await openPane($)
   else await $.ui.invalidate('ui.render')
 }
 
-// v0.6: in Claude Desktop, with the requests going through the engine, the page opens by itself in a session with
-// images, unless the user closed it there. Run when the process starts (also when Claude Desktop wakes the session),
-// when the desktop attaches, and after each turn.
-async function keepPage($) {
+// v0.6: in Claude Desktop (its browser tools answer), with the requests going through the engine, the page opens by
+// itself in a session with images, unless the user closed it there. `when`: the process started ('start'), a turn
+// starts ('turn', or 'after-pause' once Claude Desktop's idle limit has passed since the last one) or ended ('end'),
+// or the check before that limit ('pause').
+async function keepPage($, when) {
   if (!routingState?.active) return
-  if (!(await $.session.surfaces()).includes('desktop')) return
   const sessionId = await $.session.id()
   const open = await pageTabs($)
   if (open === null) return
   if (open.length) { pageFor = sessionId; return }
-  // Open in this process, gone while it runs: the user closed it.
-  if (pageFor === sessionId) { pageFor = null; await markClosed($, sessionId, true); return }
-  if (await closedHere($, sessionId)) return
+  if (pageFor === sessionId) {
+    // Open in this process and gone: Claude Desktop closes it only after a longer pause; else the user closed it.
+    pageFor = null
+    if (when !== 'after-pause') { await markClosed($, sessionId, true); return }
+  }
+  if (when === 'pause' || (await closedHere($, sessionId))) return
   const state = await api($, `/__cam/claude/panel?session=${encodeURIComponent(sessionId)}`).catch(() => null)
   if (!state?.totals?.images) return
   if (await openInBrowser($, panelUrl(sessionId))) pageFor = sessionId
@@ -242,12 +263,31 @@ async function keepPage($) {
 async function followSession($) {
   const sessionId = await $.session.id()
   const open = await pageTabs($)
-  if (!open?.length) { pageFor = null; return keepPage($) }
+  if (!open?.length) { pageFor = null; return keepPage($, 'start') }
   await $.mcp.call('Claude_Browser', 'navigate', { url: panelUrl(sessionId), tabId: open[0].tabId })
   pageFor = sessionId
 }
 
-const keepPageLater = ($) => $.clock.after(0, () => { keepPage($).catch(() => {}) })
+// After the event that asked, so it is never held up.
+const pageLater = ($, work) => $.clock.after(0, () => { pageStep(work).catch(() => {}) })
+const keepPageLater = ($, when) => pageLater($, () => keepPage($, when))
+
+// v0.6: a turn starts: Claude Desktop may have closed the page during the pause before it.
+async function pageTurnStarts($) {
+  pauseCheck?.cancel()
+  pauseCheck = null
+  const paused = quietSince !== null && (await $.clock.now()) - quietSince >= DESKTOP_IDLE_MS
+  quietSince = null
+  keepPageLater($, paused ? 'after-pause' : 'turn')
+}
+
+// v0.6: a turn ended: Claude Desktop's idle timer starts; a close before its limit is the user's.
+async function pageTurnEnds($) {
+  quietSince = await $.clock.now()
+  pauseCheck?.cancel()
+  pauseCheck = $.clock.after(PAUSE_CHECK_MS, () => { pauseCheck = null; keepPageLater($, 'pause') })
+  keepPageLater($, 'end')
+}
 
 async function loadOverview($) {
   try {
@@ -310,14 +350,9 @@ export function register(on) {
     // rest of the wait goes on in the background.
     const done = await startRouting($, 12).catch(() => true)
     if (!done) $.clock.after(0, () => { startRouting($).catch(() => {}) })
-    // v0.6: the page, once routing is settled; when it is still waiting for the engine, after the first turn instead.
-    else keepPageLater($)
-    return next(e)
-  })
-
-  // v0.6: the desktop connects after the process started (a session woken up, or opened again).
-  on('session.attach', { surface: 'desktop' }, async ($, e, next) => {
-    keepPageLater($)
+    // v0.6: the page, once routing is settled (a process Claude Desktop started again included); when it is still
+    // waiting for the engine, with the first turn instead.
+    else keepPageLater($, 'start')
     return next(e)
   })
 
@@ -326,14 +361,20 @@ export function register(on) {
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
     if (routingState) await $.state.set(ROUTING, routingState).catch(() => {})
     reloadOverview($)
-    $.clock.after(0, () => { followSession($).catch(() => {}) })
+    pageLater($, () => followSession($))
+    return next(e)
+  })
+
+  // v0.6: the page is a convenience: whatever happens to it, the turn goes on.
+  on('turn.start', async ($, e, next) => {
+    await pageTurnStarts($).catch(() => {})
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     reloadOverview($)
-    keepPageLater($)
+    await pageTurnEnds($).catch(() => {})
     return result
   })
 
