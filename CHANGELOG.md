@@ -2,6 +2,27 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.7.0] - Unreleased
+
+Subagents and side chats in Codex follow Auto-select too.
+
+### Features
+
+- Side chats no longer resend the task's images. A side chat you open in a Codex task carries the task's whole history, images included; it now goes out with those images as placeholders, except the ones you pinned, and when an answer needs one, the model fetches it from the task by ID. Reported in [#2](https://github.com/chipfighter/context-attachment-manager/issues/2), where a text-only question in a side chat carried 39 images (48.75 MB) and failed with `Broken pipe`.
+- Subagents the model starts without the task's history leave out the images of their own earlier turns and fetch the ones they need by ID. The same goes for subagents they start.
+- The task's panel lists its subagents and side chats once they have sent a request: folded to one line with how many there are, what their last requests saved, and an *Auto-select too* switch, on by default, also in tasks from before 0.7. Unfold it to see each one's name, rule and last request. Switched off, their requests go out as they are.
+- Subagents started with the task's history follow the task's checks, as before. Claude Code works as in 0.6.0.
+
+### Fixes
+
+- A task forked in Codex could lose the checks it takes over from the original task when its first request came while Codex was still writing the task's record.
+
+### Notes
+
+- Tested on Windows with the app-server of Codex 0.162 (the one Codex Desktop ships) and GPT-6 Sol, Luna and Astra at low effort. A side chat left out the task's two images, answered a text-only question without them, and fetched one back from the task to read a digit in its corner. A subagent's second turn left out the image of its first turn and fetched it back. With the switch off, both went out as they were. The panel listed each side chat and subagent with the right numbers. GPT-6 Luna's subagent once couldn't find the image file it was told about, and once Luna didn't start a subagent at all; that is the model, and the next try worked.
+- Codex doesn't document side chats and subagents for plugins: the plugin recognizes them from what Codex sends with each request. If that changes, they go out as they did before 0.7, and the task itself is not affected.
+- Images a subagent reads during one long turn all stay in that turn, as Auto-select keeps the current turn's images; they are left out from its next turn on.
+
 ## [0.6.0] - 2026-10-13
 
 Auto-select on by default, and the panel opens by itself in Claude Desktop.

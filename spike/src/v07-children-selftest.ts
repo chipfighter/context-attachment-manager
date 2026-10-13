@@ -73,7 +73,9 @@ async function main(): Promise<void> {
 
   const engine = spawn(process.execPath, [join(here, "..", "..", "plugin", "src", "proxy.ts"), "--port", String(port), "--stay"], { env: { ...process.env, CAM_DATA_DIR: data }, stdio: "ignore", windowsHide: true });
   for (let i = 0; i < 50 && !(await engineHealth(port)); i++) await sleep(200);
-  const off = ["computer-use@openai-bundled", "unified-computer-use@openai-bundled", "chrome@openai-bundled", "browser@openai-bundled", "codex-app-tools@openai-bundled"]
+  // The plugin installed in the user's Codex too: its cam_view_image is another copy of the tool, and an older one may
+  // not know side chats (the model's first fetch in a side chat went there and failed, 2026-10-14).
+  const off = ["computer-use@openai-bundled", "unified-computer-use@openai-bundled", "chrome@openai-bundled", "browser@openai-bundled", "codex-app-tools@openai-bundled", "codex-attachment-manager@codex-attachment-manager"]
     .flatMap((plugin) => ["-c", `plugins.${plugin}.enabled=false`]);
   const env = { CODEX_HOME: codexHome(), CAM_DATA_DIR: data, CAM_NO_ENGINE: "1" };
   const plugin = [
