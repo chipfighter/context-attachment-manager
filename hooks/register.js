@@ -14,7 +14,13 @@
 // Also: the model's cam_view_image call gets this session's id (the service may outlive a /clear or /resume), and needs
 // no permission prompt: it is the plugin's own read-only tool, approved as in Codex (default_tools_approval_mode
 // "approve" there; user 2026-10-10 here). A deny or ask from the user's own hooks or settings still stands.
-// Input: mod events. Output: env changes for this process, a pane, requests to the engine on 127.0.0.1.
+// v0.6 (user 2026-10-13): in Claude Desktop the page opens by itself once the session has images, without /cam.
+// Claude Desktop stops an idle session's process after 30 minutes and closes the browser tabs it opened (its log:
+// "WarmLifecycle … Idle timeout reached"); the process starts again when the session is used, and the page opens
+// again then. Closed by the user, it stays closed in that session until /cam: a turn that ends without the tab, in the
+// process that had it open, means the user closed it, kept in the plugin's store for the session.
+// Input: mod events. Output: env changes for this process, a pane, requests to the engine on 127.0.0.1, the page in
+// Claude Desktop's browser.
 
 const PLUGIN = 'codex-attachment-manager'
 // The engine's port (engine.ts, DEFAULT_PORT); the plugin's MCP server starts the engine on it.
@@ -23,6 +29,9 @@ const PANE = 'cam'
 const ROUTING = { plugin: 'codex-attachment-manager', key: 'routing' }
 // The model's image fetch, as Claude Code names the tool of this plugin's MCP server (.claude-plugin/plugin.json).
 const FETCH_TOOL = 'mcp__plugin_codex-attachment-manager_codex_attachment_manager__cam_view_image'
+// v0.6: the sessions where the user closed the page ($.store: session id → when), the newest kept.
+const CLOSED = 'closedPanels'
+const CLOSED_KEPT = 200
 
 const WORDS = {
   zh: {
@@ -67,6 +76,8 @@ let inBrowser = false
 let overview = null
 let paneOpened = false
 let copied = false
+// v0.6: the session whose page this process had open in Claude's browser (null: none).
+let pageFor = null
 
 // The engine's panel API answers in JSON; the header marks a request as the panel's (a browser page cannot send it).
 async function api($, path) {
@@ -165,13 +176,78 @@ async function openInBrowser($, url) {
   }
 }
 
-// /cam.
+// v0.6: the session's tabs in Claude's browser (tabs_context answers JSON, then a line of text), the page's told apart
+// by the engine's origin; null when the browser tools are not there or fail.
+const PAGE_ORIGIN = `http://localhost:${ENGINE_PORT}`
+async function pageTabs($) {
+  try {
+    const result = await $.mcp.call('Claude_Browser', 'tabs_context', {})
+    if (result?.isError) return null
+    const text = (result?.content ?? []).map((block) => block?.text ?? '').join('\n')
+    const tabs = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)).tabs
+    return Array.isArray(tabs) ? tabs.filter((tab) => tab?.origin === PAGE_ORIGIN) : null
+  } catch {
+    return null
+  }
+}
+
+async function closedHere($, sessionId) {
+  const closed = (await $.store.get(CLOSED)) ?? {}
+  return typeof closed[sessionId] === 'string'
+}
+
+async function markClosed($, sessionId, isClosed) {
+  const closed = { ...((await $.store.get(CLOSED)) ?? {}) }
+  if (isClosed) closed[sessionId] = new Date(await $.clock.now()).toISOString()
+  else if (sessionId in closed) delete closed[sessionId]
+  else return
+  const newest = Object.entries(closed).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).slice(0, CLOSED_KEPT)
+  await $.store.set(CLOSED, Object.fromEntries(newest))
+}
+
+// /cam: the user asked, so a close before no longer counts. One tab of the page: the new one replaces any open.
 async function openPanel($) {
   routingState = (await readRouting($)) ?? routingState
-  inBrowser = await openInBrowser($, panelUrl(await $.session.id()))
+  const sessionId = await $.session.id()
+  await markClosed($, sessionId, false).catch(() => {})
+  const before = (await pageTabs($)) ?? []
+  inBrowser = await openInBrowser($, panelUrl(sessionId))
+  if (inBrowser) {
+    pageFor = sessionId
+    for (const tab of before) await $.mcp.call('Claude_Browser', 'tabs_close', { tabId: tab.tabId }).catch(() => {})
+  }
   if (!inBrowser || !routingState?.active) await openPane($)
   else await $.ui.invalidate('ui.render')
 }
+
+// v0.6: in Claude Desktop, with the requests going through the engine, the page opens by itself in a session with
+// images, unless the user closed it there. Run when the process starts (also when Claude Desktop wakes the session),
+// when the desktop attaches, and after each turn.
+async function keepPage($) {
+  if (!routingState?.active) return
+  if (!(await $.session.surfaces()).includes('desktop')) return
+  const sessionId = await $.session.id()
+  const open = await pageTabs($)
+  if (open === null) return
+  if (open.length) { pageFor = sessionId; return }
+  // Open in this process, gone while it runs: the user closed it.
+  if (pageFor === sessionId) { pageFor = null; await markClosed($, sessionId, true); return }
+  if (await closedHere($, sessionId)) return
+  const state = await api($, `/__cam/claude/panel?session=${encodeURIComponent(sessionId)}`).catch(() => null)
+  if (!state?.totals?.images) return
+  if (await openInBrowser($, panelUrl(sessionId))) pageFor = sessionId
+}
+
+// v0.6: after /clear or /resume the page follows the new session: the open tab is pointed at it, or it opens as above.
+async function followSession($) {
+  const sessionId = await $.session.id()
+  const open = await pageTabs($)
+  if (!open?.length) { pageFor = null; return keepPage($) }
+  await $.mcp.call('Claude_Browser', 'navigate', { url: panelUrl(sessionId), tabId: open[0].tabId })
+  pageFor = sessionId
+}
+
+const keepPageLater = ($) => $.clock.after(0, () => { keepPage($).catch(() => {}) })
 
 async function loadOverview($) {
   try {
@@ -234,6 +310,14 @@ export function register(on) {
     // rest of the wait goes on in the background.
     const done = await startRouting($, 12).catch(() => true)
     if (!done) $.clock.after(0, () => { startRouting($).catch(() => {}) })
+    // v0.6: the page, once routing is settled; when it is still waiting for the engine, after the first turn instead.
+    else keepPageLater($)
+    return next(e)
+  })
+
+  // v0.6: the desktop connects after the process started (a session woken up, or opened again).
+  on('session.attach', { surface: 'desktop' }, async ($, e, next) => {
+    keepPageLater($)
     return next(e)
   })
 
@@ -242,12 +326,14 @@ export function register(on) {
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
     if (routingState) await $.state.set(ROUTING, routingState).catch(() => {})
     reloadOverview($)
+    $.clock.after(0, () => { followSession($).catch(() => {}) })
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     reloadOverview($)
+    keepPageLater($)
     return result
   })
 

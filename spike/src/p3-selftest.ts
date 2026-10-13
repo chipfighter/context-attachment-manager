@@ -87,7 +87,7 @@ async function main(): Promise<void> {
     const turns: Json = {};
     turns.t1Upload = await runTurn(server, t1, [text("这是两张测试图，先不用描述，只回复“收到”。"), { type: "localImage", path: file("a.png") }, { type: "localImage", path: file("b.png") }]);
     turns.t2Upload = await runTurn(server, t2, [text("这是一张测试图，先不用描述，只回复“收到”。"), { type: "localImage", path: file("c.png") }]);
-    applySelection(t1, { uncheck: ["IMG-001"] }, { sessionsDir: join(codexHome(), "sessions") });
+    applySelection(t1, { uncheck: ["IMG-001"], auto: false }, { sessionsDir: join(codexHome(), "sessions") });
     await sleep(2500);
     turns.t1AfterUncheck = await runTurn(server, t1, [text("请只回复“好的”。")]);
     turns.t2Normal = await runTurn(server, t2, [text("请只回复“好的”。")]);

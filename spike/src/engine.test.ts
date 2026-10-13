@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { buildOf, compareVersions, countClaudeInPs, countClaudeProcesses, countCodexInPs, countCodexProcesses, engineHealth, ensureEngine, isEngineHealth, shouldReplace, watchForCodex, type Health } from "../../plugin/src/engine.ts";
 import { selectionDirOf } from "../../plugin/src/paths.ts";
 import { readRequestStats, recordRequest } from "../../plugin/src/request-stats.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
+import { autoDefaultSince, writeSelection } from "../../plugin/src/selection.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
@@ -56,11 +56,15 @@ test("the engine gives up only after consecutive checks without Codex", async ()
 
 test("ensure starts one engine; a second start on the same port leaves it alone", async (t) => {
   const port = 20000 + Math.floor(Math.random() * 20000);
-  process.env.CAM_DATA_DIR = mkdtempSync(join(tmpdir(), "cam-engine-"));
+  const data = mkdtempSync(join(tmpdir(), "cam-engine-"));
+  process.env.CAM_DATA_DIR = data;
   t.after(() => { delete process.env.CAM_DATA_DIR; });
   const first = await ensureEngine({ port, extraArgs: ["--stay"] });
   assert.equal(first.state, "started");
   t.after(() => { try { process.kill(first.health!.pid); } catch { /* already gone */ } });
+  // v0.6: from now on new tasks and sessions have automatic selection on by default.
+  assert.notEqual(autoDefaultSince(join(data, "selection")), null);
+  assert.notEqual(autoDefaultSince(join(data, "claude", "selection")), null);
   const again = await ensureEngine({ port });
   assert.deepEqual([again.state, again.health?.pid], ["running", first.health!.pid]);
   const second = await new Promise<string>((resolve) => execFile(process.execPath, [join(here, "..", "..", "plugin", "src", "proxy.ts"), "--port", String(port), "--stay"], (_error, stdout) => resolve(stdout)));

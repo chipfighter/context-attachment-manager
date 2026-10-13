@@ -100,7 +100,8 @@ async function main(): Promise<void> {
     const index = loadThreadIndex(join(codexHome(), "sessions"), threadId);
     const a = index.images.find((image) => image.name === "a.png")!;
     result.aId = a.id;
-    writeSelection({ threadId, unchecked: { [a.key]: { id: a.id, at: new Date().toISOString() } } }, selectionDirOf(data));
+    // Manual mode on purpose: from v0.6 a new task has automatic selection on by default.
+    writeSelection({ threadId, unchecked: { [a.key]: { id: a.id, at: new Date().toISOString() } }, auto: false }, selectionDirOf(data));
     await sleep(2500);
     await turn("canYouSee", words.canYouSee);
     await turn("recall", words.recall);
@@ -110,7 +111,7 @@ async function main(): Promise<void> {
     result.lastRequest = await lastRewrite();
     const b = index.images.find((image) => image.name === "b.png")!;
     result.bId = b.id;
-    writeSelection({ threadId, unchecked: { [b.key]: { id: b.id, at: new Date().toISOString() } } }, selectionDirOf(data));
+    writeSelection({ threadId, unchecked: { [b.key]: { id: b.id, at: new Date().toISOString() } }, auto: false }, selectionDirOf(data));
     await sleep(2500);
     await turn("recheck", words.recheck);
     result.recheckRequest = await lastRewrite();

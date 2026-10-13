@@ -9,11 +9,11 @@
 // Input: thread id, the sessions directory (rollouts are only read) and the tool's data directory.
 // Output: PanelState as plain JSON; selection changes are written to <data dir>/selection/.
 
-import { claudeHome, claudeImageData, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
+import { claudeHome, claudeImageData, claudeStartedAt, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
 import type { ImageSource } from "./images.ts";
 import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, requestStatsDirOf, selectionDirOf } from "./paths.ts";
 import { readRequestStats, type RequestStats } from "./request-stats.ts";
-import { effectiveSelection, readSelection, writeSelection, type Mark, type Selection } from "./selection.ts";
+import { claudeSelection, effectiveSelection, writeSelection, type Mark, type Selection } from "./selection.ts";
 import { buildIndex, imageData, readThreadHistory, type IndexedImage, type ThreadIndex } from "./thread-index.ts";
 import { threadTitle } from "./thread-names.ts";
 import { pngThumbnail } from "./thumbnail.ts";
@@ -276,7 +276,7 @@ export type ClaudePanelOptions = { dataRoot?: string; home?: string };
 function loadClaude(sessionId: string, options: ClaudePanelOptions) {
   const root = options.dataRoot ?? dataDir();
   const index = loadClaudeIndex(sessionId, options.home ?? claudeHome());
-  const selection = readSelection(sessionId, claudeSelectionDirOf(root));
+  const selection = claudeSelection(sessionId, claudeSelectionDirOf(root), claudeStartedAt(index));
   const stats = readRequestStats(sessionId, claudeRequestStatsDirOf(root));
   return { root, index, selection, stats };
 }

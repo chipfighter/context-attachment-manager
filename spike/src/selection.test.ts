@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { hasUnchecked, needsRewrite } from "../../plugin/src/proxy.ts";
-import { effectiveSelection, readSelection, writeSelection } from "../../plugin/src/selection.ts";
+import { autoDefaultSince, effectiveSelection, ensureAutoDefault, readSelection, writeSelection } from "../../plugin/src/selection.ts";
 import { startThread } from "./testfixtures.ts";
 
 const PARENT = "01a0d301-0000-7000-8000-0000000000f0";
@@ -88,4 +88,51 @@ test("switched on again after the fork, the switch stays the parent's; first use
   writeSelection({ threadId: PARENT, unchecked: {}, auto: true, autoAt: "2026-09-24T12:30:00Z", autoSince: "2026-09-24T12:30:00Z" }, later.dir);
   assert.equal(effectiveSelection(FORK, later.sessionsDir, later.dir).auto, undefined);
   assert.equal(needsRewrite(FORK, later.dir, later.sessionsDir), false);
+});
+
+// v0.6 (user 2026-10-13): automatic selection is on by default in a task started after this version first ran here;
+// tasks from before keep what they had. The start time is written once next to the selections.
+test("v0.6: the default's start time is written once and kept", () => {
+  const { dir } = setup();
+  assert.equal(autoDefaultSince(dir), null, "before this version runs, no default");
+  ensureAutoDefault(dir, new Date("2026-09-24T11:00:00Z"));
+  ensureAutoDefault(dir, new Date("2026-09-25T00:00:00Z"));
+  assert.equal(autoDefaultSince(dir), "2026-09-24T11:00:00.000Z");
+});
+
+test("v0.6: a task started after the default began has automatic selection on, unless it has its own switch", () => {
+  const { sessionsDir, dir, rollout } = setup();
+  ensureAutoDefault(dir, new Date("2026-09-24T11:00:00Z"));
+  const NEW = "01a0d301-0000-7000-8000-0000000000f5";
+  rollout(NEW, { timestamp: "2026-09-24T11:30:00Z" });
+  const fresh = effectiveSelection(NEW, sessionsDir, dir);
+  assert.deepEqual([fresh.auto, fresh.autoSince], [true, "2026-09-24T11:30:00Z"]);
+  assert.equal(existsSync(join(dir, `${NEW}.json`)), false, "the default is not written down");
+  assert.equal(needsRewrite(NEW, dir, sessionsDir), true);
+  // Started before (10:00): as before.
+  assert.equal(effectiveSelection(PLAIN, sessionsDir, dir).auto, undefined);
+  assert.equal(needsRewrite(PLAIN, dir, sessionsDir), false);
+  // No rollout yet: a new task.
+  assert.equal(effectiveSelection("01a0d301-0000-7000-8000-0000000000f9", sessionsDir, dir).auto, true);
+  // Its own switch wins, either way.
+  writeSelection({ threadId: NEW, unchecked: {}, auto: false, autoAt: "2026-09-24T11:40:00Z", autoSince: "2026-09-24T11:30:00Z" }, dir);
+  assert.equal(effectiveSelection(NEW, sessionsDir, dir).auto, false);
+  writeSelection({ threadId: PLAIN, unchecked: {}, auto: true, autoAt: "2026-09-24T11:40:00Z", autoSince: "2026-09-24T11:40:00Z" }, dir);
+  assert.equal(effectiveSelection(PLAIN, sessionsDir, dir).auto, true);
+});
+
+test("v0.6: a fork counts from the task it came from", () => {
+  const { sessionsDir, dir, rollout } = setup();
+  ensureAutoDefault(dir, new Date("2026-09-24T11:00:00Z"));
+  const OLD_FORK = "01a0d301-0000-7000-8000-0000000000f6";
+  const NEW = "01a0d301-0000-7000-8000-0000000000f7";
+  const NEW_FORK = "01a0d301-0000-7000-8000-0000000000f8";
+  rollout(OLD_FORK, { forked_from_id: PLAIN, timestamp: "2026-09-24T12:00:00Z" });
+  rollout(NEW, { timestamp: "2026-09-24T11:30:00Z" });
+  rollout(NEW_FORK, { forked_from_id: NEW, timestamp: "2026-09-24T12:00:00Z" });
+  // Forked at 12:00 from tasks that started at 10:00: as before, whether or not anything comes along.
+  assert.equal(effectiveSelection(FORK, sessionsDir, dir).auto, undefined);
+  assert.equal(effectiveSelection(OLD_FORK, sessionsDir, dir).auto, undefined);
+  // Forked from a task that started after: on, like it.
+  assert.equal(effectiveSelection(NEW_FORK, sessionsDir, dir).auto, true);
 });

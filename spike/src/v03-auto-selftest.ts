@@ -8,7 +8,9 @@
 // Thread A asks outright for a fetch; thread B asks questions that need an image or do not; thread C has one image, so
 // nothing else in the context can mislead the reading. Each test image hides a digit in a corner that the descriptions
 // leave out. Drafts of the wording were tried the same way before it was built, with the rewrite done by a stand-in.
-// Input: [--label name] [--lang zh|en] [--port 17897] [--threads A,B,C]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
+// v0.6 — thread D sets no switch: a new task has automatic selection on by default. Its question needs two images the
+// model has not fetched before, at once (user 2026-10-13: does it fetch every image it needs?).
+// Input: [--label name] [--lang zh|en] [--port 17897] [--threads A,B,C,D]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
 // Output: local/v03/auto-<label>.json (synthetic images only).
 
 import { spawn } from "node:child_process";
@@ -64,6 +66,8 @@ const SCRIPT = {
     textOnly: "把“今天天气很好”翻译成英文。",
     sum: "黄色背景那张图左上角的数字，和 a.png 右下角的数字，加起来是多少？",
     corner: "这张图右上角的数字是几？",
+    uploadDescribe: "这是三张测试图。分别用一句话说说它们的背景色和中间的主要形状，只说这两样，不要提角落里的东西。",
+    pair: "a.png 右下角的数字，和紫色背景那张图右上角的数字，加起来是多少？",
     recallWords: [/黄/, /圆/],
   },
   en: {
@@ -79,12 +83,14 @@ const SCRIPT = {
     textOnly: "Translate \"今天天气很好\" into English.",
     sum: "What do the number in the top-left corner of the yellow image and the number in the bottom-right corner of a.png add up to?",
     corner: "What is the number in the top-right corner of this image?",
+    uploadDescribe: "Here are three test images. In one sentence each, give their background color and the main shape in the middle. Only those two things: don't mention anything in the corners.",
+    pair: "What do the number in the bottom-right corner of a.png and the number in the top-right corner of the purple image add up to?",
     recallWords: [/yellow/i, /circle|disc|disk/i],
   },
 };
 
 // A number in the reply, as a numeral or a word, ignoring image ids.
-const NUMBER_WORDS: Record<number, RegExp> = { 3: /三|three/i, 5: /五|five/i, 7: /七|seven/i, 10: /十|ten\b/i };
+const NUMBER_WORDS: Record<number, RegExp> = { 3: /三|three/i, 5: /五|five/i, 7: /七|seven/i, 10: /十|ten\b/i, 12: /十二|twelve/i };
 const says = (reply: string, n: number) => {
   const clean = reply.replace(/IMG-\d{3}/g, "");
   return new RegExp(`(^|[^0-9])${n}([^0-9]|$)`).test(clean) || NUMBER_WORDS[n].test(clean);
@@ -95,7 +101,7 @@ async function main(): Promise<void> {
   const label = option("--label", "run1");
   const lang: Lang = option("--lang", "zh") === "en" ? "en" : "zh";
   const port = Number(option("--port", "17897"));
-  const only = option("--threads", "A,B,C").split(",");
+  const only = option("--threads", "A,B,C,D").split(",");
   const words = SCRIPT[lang];
   const root = join(localRoot, "v03");
   const data = join(root, `data-${label}`);
@@ -173,6 +179,13 @@ async function main(): Promise<void> {
         turns.corner = await turn(id, words.corner);
         return { threadId: id, turns };
       },
+      // v0.6: no switch set; described while the images are still this turn's.
+      D: async () => {
+        const id = await start("D");
+        const turns: Json = { upload: await turn(id, words.uploadDescribe, ["a.png", "b.png", "c.png"]) };
+        turns.pair = await turn(id, words.pair);
+        return { threadId: id, turns };
+      },
     };
     for (const name of only) if (threads[name]) result.threads[name] = await threads[name]();
   } finally {
@@ -184,6 +197,7 @@ async function main(): Promise<void> {
   const A = result.threads.A?.turns ?? {};
   const B = result.threads.B?.turns ?? {};
   const C = result.threads.C?.turns ?? {};
+  const D = result.threads.D?.turns ?? {};
   const reply = (t: Json) => String(t?.reply ?? "");
   const ran = (name: string) => !!result.threads[name];
   result.checks = {
@@ -210,7 +224,12 @@ async function main(): Promise<void> {
       C_cornerFetchesImg001: C.corner.fetched.includes("IMG-001"),
       C_cornerAnswers5: says(reply(C.corner), 5),
     } : {}),
-    noErrors: [...Object.values(A), ...Object.values(B), ...Object.values(C)].every((t: Json) => t.status === "completed" && !t.errors.length),
+    ...(ran("D") ? {
+      D_onByDefault: !!D.pair.lastRewrite?.auto && ["IMG-001", "IMG-002", "IMG-003"].every((id) => D.pair.lastRewrite.replaced.includes(`${id}:plain`)),
+      D_pairFetchesBoth: ["IMG-001", "IMG-003"].every((id) => D.pair.fetched.includes(id)),
+      D_pairAnswers12: says(reply(D.pair), 12),
+    } : {}),
+    noErrors: [...Object.values(A), ...Object.values(B), ...Object.values(C), ...Object.values(D)].every((t: Json) => t.status === "completed" && !t.errors.length),
   };
   // Fetching an image it already answered about is not wrong, only slower.
   result.notes = { refetched: [A.again?.fetched.length ? "A.again" : null, B.sum?.fetched.includes("IMG-001") ? "B.sum" : null].filter(Boolean) };
