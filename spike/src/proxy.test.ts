@@ -41,8 +41,18 @@ test("NO_PROXY entries covering the upstream host mean a direct connection", () 
 
 test("the task a request belongs to is read from x-codex-turn-metadata", () => {
   const headers = { "x-codex-turn-metadata": JSON.stringify({ thread_id: "thread-a", turn_id: "turn-1" }), "x-codex-window-id": "thread-a:0" };
-  assert.deepEqual(requestIdentity(headers), { threadId: "thread-a", turnId: "turn-1", windowId: "thread-a:0" });
-  assert.deepEqual(requestIdentity({ "x-codex-turn-metadata": "not json" }), { threadId: null, turnId: null, windowId: null });
+  assert.deepEqual(requestIdentity(headers), { threadId: "thread-a", turnId: "turn-1", windowId: "thread-a:0", forkedFrom: null, parentThreadId: null, subagentKind: null });
+  assert.deepEqual(requestIdentity({ "x-codex-turn-metadata": "not json" }), { threadId: null, turnId: null, windowId: null, forkedFrom: null, parentThreadId: null, subagentKind: null });
+});
+
+// v0.7: as Codex 0.162 sends them (docs/v0.7/plan.md §3).
+test("a side chat's requests name the task it was forked from, a subagent's its parent", () => {
+  const side = { "x-codex-turn-metadata": JSON.stringify({ thread_id: "side", session_id: "side", turn_id: "turn-s", forked_from_thread_id: "main" }) };
+  assert.deepEqual(requestIdentity(side), { threadId: "side", turnId: "turn-s", windowId: null, forkedFrom: "main", parentThreadId: null, subagentKind: null });
+  const child = { "x-codex-turn-metadata": JSON.stringify({ thread_id: "child", session_id: "main", turn_id: "turn-c", parent_thread_id: "main", subagent_kind: "thread_spawn" }), "x-codex-parent-thread-id": "main", "x-openai-subagent": "collab_spawn" };
+  assert.deepEqual(requestIdentity(child), { threadId: "child", turnId: "turn-c", windowId: null, forkedFrom: null, parentThreadId: "main", subagentKind: "thread_spawn" });
+  // Codex's own header, when the metadata does not say.
+  assert.equal(requestIdentity({ "x-codex-turn-metadata": JSON.stringify({ thread_id: "child" }), "x-codex-parent-thread-id": "main" }).parentThreadId, "main");
 });
 
 test("request metadata counts images in messages and in tool outputs, without content", () => {
@@ -404,4 +414,32 @@ test("v0.5: the request writing a second summary is rewritten as usual; after it
   ]), undefined, session, dir, home, {});
   assert.deepEqual(after.report.compacted, { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] });
   assert.deepEqual(partsOf(sent(after)[0]), ["second summary", "IMG-001", "image:A", "IMG-002", "image:B"]);
+});
+
+// v0.7: a side chat. Codex keeps it in memory only, so it has no rollout; its requests carry the task's history and
+// name that task (forked_from_thread_id).
+test("a side chat's request is rewritten with the images of the task it came from; with the switch off it goes out as it is", () => {
+  const { threadId, sessions, selections, red, blue, body } = fixture();
+  const SIDE = "01a0d307-0000-7000-8000-0000000000b1";
+  // The task's own switch is off and nothing is unchecked there: the side chat still leaves the images out.
+  assert.equal(needsRewrite(SIDE, selections, sessions, threadId), true);
+  const json = JSON.parse(zlib.zstdDecompressSync(body()).toString("utf8"));
+  json.input.push({ type: "message", role: "user", content: [{ type: "input_text", text: "主任务在做什么？" }] });
+  const original = zlib.zstdCompressSync(Buffer.from(JSON.stringify(json)));
+  const { body: out, report } = rewriteBody(original, "zstd", SIDE, sessions, selections, "side-turn", threadId);
+  const text = zlib.zstdDecompressSync(out).toString("utf8");
+  assert.ok(!text.includes(red.slice(30)) && !text.includes(blue.slice(30)), "the task's images are left out, those of its latest turn too");
+  assert.match(text, /\[图片 IMG-001（\[Image #1\]） 已省略｜a\.png｜用户上传｜第 1 轮｜64×64\]/);
+  assert.deepEqual([report.auto, report.sideChatOf, report.replaced.map((r: Record<string, unknown>) => r.id)], [true, threadId, ["IMG-001", "IMG-002"]]);
+  // Pinned in the task: still sent.
+  const pinned = { "msg_1#1": { id: "IMG-002", at: "2026-10-06T10:00:00Z" } };
+  writeSelection({ threadId, unchecked: {}, auto: true, autoAt: "2026-10-06T10:00:00Z", autoSince: "2026-10-06T10:00:00Z", pinned }, selections);
+  const kept = zlib.zstdDecompressSync(rewriteBody(original, "zstd", SIDE, sessions, selections, "side-turn", threadId).body).toString("utf8");
+  assert.ok(!kept.includes(red.slice(30)) && kept.includes(blue.slice(30)));
+  // Turned off in the task's panel.
+  writeSelection({ threadId, unchecked: {}, auto: true, autoAt: "2026-10-06T10:00:00Z", autoSince: "2026-10-06T10:00:00Z", pinned, childrenAuto: false }, selections);
+  assert.equal(needsRewrite(SIDE, selections, sessions, threadId), false);
+  assert.equal(rewriteBody(original, "zstd", SIDE, sessions, selections, "side-turn", threadId).body, original);
+  // A thread with a rollout of its own is no side chat, whatever its requests say (a fork the user made).
+  assert.equal(needsRewrite(threadId, selections, sessions, "01a0d307-0000-7000-8000-0000000000b9"), true);
 });
