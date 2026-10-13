@@ -2,7 +2,7 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [0.7.0] - Unreleased
+## [0.7.0] - 2026-10-14
 
 Subagents and side chats in Codex follow Auto-select too.
 

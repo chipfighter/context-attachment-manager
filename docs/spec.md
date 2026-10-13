@@ -1,6 +1,6 @@
 # 规格：Context Attachment Manager（上下文素材管理器）
 
-> 本文件是目标、范围、约束和验收标准的唯一事实来源（2026-09-24 经用户、Claude、Codex 三方确认），描述当前版本 v0.6.0，以后随版本更新。v0.4 加的 Claude 桌面 Code 接入，相关内容都标着“v0.4”；它的关卡、任务和验收步骤见 [v0.4/](v0.4/)。v0.5 加的 Claude Code 压缩后保留图片标着“v0.5”，方案和实测见 [v0.5/plan.md](v0.5/plan.md)。v0.6 的默认开启自动选图和 Claude 桌面版自动打开面板标着“v0.6”，见 [v0.6/plan.md](v0.6/plan.md)。v0.7 的 Codex 子代理和旁聊也自动选图标着“v0.7”，见 [v0.7/plan.md](v0.7/plan.md)。项目 2026-10-11 由 Codex Attachment Manager 改名，因为不再只给 Codex 用（用户定）；安装用的标识（`codex-attachment-manager`）和数据目录不变，已装的用户照常升级。
+> 本文件是目标、范围、约束和验收标准的唯一事实来源（2026-09-24 经用户、Claude、Codex 三方确认），描述当前版本 v0.7.0，以后随版本更新。v0.4 加的 Claude 桌面 Code 接入，相关内容都标着“v0.4”；它的关卡、任务和验收步骤见 [v0.4/](v0.4/)。v0.5 加的 Claude Code 压缩后保留图片标着“v0.5”，方案和实测见 [v0.5/plan.md](v0.5/plan.md)。v0.6 的默认开启自动选图和 Claude 桌面版自动打开面板标着“v0.6”，见 [v0.6/plan.md](v0.6/plan.md)。v0.7 的 Codex 子代理和旁聊也自动选图标着“v0.7”，见 [v0.7/plan.md](v0.7/plan.md)。项目 2026-10-11 由 Codex Attachment Manager 改名，因为不再只给 Codex 用（用户定）；安装用的标识（`codex-attachment-manager`）和数据目录不变，已装的用户照常升级。
 > 技术方案见 [design.md](design.md)。v0.1 的开发记录（原方案、任务记录、各阶段报告、最初的构想）归档在 [history/v0.1/](history/v0.1/)，只作参考。
 
 ## 1. 目标
