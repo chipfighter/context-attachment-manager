@@ -2,7 +2,7 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [0.6.0] - Unreleased
+## [0.6.0] - 2026-10-13
 
 Auto-select on by default, and the panel opens by itself in Claude Desktop.
 
