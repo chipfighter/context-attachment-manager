@@ -117,7 +117,7 @@ Then start a new session in the Code tab. There is nothing to set up: the plugin
 
 ### In Claude Desktop
 
-1. Once a session in the Code tab has images, the panel opens by itself in Claude Desktop's built-in browser, next to the conversation. Claude Desktop closes a session's built-in browser after about 30 minutes without a message; the panel opens again with your next one. If you close it yourself, it stays closed in that session until you type `/cam` and send it, which opens it any time. If `/cam` is your first message in a new session, the prompt box may say the command doesn't exist: send it anyway. Claude Desktop starts the session when you send your first message, and the plugin adds `/cam` then.
+1. Once a session in the Code tab has images, the panel opens by itself in Claude Desktop's built-in browser, next to the conversation. When you have been away from a session for about 30 minutes, Claude Desktop closes its built-in browser; the panel opens again with your next message. If you close it yourself, it stays closed in that session until you type `/cam` and send it, which opens it any time. If `/cam` is your first message in a new session, the prompt box may say the command doesn't exist: send it anyway. Claude Desktop starts the session when you send your first message, and the plugin adds `/cam` then.
 2. From there it works as in Codex: new sessions start with **Auto-select** on; pin, filter, or switch it off to uncheck images yourself and answer `need IMG-xxx`. Changes apply from the next message.
 3. With Auto-select on, the model's `cam_view_image` calls don't ask for your permission, unless your own Claude Code settings or hooks say otherwise.
 

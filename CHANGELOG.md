@@ -10,7 +10,7 @@ Auto-select on by default, and the panel opens by itself in Claude Desktop.
 
 - New tasks in Codex and new sessions in Claude Code start with Auto-select on: images from earlier turns are left out, and the model fetches the ones it needs by ID, so long conversations stay small even if you never open the panel. Tasks and sessions you had before keep their setting, and switching Auto-select off in the panel sticks.
 - In Claude Desktop the panel opens by itself in the built-in browser once a session has images: when the model read an image, as that turn ends; when you paste one, as your message goes out. You no longer need to type `/cam`.
-- Claude Desktop closes a session's built-in browser after about 30 minutes without a turn; the panel then opens again with your next message. If you close it yourself, it stays closed in that session until you type `/cam`, which also leaves just one panel tab.
+- When you have been away from a session for about 30 minutes, Claude Desktop closes its built-in browser; the panel then opens again with your next message. If you close it yourself, it stays closed in that session until you type `/cam`, which also leaves just one panel tab.
 - In Codex, tasks you had before work as in 0.5.0.
 
 ### Notes
