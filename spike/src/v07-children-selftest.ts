@@ -40,7 +40,8 @@ const SCRIPT = {
     sideNote: "这是从主任务分出来的旁聊，用来问一个小问题。在这之前的内容都是从主任务继承来的，只作参考，不要接着做里面的事。只回答在这之后提的问题。",
     sideText: "用一句话总结我们刚才在做什么。",
     detail: "a.png 右下角的数字是几？",
-    spawn: "用 spawn_agent 开一个子代理，fork_turns 设为 \"none\"，交给它这个任务：“用 view_image 工具查看当前目录下的 a.png，然后用一句话说说它的背景色和中间的主要形状，只说这两样，不要提角落里的东西。”等它做完，把它的回答原样告诉我。",
+    // The full path: GPT-6 Luna's subagent did not find "a.png in the current folder" (2026-10-13).
+    spawn: (path: string) => `用 spawn_agent 开一个子代理，fork_turns 设为 "none"，交给它这个任务：“用 view_image 工具查看 ${path}，然后用一句话说说它的背景色和中间的主要形状，只说这两样，不要提角落里的东西。”等它做完，把它的回答原样告诉我。`,
     followup: "用 followup_task 给你刚才开的那个子代理发一个后续任务：“a.png 右下角的数字是几？”等它答完，把它的回答原样告诉我。",
   },
   en: {
@@ -49,7 +50,7 @@ const SCRIPT = {
     sideNote: "This is a side chat forked from the main task for a quick question. Everything before this point is inherited from the main task and is for reference only; do not continue anything in it. Answer only what is asked after this point.",
     sideText: "In one sentence, sum up what we were just doing.",
     detail: "What is the number in the bottom-right corner of a.png?",
-    spawn: "Use spawn_agent to start one subagent with fork_turns set to \"none\" and this task: \"Use the view_image tool on a.png in the current folder, then give its background color and the main shape in the middle in one sentence. Only those two things: don't mention anything in the corners.\" Wait until it finishes, then tell me its answer as it is.",
+    spawn: (path: string) => `Use spawn_agent to start one subagent with fork_turns set to "none" and this task: "Use the view_image tool on ${path}, then give its background color and the main shape in the middle in one sentence. Only those two things: don't mention anything in the corners." Wait until it finishes, then tell me its answer as it is.`,
     followup: "Use followup_task to give the subagent you just started a follow-up task: \"What is the number in the bottom-right corner of a.png?\" Wait until it answers, then tell me its answer as it is.",
   },
 };
@@ -124,7 +125,7 @@ async function main(): Promise<void> {
       },
       C: async () => {
         const id = await start("C");
-        const turns: Json = { spawn: await turn(id, words.spawn) };
+        const turns: Json = { spawn: await turn(id, words.spawn(join(work, "a.png"))) };
         const [child] = subagentsOf(id);
         if (!child) return { threadId: id, turns, error: "no subagent started" };
         turns.childFirst = lastOf(child);
@@ -141,7 +142,7 @@ async function main(): Promise<void> {
         await sleep(2500);
         const side = await sideChat(id);
         turns.sideText = await turn(side, words.sideText);
-        turns.spawn = await turn(id, words.spawn);
+        turns.spawn = await turn(id, words.spawn(join(work, "a.png")));
         const [child] = subagentsOf(id);
         if (child) turns.followup = await turn(id, words.followup);
         return { threadId: id, side, child: child ?? null, turns, childLast: child ? lastOf(child) : null };
