@@ -127,7 +127,7 @@ export function forwardHeaders(headers: IncomingHttpHeaders, upstream = UPSTREAM
 // Which task a request belongs to, from Codex's own turn metadata header.
 // v0.7: and where that task came from: a side chat (a fork Codex keeps in memory only) names the task it was forked
 // from, a subagent its parent (also in Codex's own header).
-export type RequestIdentity = { threadId: string | null; turnId: string | null; windowId: string | null; forkedFrom: string | null; parentThreadId: string | null; subagentKind: string | null };
+export type RequestIdentity = { threadId: string | null; turnId: string | null; windowId: string | null; forkedFrom: string | null; parentThreadId: string | null; subagentKind: string | null; turnTrigger: string | null };
 export function requestIdentity(headers: IncomingHttpHeaders): RequestIdentity {
   let meta: Json = {};
   try { meta = JSON.parse(String(headers["x-codex-turn-metadata"] ?? "{}")); } catch { /* not JSON */ }
@@ -135,6 +135,7 @@ export function requestIdentity(headers: IncomingHttpHeaders): RequestIdentity {
   return {
     threadId: meta.thread_id ?? meta.session_id ?? null, turnId: meta.turn_id ?? null, windowId: header("x-codex-window-id"),
     forkedFrom: meta.forked_from_thread_id ?? null, parentThreadId: meta.parent_thread_id ?? header("x-codex-parent-thread-id"), subagentKind: meta.subagent_kind ?? null,
+    turnTrigger: meta.turn_trigger ?? null,
   };
 }
 

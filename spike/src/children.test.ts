@@ -59,3 +59,13 @@ test("each child is recorded once under its task; later requests leave the recor
   assert.equal(recordChild("../escape", SIDE, { kind: "side", from: MAIN, at: "x" }, dir), false);
   assert.deepEqual(readChildren("../escape", dir), {});
 });
+
+// Composer suggestions are app-generated ephemeral forks, not user-created side chats.
+test("composer predictions are not registered as side chats", () => {
+  const { sessionsDir } = sessions();
+  const at = "2026-10-15T10:00:00Z";
+  const identity = { threadId: SIDE, forkedFrom: MAIN, turnTrigger: "composer_predictions" };
+  assert.equal(childOf(identity, sessionsDir, at), null);
+  assert.equal(childOf({ ...identity, turnTrigger: "user" }, sessionsDir, at)?.child.kind, "side");
+  assert.equal(childOf({ threadId: SIDE, forkedFrom: MAIN }, sessionsDir, at)?.child.kind, "side", "older metadata remains compatible");
+});

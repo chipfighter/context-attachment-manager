@@ -41,16 +41,16 @@ test("NO_PROXY entries covering the upstream host mean a direct connection", () 
 
 test("the task a request belongs to is read from x-codex-turn-metadata", () => {
   const headers = { "x-codex-turn-metadata": JSON.stringify({ thread_id: "thread-a", turn_id: "turn-1" }), "x-codex-window-id": "thread-a:0" };
-  assert.deepEqual(requestIdentity(headers), { threadId: "thread-a", turnId: "turn-1", windowId: "thread-a:0", forkedFrom: null, parentThreadId: null, subagentKind: null });
-  assert.deepEqual(requestIdentity({ "x-codex-turn-metadata": "not json" }), { threadId: null, turnId: null, windowId: null, forkedFrom: null, parentThreadId: null, subagentKind: null });
+  assert.deepEqual(requestIdentity(headers), { threadId: "thread-a", turnId: "turn-1", windowId: "thread-a:0", forkedFrom: null, parentThreadId: null, subagentKind: null, turnTrigger: null });
+  assert.deepEqual(requestIdentity({ "x-codex-turn-metadata": "not json" }), { threadId: null, turnId: null, windowId: null, forkedFrom: null, parentThreadId: null, subagentKind: null, turnTrigger: null });
 });
 
 // v0.7: as Codex 0.162 sends them (docs/v0.7/plan.md §3).
 test("a side chat's requests name the task it was forked from, a subagent's its parent", () => {
   const side = { "x-codex-turn-metadata": JSON.stringify({ thread_id: "side", session_id: "side", turn_id: "turn-s", forked_from_thread_id: "main" }) };
-  assert.deepEqual(requestIdentity(side), { threadId: "side", turnId: "turn-s", windowId: null, forkedFrom: "main", parentThreadId: null, subagentKind: null });
+  assert.deepEqual(requestIdentity(side), { threadId: "side", turnId: "turn-s", windowId: null, forkedFrom: "main", parentThreadId: null, subagentKind: null, turnTrigger: null });
   const child = { "x-codex-turn-metadata": JSON.stringify({ thread_id: "child", session_id: "main", turn_id: "turn-c", parent_thread_id: "main", subagent_kind: "thread_spawn" }), "x-codex-parent-thread-id": "main", "x-openai-subagent": "collab_spawn" };
-  assert.deepEqual(requestIdentity(child), { threadId: "child", turnId: "turn-c", windowId: null, forkedFrom: null, parentThreadId: "main", subagentKind: "thread_spawn" });
+  assert.deepEqual(requestIdentity(child), { threadId: "child", turnId: "turn-c", windowId: null, forkedFrom: null, parentThreadId: "main", subagentKind: "thread_spawn", turnTrigger: null });
   // Codex's own header, when the metadata does not say.
   assert.equal(requestIdentity({ "x-codex-turn-metadata": JSON.stringify({ thread_id: "child" }), "x-codex-parent-thread-id": "main" }).parentThreadId, "main");
 });
@@ -442,4 +442,16 @@ test("a side chat's request is rewritten with the images of the task it came fro
   assert.equal(rewriteBody(original, "zstd", SIDE, sessions, selections, "side-turn", threadId).body, original);
   // A thread with a rollout of its own is no side chat, whatever its requests say (a fork the user made).
   assert.equal(needsRewrite(threadId, selections, sessions, "01a0d307-0000-7000-8000-0000000000b9"), true);
+});
+
+// Only child-list classification changes: prediction requests still retain their attachment-management context.
+test("composer predictions retain their trigger and inherited image rewriting", () => {
+  const { threadId, sessions, selections, body } = fixture();
+  const identity = requestIdentity({ "x-codex-turn-metadata": JSON.stringify({ thread_id: "prediction", forked_from_thread_id: threadId, turn_trigger: "composer_predictions" }) });
+  assert.equal(identity.turnTrigger, "composer_predictions");
+  assert.equal(identity.forkedFrom, threadId);
+  assert.equal(needsRewrite(identity.threadId, selections, sessions, identity.forkedFrom), true);
+  const result = rewriteBody(body(), "zstd", identity.threadId!, sessions, selections, null, identity.forkedFrom);
+  assert.equal(result.report.auto, true);
+  assert.equal(result.report.replaced.length, 2);
 });
