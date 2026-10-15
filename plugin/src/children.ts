@@ -24,13 +24,13 @@ export function readChildren(taskId: string, dir = childrenDirOf()): Record<stri
 export function recordChild(taskId: string, childId: string, child: Child, dir = childrenDirOf()): boolean {
   const key = `${dir}\0${taskId}\0${childId}`;
   if (known.has(key) || !THREAD_ID.test(taskId) || !THREAD_ID.test(childId)) return false;
-  known.add(key);
   const children = readChildren(taskId, dir);
-  if (children[childId]) return false;
+  if (children[childId]) { known.add(key); return false; }
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${taskId}.json`);
   writeFileSync(`${file}.tmp`, JSON.stringify({ ...children, [childId]: child }, null, 2));
   renameSync(`${file}.tmp`, file);
+  known.add(key);
   return true;
 }
 
