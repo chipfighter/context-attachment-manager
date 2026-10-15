@@ -16,7 +16,7 @@ async function bounded<T>(promise: Promise<T>, message: string, ms = 2000): Prom
   } finally { clearTimeout(timer!); }
 }
 
-async function fixture(t: TestContext, handler: http.RequestListener) {
+async function fixture(t: TestContext, handler: http.RequestListener, connectDelay = 0) {
   const root = mkdtempSync(join(tmpdir(), "cam-http-lifecycle-"));
   const upstream = http.createServer(handler);
   await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
@@ -26,7 +26,7 @@ async function fixture(t: TestContext, handler: http.RequestListener) {
   const port = (reservation.address() as { port: number }).port;
   await new Promise<void>((resolve) => reservation.close(() => resolve()));
   const child = spawn(process.execPath, [fileURLToPath(new URL("./proxy-http-fixture.ts", import.meta.url))], {
-    env: { ...process.env, CAM_DATA_DIR: root, CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), NO_PROXY: "*", no_proxy: "*" },
+    env: { ...process.env, CAM_DATA_DIR: root, CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), CAM_TEST_CONNECT_DELAY: String(connectDelay), NO_PROXY: "*", no_proxy: "*" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
@@ -47,7 +47,7 @@ async function fixture(t: TestContext, handler: http.RequestListener) {
       if (output.includes(`http://127.0.0.1:${port}/`)) resolve();
     });
   }), "synthetic engine did not start", 10000);
-  return { port };
+  return { port, upstream };
 }
 
 function request(port: number) {
@@ -58,6 +58,17 @@ function request(port: number) {
   client.end(body);
   return client;
 }
+
+test("HTTP cancellation during the upstream handshake closes the pending socket", async (t) => {
+  const { port, upstream } = await fixture(t, () => assert.fail("cancelled request must not reach the upstream"), 10000);
+  const connected = new Promise<import("node:net").Socket>((resolve) => upstream.once("connection", resolve));
+  const client = request(port);
+  t.after(() => client.destroy());
+  const socket = await bounded(connected, "synthetic handshake did not start");
+  const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+  client.destroy();
+  await bounded(closed, "pending upstream socket stayed open after cancellation");
+});
 
 test("HTTP client cancellation closes the upstream response", async (t) => {
   let upstreamClosed!: () => void;

@@ -8,7 +8,10 @@ const upstreamPort = Number(process.env.CAM_TEST_UPSTREAM_PORT);
 if (!upstreamPort) throw new Error("missing synthetic upstream port");
 // The proxy uses http.request over an already-connected TLS socket. A plain local socket exercises the same HTTP
 // lifecycle; only the TLS handshake is replaced, in this isolated child process.
-tls.connect = ((_options: unknown, callback: () => void) => net.connect(upstreamPort, "127.0.0.1", callback)) as typeof tls.connect;
+tls.connect = ((_options: unknown, callback: () => void) => net.connect(upstreamPort, "127.0.0.1", () => {
+  const delay = Number(process.env.CAM_TEST_CONNECT_DELAY ?? 0);
+  if (delay) setTimeout(callback, delay).unref(); else callback();
+})) as typeof tls.connect;
 const script = fileURLToPath(new URL("../../plugin/src/proxy.ts", import.meta.url));
 process.argv = [process.execPath, script, "--stay", "--port", process.env.CAM_TEST_PROXY_PORT!];
 await import(script);

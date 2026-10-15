@@ -94,14 +94,18 @@ export function macProxy(scutil: string): string | null {
   return null;
 }
 
-function connectUpstream(via: { host: string; port: number } | null, upstream = UPSTREAM_HOST): Promise<tls.TLSSocket> {
+function connectUpstream(via: { host: string; port: number } | null, upstream = UPSTREAM_HOST, signal?: AbortSignal): Promise<tls.TLSSocket> {
   const startTls = (socket?: net.Socket) => new Promise<tls.TLSSocket>((ok, fail) => {
-    const secure = tls.connect({ socket, host: socket ? undefined : upstream, port: 443, servername: upstream, ALPNProtocols: ["http/1.1"] }, () => ok(secure));
-    secure.once("error", fail);
+    const cleanup = () => signal?.removeEventListener("abort", abort);
+    const secure = tls.connect({ socket, host: socket ? undefined : upstream, port: 443, servername: upstream, ALPNProtocols: ["http/1.1"] }, () => { cleanup(); ok(secure); });
+    const abort = () => { cleanup(); secure.destroy(); socket?.destroy(); fail(new Error("upstream connection cancelled")); };
+    secure.once("error", (error) => { cleanup(); fail(error); });
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
   });
   if (!via) return startTls();
   return new Promise((ok, fail) => {
-    const socket = net.connect(via.port, via.host, () => socket.write(`CONNECT ${upstream}:443 HTTP/1.1\r\nHost: ${upstream}:443\r\n\r\n`));
+    const socket = net.connect({ port: via.port, host: via.host, signal }, () => socket.write(`CONNECT ${upstream}:443 HTTP/1.1\r\nHost: ${upstream}:443\r\n\r\n`));
     let buffered = Buffer.alloc(0);
     const onData = (chunk: Buffer) => {
       buffered = Buffer.concat([buffered, chunk]);
@@ -716,9 +720,13 @@ async function main(): Promise<void> {
     // thinking after the changed history (thinkingRejected) moves on to the next one (see ClaudeAttempt), the last being
     // the original as Claude Code built it; the statistics say which went out (the panel shows a fallback).
     type Attempt = { body: Buffer | null; report: Json | null; edited: boolean } & Partial<Pick<ClaudeAttempt, "history" | "sent" | "made" | "sure">>;
+    const connecting = new AbortController();
+    res.once("close", () => {
+      if (!res.writableFinished) { connecting.abort(); finish("client closed before the response ended"); }
+    });
     const send = (attempts: Attempt[], at = 0): void => {
       if (res.destroyed) return;
-      connectUpstream(viaOf(upstream), upstream).then((socket) => {
+      connectUpstream(viaOf(upstream), upstream, connecting.signal).then((socket) => {
       // The client can cancel while CONNECT/TLS is still in progress.
       if (res.destroyed) { socket.destroy(); return; }
       const attempt = attempts[at];
