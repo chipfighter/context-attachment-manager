@@ -716,7 +716,11 @@ async function main(): Promise<void> {
     // thinking after the changed history (thinkingRejected) moves on to the next one (see ClaudeAttempt), the last being
     // the original as Claude Code built it; the statistics say which went out (the panel shows a fallback).
     type Attempt = { body: Buffer | null; report: Json | null; edited: boolean } & Partial<Pick<ClaudeAttempt, "history" | "sent" | "made" | "sure">>;
-    const send = (attempts: Attempt[], at = 0): void => { connectUpstream(viaOf(upstream), upstream).then((socket) => {
+    const send = (attempts: Attempt[], at = 0): void => {
+      if (res.destroyed) return;
+      connectUpstream(viaOf(upstream), upstream).then((socket) => {
+      // The client can cancel while CONNECT/TLS is still in progress.
+      if (res.destroyed) { socket.destroy(); return; }
       const attempt = attempts[at];
       const outgoing = forwardHeaders(req.headers, upstream);
       if (attempt.body) outgoing["content-length"] = String(attempt.body.length);
@@ -732,7 +736,7 @@ async function main(): Promise<void> {
         if (at < attempts.length - 1 && status === 400) {
           const parts: Buffer[] = [];
           answer.on("data", (chunk: Buffer) => parts.push(chunk));
-          answer.on("error", (error) => finish(String(error)));
+          answer.on("error", (error) => { finish(String(error)); res.destroy(error); });
           answer.on("end", () => {
             const raw = Buffer.concat(parts);
             const text = decodeBody(raw, answer.headers["content-encoding"] as string | undefined)?.toString("utf8") ?? "";
@@ -774,16 +778,22 @@ async function main(): Promise<void> {
           }
           finish();
         });
-        answer.on("error", (error) => finish(String(error)));
+        // A partial response cannot be ended as if it were complete: propagate the broken stream to Codex.
+        answer.on("error", (error) => { finish(String(error)); res.destroy(error); });
       });
-      outbound.on("error", (error) => { if (!res.headersSent) res.writeHead(502); res.end(); finish(String(error)); });
-      // Codex may drop the connection mid-stream; still log the request once.
-      res.on("close", () => finish(res.writableFinished ? undefined : "client closed before the response ended"));
+      outbound.on("error", (error) => { if (!res.destroyed) { if (!res.headersSent) res.writeHead(502); res.end(); } finish(String(error)); });
+      // Log once, and release the upstream stream when the client no longer consumes it.
+      res.on("close", () => {
+        if (!res.writableFinished) outbound.destroy();
+        finish(res.writableFinished ? undefined : "client closed before the response ended");
+      });
       if (attempt.body) outbound.end(attempt.body);
       else { collect(); req.pipe(outbound); }
     }, (error) => {
-      res.writeHead(502, { "content-type": "text/plain" });
-      res.end(`codex-attachment-manager proxy: cannot reach ${upstream}`);
+      if (!res.destroyed) {
+        res.writeHead(502, { "content-type": "text/plain" });
+        res.end(`codex-attachment-manager proxy: cannot reach ${upstream}`);
+      }
       finish(String(error));
     }); };
     if (!rewrite && !claudeRewrite) { send([{ body: null, report: null, edited: false }]); return; }
