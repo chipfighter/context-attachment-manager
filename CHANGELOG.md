@@ -2,6 +2,21 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.7.1] - 2026-10-16
+
+Bug fixes for child tracking and interrupted HTTP requests.
+
+### Fixes
+
+- Codex composer prediction requests no longer appear as side chats in the task's panel. [#7](https://github.com/chipfighter/context-attachment-manager/pull/7), fixes [#3](https://github.com/chipfighter/context-attachment-manager/issues/3).
+- Tracking a subagent or side chat now retries after a temporary write failure, so a failed first write does not keep it out of the task's panel. [#9](https://github.com/chipfighter/context-attachment-manager/pull/9), fixes [#6](https://github.com/chipfighter/context-attachment-manager/issues/6).
+- Cancelling an HTTP request now closes its pending or active upstream connection. If an upstream response breaks partway through, the client is notified instead of being left waiting, so it can report or retry the failure. [#8](https://github.com/chipfighter/context-attachment-manager/pull/8), fixes [#4](https://github.com/chipfighter/context-attachment-manager/issues/4) and [#5](https://github.com/chipfighter/context-attachment-manager/issues/5).
+
+### Notes
+
+- Tested on Windows with GPT-6 Sol at low effort: automatic image selection, fetching images when needed, cancelling a response, and recovery after an interrupted upstream response. Codex retried the interrupted response successfully and continued the conversation.
+- CI checks unit tests, plugin installation and startup, and install/uninstall scripts on Windows, macOS and Linux. Claude Code was not live-tested for this patch.
+
 ## [0.7.0] - 2026-10-14
 
 Subagents and side chats in Codex follow Auto-select too.
