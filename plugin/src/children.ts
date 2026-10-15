@@ -36,7 +36,10 @@ export function recordChild(taskId: string, childId: string, child: Child, dir =
 
 // The task a request's thread belongs to as a side chat or as a subagent started without history, or null. A
 // subagent's first request can come before Codex writes its rollout; it is found at the next one.
-export function childOf(identity: { threadId: string | null; forkedFrom: string | null }, sessionsDir: string, at: string): { task: string; id: string; child: Child } | null {
+export function childOf(identity: { threadId: string | null; forkedFrom: string | null; turnTrigger?: string | null }, sessionsDir: string, at: string): { task: string; id: string; child: Child } | null {
+  // Codex also forks an ephemeral thread for its suggested next message. Keep rewriting those requests, but do not
+  // present an app-generated composer prediction as a side chat the user opened (HTTP and WebSocket share this path).
+  if (identity.turnTrigger === "composer_predictions") return null;
   const id = identity.threadId;
   if (!id) return null;
   const origin = sideChatOrigin(id, identity.forkedFrom, sessionsDir);
