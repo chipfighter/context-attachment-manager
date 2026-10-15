@@ -1,0 +1,34 @@
+# Let every contributor's existing PR CI run without a maintainer approving each new author.
+# Only this default-branch controller has Actions write access. PR tests remain in ci.yml.
+name: Allow PR CI
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [requested]
+permissions:
+  contents: read
+  actions: write
+  pull-requests: read
+cache-mode: none
+concurrency:
+  group: allow-pr-ci-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  approve:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.path == '.github/workflows/ci.yml' &&
+      github.event.workflow_run.status == 'completed' &&
+      github.event.workflow_run.conclusion == 'action_required'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # workflow_run executes the default branch; explicitly keep checkout there too.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Allow only the current PR revision's CI
+        run: node .github/scripts/approve-ci.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
