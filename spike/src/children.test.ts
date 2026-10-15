@@ -3,7 +3,7 @@
 // Input: synthetic rollouts and temporary folders; output: Node test assertions only.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -58,4 +58,17 @@ test("each child is recorded once under its task; later requests leave the recor
   // Only real thread ids name a file.
   assert.equal(recordChild("../escape", SIDE, { kind: "side", from: MAIN, at: "x" }, dir), false);
   assert.deepEqual(readChildren("../escape", dir), {});
+});
+
+// A transient write failure must not poison the engine's process-local deduplication cache.
+test("a child can be recorded again after its first write fails", () => {
+  const { root } = sessions();
+  const dir = join(root, "blocked-children");
+  const child = { kind: "side" as const, from: MAIN, at: "2026-10-15T10:00:00Z" };
+  writeFileSync(dir, "temporarily blocks mkdir");
+  assert.throws(() => recordChild(MAIN, SIDE, child, dir));
+  rmSync(dir);
+  assert.equal(recordChild(MAIN, SIDE, child, dir), true, "retry after recovery must persist the child");
+  assert.deepEqual(readChildren(MAIN, dir), { [SIDE]: child });
+  assert.equal(recordChild(MAIN, SIDE, child, dir), false, "successful writes are still deduplicated");
 });
