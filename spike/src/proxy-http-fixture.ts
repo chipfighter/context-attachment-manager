@@ -12,6 +12,7 @@ tls.connect = ((_options: unknown, callback: () => void) => net.connect(upstream
   const delay = Number(process.env.CAM_TEST_CONNECT_DELAY ?? 0);
   if (delay) setTimeout(callback, delay).unref(); else callback();
 })) as typeof tls.connect;
-const script = fileURLToPath(new URL("../../plugin/src/proxy.ts", import.meta.url));
+const scriptUrl = new URL("../../plugin/src/proxy.ts", import.meta.url);
+const script = fileURLToPath(scriptUrl);
 process.argv = [process.execPath, script, "--stay", "--port", process.env.CAM_TEST_PROXY_PORT!];
-await import(script);
+await import(scriptUrl.href);
