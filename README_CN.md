@@ -57,6 +57,7 @@
 
 - **Codex**：Codex 桌面版。在 Windows 上用 Codex 26.924 实测过。
 - **Claude 桌面版**：Code 标签页里的本地会话，用你的 Claude 订阅登录。在 Windows 上实测过，Claude 桌面版运行的是 Claude Code 2.1.295。
+- **其他 agent 应用**：暂时不做。省略图片要让引擎站在应用和模型 API 之间，只有允许改 API 地址的应用接得进来；而且每个应用组装请求、保存对话记录的方式都不一样，要逐个适配。
 - macOS、Linux：CI 会用 Codex 自己的命令行装上插件、启动插件，并跑一遍安装和卸载脚本；但还没有人在这两个平台的桌面版上实际用过。遇到问题欢迎[提 issue](https://github.com/chipfighter/context-attachment-manager/issues)。
 - Node：插件使用 Codex 自带的 Node 24；找不到时，才用 PATH 里 24 及以上版本的 `node`。Claude 桌面版不带 Node，没装 Codex 的话，请装 [Node 24 或更新版本](https://nodejs.org)。
 

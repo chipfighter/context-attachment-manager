@@ -57,6 +57,7 @@ So I wanted to keep the long conversation going and decide, turn by turn, which 
 
 - **Codex**: the Codex desktop app. Tested on Windows with Codex 26.924.
 - **Claude Desktop**: the Code tab, local sessions, signed in with your Claude subscription. Tested on Windows with the Claude Code 2.1.295 that Claude Desktop runs.
+- **Other agent apps**: not planned for now. Leaving images out needs the engine between the app and the model API, which only apps that let you change the API address allow, and each app builds its requests and stores its conversation records in its own way, so each would need its own support.
 - macOS and Linux: CI installs the plugin with Codex's own CLI, starts it, and runs the install and uninstall scripts, but nobody has tried it in the desktop apps on these platforms yet. [Issues](https://github.com/chipfighter/context-attachment-manager/issues) welcome.
 - Node: the plugin uses the Node 24 that ships with Codex, and falls back to `node` 24 or later on your PATH. Claude Desktop doesn't ship Node, so without Codex, install [Node 24 or later](https://nodejs.org).
 
