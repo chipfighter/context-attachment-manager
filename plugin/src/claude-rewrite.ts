@@ -97,7 +97,7 @@ export type ClaudeRewriteOptions = {
 
 export function rewriteMessages(
   messages: Json[],
-  index: Pick<ClaudeIndex, "uploads" | "byKey"> & Partial<Pick<ClaudeIndex, "notes">>,
+  index: Pick<ClaudeIndex, "uploads" | "byKey"> & Partial<Pick<ClaudeIndex, "notes" | "copies">>,
   leaveOut: Set<string>,
   pixelHash: (image: RequestImage) => string | null,
   options: ClaudeRewriteOptions = {},
@@ -114,7 +114,8 @@ export function rewriteMessages(
   const drop = refs.filter((ref) => ref.key !== null && !copies.has(ref.key) && leaveOut.has(ref.key) && describe(ref));
   const sent = refs.filter((ref) => !drop.includes(ref) && !copied.includes(ref));
   report.sentContentIds = sent.map((ref) => ref.contentId);
-  const unknown = refs.filter((ref) => !copied.includes(ref) && !describe(ref)).length;
+  // A copy the model fetched this turn is known as one, not as an image.
+  const unknown = refs.filter((ref) => !copied.includes(ref) && !(ref.key && index.copies?.has(ref.key)) && !describe(ref)).length;
   if (unknown) report.unknown = unknown;
   // v0.8: the first image the index knows; the feature line note follows its message.
   const first = features ? refs.find((ref) => describe(ref)) : undefined;

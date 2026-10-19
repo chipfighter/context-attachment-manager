@@ -316,7 +316,8 @@ export function rewriteItems(
   for (const ref of refs) if (unchecked.has(ref.key) && !ref.replaceable) report.locked.push(describe(ref)?.id ?? ref.key);
   const sent = refs.filter((ref) => !drop.includes(ref) && !copied.includes(ref));
   report.sentContentIds = sent.map((ref) => ref.contentId);
-  const unknown = refs.filter((ref) => !copied.includes(ref) && !describe(ref)).length;
+  // A copy the model fetched this turn is known as one (the line our fetch tool writes before it), not as an image.
+  const unknown = refs.filter((ref) => !copied.includes(ref) && !ref.fetchedId && !describe(ref)).length;
   if (unknown) report.unknown = unknown;
   // v0.8: the first image the index knows; the feature line note goes before its turn.
   const first = features ? refs.find((ref) => describe(ref)) : undefined;
