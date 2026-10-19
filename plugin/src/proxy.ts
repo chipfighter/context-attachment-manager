@@ -41,7 +41,7 @@ import { recordRequest } from "./request-stats.ts";
 import { rewriteItems, type Described } from "./rewrite.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./setup.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, selectionDir, sideChatSelection } from "./selection.ts";
-import { loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, type ThreadIndex } from "./thread-index.ts";
+import { loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -254,12 +254,11 @@ export function hasUnchecked(threadId: string | null, dir = selectionDir, sessio
 
 // Whether a thread's requests go through the rewrite (and so over HTTP): something unchecked, or automatic selection
 // used at some point (v0.3), since from then on the history may hold copies the model fetched, left out of later turns.
-// v0.7: a side chat's, unless its task's switch for subagents and side chats is off.
+// v0.7: a side chat's, always (v0.8: the switch for subagents and side chats is gone).
 export function needsRewrite(threadId: string | null, dir = selectionDir, sessionsDir = join(codexHome(), "sessions"), forkedFrom: string | null = null): boolean {
   if (!threadId) return false;
   try {
-    const origin = sideChatOrigin(threadId, forkedFrom, sessionsDir);
-    if (origin) return sideChatSelection(origin, sessionsDir, dir) !== null;
+    if (sideChatOrigin(threadId, forkedFrom, sessionsDir)) return true;
     const selection = effectiveSelection(threadId, sessionsDir, dir);
     return Object.keys(selection.unchecked).length > 0 || !!selection.autoSince;
   } catch { return false; }
@@ -281,7 +280,6 @@ export function currentTurnOf(index: ThreadIndex, turnId: string | null): number
 export function rewriteBody(original: Buffer, encoding: string | undefined, threadId: string, sessionsDir: string, dir = selectionDir, turnId: string | null = null, forkedFrom: string | null = null): { body: Buffer; report: Json } {
   const origin = sideChatOrigin(threadId, forkedFrom, sessionsDir);
   const side = origin ? sideChatSelection(origin, sessionsDir, dir) : null;
-  if (origin && !side) return { body: original, report: { sideChatOf: origin, off: true } };
   const decoded = decodeBody(original, encoding);
   if (!decoded) return { body: original, report: { skipped: "undecodable body" } };
   const text = decoded.toString("utf8");
@@ -294,7 +292,9 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
   const selection = side ?? effectiveSelection(threadId, sessionsDir, dir);
   const describe = (ref: ImageRef): Described | undefined => {
     const known = index.byKey.get(ref.key);
-    if (known) return known;
+    // v0.8: with what the model noted about it, for its placeholder.
+    const notes = known ? index.notes.get(known.id) : undefined;
+    if (known) return notes ? { ...known, notes } : known;
     const stored = selection.unchecked[ref.key];
     return stored ? { id: stored.id, name: ref.name, label: ref.label, kind: ref.kind, turn: null, width: ref.width, height: ref.height } : undefined;
   };
@@ -306,7 +306,9 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
     const pinned = selection.pinned ?? {};
     leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key]).map((image) => image.key));
   }
-  const { items, report } = rewriteItems(json.input, describe, leaveOut, pixels, { lang: currentLang(), copies, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  // v0.8: feature lines in a task's own requests, not a side chat's or a subagent's.
+  const features = !origin && writesNotes(sessionsDir, threadId);
+  const { items, report } = rewriteItems(json.input, describe, leaveOut, pixels, { lang: currentLang(), copies, features, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
   const summary: Json = {
     images: report.images,
     replaced: report.replaced.map(({ key: _key, ...rest }) => rest),
@@ -315,8 +317,10 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
     ...(selection.auto ? { auto: true } : {}),
     ...(report.copies.length ? { copies: report.copies } : {}),
     ...(origin ? { sideChatOf: origin } : {}),
+    ...(report.featureAt !== undefined ? { featureAt: report.featureAt, labeled: report.labeled ?? 0 } : {}),
+    ...(report.unknown ? { unknown: report.unknown } : {}),
   };
-  if (!report.replaced.length && !report.copies.length) return { body: original, report: summary };
+  if (!report.replaced.length && !report.copies.length && report.featureAt === undefined) return { body: original, report: summary };
   json.input = items;
   const next = Buffer.from(JSON.stringify(json), "utf8");
   const body = encodeBody(next, encoding);
@@ -325,7 +329,8 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
 
 // v0.4: a Claude Code session's requests are rewritten once something is unchecked there, or automatic selection was
 // used (copies the model fetched may be in its history from then on). v0.5: or once it was compacted with images
-// before the compaction, which the user may keep sending.
+// before the compaction, which the user may keep sending. v0.8: or once it has any image, for the feature line note
+// and the ids (Claude Code sends the whole history every time, so this costs no upload; docs/v0.8/plan.md).
 export function claudeNeedsRewrite(sessionId: string | null, dir = claudeSelectionDirOf(), home = claudeHome()): boolean {
   if (!sessionId) return false;
   let index: ClaudeIndex | null = null;
@@ -334,7 +339,7 @@ export function claudeNeedsRewrite(sessionId: string | null, dir = claudeSelecti
     const selection = claudeSelection(sessionId, dir, index ? claudeStartedAt(index) : null);
     if (Object.keys(selection.unchecked).length > 0 || selection.autoSince) return true;
   } catch { /* the transcript still decides */ }
-  return !!index?.images.some((image) => image.compacted);
+  return !!index?.images.length;
 }
 
 // The images a Claude Code request carried, by index key, with the base64 characters each took (the panel's
@@ -385,14 +390,19 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   // v0.5: after a compaction, the images from before it go back right after the summary (claude-rewrite.ts): the ones
   // the user keeps sending (checked, or pinned with automatic selection) read from the transcript, the others as
   // placeholders. With any of those, the full note follows the summary, and later messages get only their short notes.
-  const compactedImages = index.images.filter((image) => image.compacted);
+  // v0.8: each with what the model noted about it, for its placeholder.
+  const compactedImages = index.images.filter((image) => image.compacted).map((image) => {
+    const notes = index.notes.get(image.id);
+    return notes ? { ...image, notes } : image;
+  });
   const summaryIn = index.summary && compactedImages.length ? summaryAt(json.messages, index.summary) : null;
   const resend: Resend[] = summaryIn === null ? [] : compactedImages.filter((image) => !leaveOut.has(image.key)).flatMap((image) => {
     const data = claudeImageData(index, image);
     return data && image.mime ? [{ image, block: { type: "image", source: { type: "base64", media_type: image.mime, data } } }] : [];
   });
   const compactedOut = summaryIn !== null && resend.length < compactedImages.length;
-  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, noted: compactedOut, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  // v0.8: feature lines in every main conversation (a subagent's requests do not come here).
+  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, noted: compactedOut, features: true, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
   const report = rewrote.report;
   let messages = rewrote.messages;
   let compacted: Json | null = null;
@@ -403,6 +413,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
       // The note's place: after the summary when it holds placeholders; a later one moves down with a message added.
       if (compactedOut) report.noteAt = added.at + 1;
       else if (added.inserted && report.noteAt !== undefined && report.noteAt > added.at) report.noteAt += 1;
+      if (added.inserted && report.featureAt !== undefined && report.featureAt > added.at) report.featureAt += 1;
       compacted = { at: added.at, listed: compactedImages.length, resent: resend.map(({ image }) => image.id) };
     }
   }
@@ -416,8 +427,10 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
     ...(selection.auto ? { auto: true } : {}),
     ...(report.copies.length ? { copies: report.copies } : {}),
     ...(compacted ? { compacted } : {}),
+    ...(report.featureAt !== undefined ? { featureAt: report.featureAt, labeled: report.labeled ?? 0 } : {}),
+    ...(report.unknown ? { unknown: report.unknown } : {}),
   };
-  const changed = report.replaced.length > 0 || report.copies.length > 0 || compacted !== null;
+  const changed = report.replaced.length > 0 || report.copies.length > 0 || compacted !== null || report.featureAt !== undefined;
   // Once the engine has sent the session a changed history, thinking made after it may be in every later request, even
   // with nothing left out now (an image checked again).
   if (!changed && !thinking?.edited) return { body: original, report: summary, attempts: [] };
@@ -823,6 +836,9 @@ async function main(): Promise<void> {
     const started = Date.now();
     const path = (req.url ?? "/").split("?")[0];
     const identity = requestIdentity(req.headers);
+    // Node takes its own 'error' listener off an upgraded socket. Without one, a client resetting the connection (Codex
+    // can, right after a 426) throws and stops the engine (2026-10-19: four probe engines at once).
+    client.on("error", () => {});
     // A retired engine takes no new WebSocket; Codex opens it again, on the new engine.
     if (retiredAt !== null) {
       client.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
@@ -837,6 +853,8 @@ async function main(): Promise<void> {
     let down = 0;
     let upstreamStatus: string | null = null;
     connectUpstream(via).then((socket) => {
+      // The client went away while the upstream connected: its close has passed, nothing would close this one.
+      if (client.destroyed) { socket.destroy(); return; }
       const connection: Live = { client, socket, last: Date.now(), closedForSelection: false, activeWhileUnchecked: false, path, identity };
       sockets.add(connection);
       if (identity.threadId) {

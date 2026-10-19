@@ -91,6 +91,9 @@ async function main(): Promise<void> {
     const threadId: string = thread.id;
     result.threadId = threadId;
     await server.request("thread/name/set", { threadId, name: words.name(label) });
+    // Manual mode on purpose, from the first turn: from v0.6 a new task has automatic selection on by default, which
+    // would leave the uploads out of the describe turn already (v0.8 release run, 2026-10-19).
+    writeSelection({ threadId, unchecked: {}, auto: false }, selectionDirOf(data));
     const turn = async (name: string, prompt: string, images: string[] = []) => {
       result.turns[name] = await runTurn(server, threadId, [text(prompt), ...images.map((file) => ({ type: "localImage", path: join(work, file) }))]);
     };
@@ -100,7 +103,6 @@ async function main(): Promise<void> {
     const index = loadThreadIndex(join(codexHome(), "sessions"), threadId);
     const a = index.images.find((image) => image.name === "a.png")!;
     result.aId = a.id;
-    // Manual mode on purpose: from v0.6 a new task has automatic selection on by default.
     writeSelection({ threadId, unchecked: { [a.key]: { id: a.id, at: new Date().toISOString() } }, auto: false }, selectionDirOf(data));
     await sleep(2500);
     await turn("canYouSee", words.canYouSee);
@@ -130,7 +132,8 @@ async function main(): Promise<void> {
     lastRequestReplacedA: JSON.stringify(result.lastRequest?.replaced?.map((r: Json) => `${r.id}:${r.mode}`)) === JSON.stringify([`${result.aId}:plain`]),
     recheckRequestSentA: JSON.stringify(result.recheckRequest?.replaced?.map((r: Json) => `${r.id}:${r.mode}`)) === JSON.stringify([`${result.bId}:plain`]),
     recheckAnswersFromImage: words.corners.test(reply("recheck")) && !words.cannotSee.test(reply("recheck")),
-    noErrors: Object.values(result.turns as Record<string, Json>).every((t) => t.status === "completed" && !t.errors.length),
+    // A retried reconnect is Codex moving the task to HTTP (the engine declines its WebSocket), not a failure.
+    noErrors: Object.values(result.turns as Record<string, Json>).every((t) => t.status === "completed" && !t.errors.some((error: Json) => !error.willRetry)),
   };
   writeFileSync(join(root, `placeholder-${label}.json`), JSON.stringify(result, null, 2));
   console.log(JSON.stringify({ threadId: result.threadId, model: `${TEST_MODEL} ${TEST_EFFORT}`, checks: result.checks, replies: Object.fromEntries(Object.entries(result.turns as Record<string, Json>).map(([name, t]) => [name, t.reply])) }, null, 2));

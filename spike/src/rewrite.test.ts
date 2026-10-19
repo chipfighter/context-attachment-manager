@@ -56,7 +56,7 @@ test("an unchecked upload becomes one plain placeholder in place of Codex's tag,
   const parts = texts(out[2]);
   // The text, IMG-001's placeholder, then IMG-002 and IMG-003, each with its label (a later test) and Codex's 3 parts.
   assert.equal(parts.length, 1 + 1 + 4 + 4);
-  assert.match(parts[1], /^\[图片 IMG-001（\[Image #1\]） 已省略｜a\.png｜用户上传｜第 1 轮｜4×4\]\n原图被用户省略以节省上下文，情况见前面的“上下文管理说明”/);
+  assert.match(parts[1], /^\[图片 IMG-001（\[Image #1\]） 已省略｜a\.png｜用户上传｜第 1 轮｜4×4\]\n需要重看时，在回复里写“需要 IMG-001”。$/);
   assert.match(parts[1], /需要 IMG-001/);
   assert.doesNotMatch(parts[1], /C:\\work/, "no local path in the placeholder");
   assert.match(texts(out[5])[1], /^\[图片 IMG-004 已省略｜a\.png｜工具查看的图片｜第 1 轮｜4×4\]\n.*需要 IMG-004/s);
@@ -177,7 +177,7 @@ test("a PDF comment screenshot is replaced like an upload, and Codex's caption b
   assert.deepEqual(texts(out.find((item) => item.id === "msg_1")!), [
     "PDF path: C:\\docs\\report.pdf\nPDF page: 3/12\n",
     caption,
-    "[图片 IMG-001 已省略｜未命名｜用户上传｜第 1 轮｜4×4]\n原图被用户省略以节省上下文，情况见前面的“上下文管理说明”；需要重新看这张图时，在回复里写出“需要 IMG-001”。",
+    "[图片 IMG-001 已省略｜未命名｜用户上传｜第 1 轮｜4×4]\n需要重看时，在回复里写“需要 IMG-001”。",
   ]);
 });
 
@@ -223,7 +223,7 @@ test("automatic selection: earlier turns become placeholders in its own wording,
   assert.equal(report.noteAt, 1);
   const parts = texts(out[2]);
   assert.equal(parts[1], autoPlaceholder({ id: "IMG-001", name: "a.png", label: "[Image #1]", kind: "upload", turn: 1, width: 4, height: 4 }));
-  assert.match(parts[1], /^\[图片 IMG-001（\[Image #1\]） 已省略｜a\.png｜用户上传｜第 1 轮｜4×4\]\n.*自动选图.*调用 cam_view_image 工具，传入“IMG-001”/s);
+  assert.match(parts[1], /^\[图片 IMG-001（\[Image #1\]） 已省略｜a\.png｜用户上传｜第 1 轮｜4×4\]\n需要原图时调用 cam_view_image，传入“IMG-001”。$/);
   // The copy fetched this turn is sent, yet IMG-001's placeholder does not point to it: it stays as it was before the fetch.
   assert.deepEqual(modes(report), [["IMG-001", "plain", null], ["IMG-002", "plain", null], ["IMG-003", "plain", null]]);
   assert.equal(out[4], input[3], "this turn's new image goes as it is, without a label");

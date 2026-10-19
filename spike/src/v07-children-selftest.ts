@@ -1,7 +1,7 @@
 // Purpose: v0.7 — subagents and side chats end to end (docs/v0.7/plan.md §5). A side chat's requests leave out the
 // images of the task it came from, and the model there fetches one from that task when the answer needs it; a subagent
-// started without history has the images of its earlier turns left out and fetches one back; with the task's switch for
-// them off, their requests go out as they are; the task's panel lists them.
+// started without history has the images of its earlier turns left out and fetches one back; the task's panel lists
+// them. v0.8: the task's switch for them is gone, and with it thread O (the same with the switch off).
 // Set up like v03-auto-selftest.ts: a test engine of this checkout (its own port and data folder), this checkout's
 // plugin server attached to the test app-server for cam_view_image, Codex's multi_agent_v2 on (spawn_agent's
 // fork_turns), the tools that act on the machine off, a read-only sandbox, and the tasks archived at the end (their
@@ -9,8 +9,8 @@
 // fork), with a short instruction like the one Codex gives it.
 // Thread S: a side chat asks a text question, then about a detail of an image. Thread C: a subagent views an image in
 // its first turn and is asked about a detail of it in its second, which the main task gives it with followup_task
-// (Codex takes no input for a multi_agent_v2 subagent from the app-server). Thread O: the same with the switch off.
-// Input: [--label name] [--lang zh|en] [--port 17898] [--threads S,C,O]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
+// (Codex takes no input for a multi_agent_v2 subagent from the app-server).
+// Input: [--label name] [--lang zh|en] [--port 17898] [--threads S,C]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
 // Output: local/v07/children-<label>.json (synthetic images only).
 
 import { spawn } from "node:child_process";
@@ -23,9 +23,8 @@ import { codexHome } from "../../plugin/src/codexconfig.ts";
 import { engineHealth } from "../../plugin/src/engine.ts";
 import { languageFileOf, rememberLang, type Lang } from "../../plugin/src/language.ts";
 import { loadPanelState } from "../../plugin/src/panel-state.ts";
-import { requestStatsDirOf, selectionDirOf } from "../../plugin/src/paths.ts";
+import { requestStatsDirOf } from "../../plugin/src/paths.ts";
 import { readRequestStats } from "../../plugin/src/request-stats.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
 import { loadThreadIndex, threadsStartedSince } from "../../plugin/src/thread-index.ts";
 import { archiveThreads, CORNER_IMAGES, runTurn, says, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 
@@ -60,7 +59,7 @@ async function main(): Promise<void> {
   const label = option("--label", "run1");
   const lang: Lang = option("--lang", "zh") === "en" ? "en" : "zh";
   const port = Number(option("--port", "17898"));
-  const only = option("--threads", "S,C,O").split(",");
+  const only = option("--threads", "S,C").split(",");
   const words = SCRIPT[lang];
   const root = join(localRoot, "v07");
   const data = join(root, `data-${label}`);
@@ -136,24 +135,11 @@ async function main(): Promise<void> {
         turns.childSecond = lastOf(child);
         return { threadId: id, child, turns, childImages: loadThreadIndex(sessionsDir, child).images.map((image) => image.id), fetches: fetches().filter((entry) => entry.threadId === child) };
       },
-      O: async () => {
-        const id = await start("O");
-        const turns: Json = { upload: await turn(id, words.uploadTwo, ["a.png", "c.png"]) };
-        // As the panel's switch does.
-        writeSelection({ threadId: id, unchecked: {}, childrenAuto: false }, selectionDirOf(data));
-        await sleep(2500);
-        const side = await sideChat(id);
-        turns.sideText = await turn(side, words.sideText);
-        turns.spawn = await turn(id, words.spawn(join(work, "a.png")));
-        const [child] = subagentsOf(id);
-        if (child) turns.followup = await turn(id, words.followup);
-        return { threadId: id, side, child: child ?? null, turns, childLast: child ? lastOf(child) : null };
-      },
     };
     for (const name of only) if (threads[name]) result.threads[name] = await threads[name]();
     // What each task's panel lists (as the panel would read it).
     for (const thread of Object.values(result.threads) as Json[]) {
-      thread.panel = loadPanelState(thread.threadId, { sessionsDir, dataRoot: data }).children.map((child) => ({ kind: child.kind, name: child.name, auto: child.auto, images: child.images, replaced: child.last?.replaced ?? null }));
+      thread.panel = loadPanelState(thread.threadId, { sessionsDir, dataRoot: data }).children.map((child) => ({ kind: child.kind, name: child.name, images: child.images, replaced: child.last?.replaced ?? null }));
     }
   } finally {
     result.notArchived = await archiveThreads(server, created);
@@ -163,7 +149,6 @@ async function main(): Promise<void> {
 
   const S = result.threads.S ?? null;
   const C = result.threads.C ?? null;
-  const O = result.threads.O ?? null;
   const fetched = (thread: Json | null, id: string) => (thread?.fetches ?? []).some((entry: Json) => (entry.found ?? []).includes(id));
   result.checks = {
     ...(S ? {
@@ -172,19 +157,14 @@ async function main(): Promise<void> {
       sideTextNoFetch: !S.turns.sideText.tools.some((tool: string) => tool.startsWith("mcpToolCall")),
       sideFetches: fetched(S, "IMG-001") && (S.fetches ?? []).every((entry: Json) => entry.from === S.threadId),
       sideAnswers: says(S.turns.sideDetail.reply, 7),
-      sideListed: S.panel.some((child: Json) => child.kind === "side" && child.auto),
+      sideListed: S.panel.some((child: Json) => child.kind === "side"),
     } : {}),
     ...(C ? {
       childAuto: C.turns.childSecond?.rewrite?.auto === true,
       childLeavesOut: (C.childImages ?? []).length > 0 && !!C.turns.childSecond?.rewrite?.replaced?.includes(C.childImages[0]),
       childFetches: fetched(C, C.childImages?.[0] ?? "IMG-001"),
       childAnswers: says(C.turns.followup?.reply ?? "", 7),
-      childListed: C.panel.some((child: Json) => child.kind === "subagent" && child.auto),
-    } : {}),
-    ...(O ? {
-      offSideAsIs: !O.turns.sideText.last.rewrite?.replaced?.length && !O.turns.sideText.last.rewrite?.auto,
-      offChildAsIs: !!O.childLast && (O.childLast.images ?? 1) > 0 && !O.childLast.rewrite?.replaced?.length && !O.childLast.rewrite?.auto,
-      offListed: O.panel.length > 0 && O.panel.every((child: Json) => !child.auto),
+      childListed: C.panel.some((child: Json) => child.kind === "subagent"),
     } : {}),
   };
   mkdirSync(root, { recursive: true });

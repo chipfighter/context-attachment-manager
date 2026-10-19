@@ -2,6 +2,41 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.8.0] - 2026-10-20
+
+The model keeps notes on your images, and the panel finds them by what you remember.
+
+### Features
+
+- The model notes what each new image shows: the scene first, then what can be seen, such as "rainy blue night | close-up, facing the camera, neon reflections". When you rate an image ("the first one is too dark", even turns later), it notes your words under that image. It writes these notes at the start of its reply as Markdown link definitions, which Codex and Claude Desktop don't display, and doesn't mention them in its answer.
+- Placeholders carry the notes, with the latest three ratings and the turns they came from, so after a compaction, or many turns later, the model can still tell the images apart. In the case that started this release, a face close-up the user had called the best and a half-length shot from the start of the task, the model picked the close-up after the task was compacted, without fetching.
+- New images carry their ID from the turn they appear in, so the model can match your words to the right image at once. The placeholder's second line is shorter, to make room for the notes.
+- The panel is redone as one screen:
+  - A card at the top with the next request's estimated size, the savings and what the next message sends. *Show details* adds the last request, the images the model fetched in the latest turn, and what subagents and side chats saved.
+  - A search box that finds images by what they show, by scene, or by what you or the model said in that turn, and filters for uploads, generated images and each scene.
+  - Thumbnails grouped by turn, newest first, with small marks. Images that won't be sent are gray, and the box at the end of a turn's line covers the whole turn.
+  - Click a thumbnail to preview it across the panel, with a *Send every turn* checkbox (Auto-select) or a *Send* checkbox (manual). Click outside the image or press Esc to go back.
+  - An ID in the *Model needs* bar or among the fetched images scrolls to that image and flashes it, clearing a search or filter that hides it.
+
+### Changes
+
+- Subagents and side chats in Codex always follow Auto-select. The *Auto-select too* switch is gone; where it was off in 0.7, it is on again.
+- The search and filters replace the source filter of 0.2. Pinned images are now called *Send every turn*.
+- In Claude Code, requests are rewritten as soon as a session has images, to add the note for the model and the IDs, not only once you uncheck one. On Claude accounts created on or after August 31, 2026, this leaves out the earlier thinking of the turn in which the first image came in, once.
+- In Codex, a task with Auto-select off is left alone until you uncheck an image, as before: its requests go out as they are, over WebSocket, and the model keeps no notes there until then.
+
+### Fixes
+
+- The engine no longer exits when Codex resets a WebSocket connection the engine has declined, which Codex does when the engine moves a task to HTTP. In 0.7.1 the engine process exited then, and requests failed until it was started again.
+
+### Notes
+
+- Tested on Windows with the app-server of Codex 0.163 (the one Codex desktop 26.1013 ships) and GPT-6 Sol, Luna and Astra at low effort, in Chinese and English. New images got a note, ratings were noted on the right image, and the replies didn't mention them. After `thread/compact/start`, all four images of the user's case were placeholders with notes; asked which one to use as a face reference, all six runs chose the close-up rated the best, without fetching.
+- The release self-tests (placeholders, `need IMG-xxx`, Auto-select, subagents and side chats, and the new notes test) passed with GPT-6 Sol and Astra in both languages. GPT-6 Luna failed five of its ten runs: it misread a fetched corner digit (5 as 3), as in 0.3 and 0.6; once asked for images to be attached instead of fetching them; once said it couldn't see an unchecked image without asking for it by ID; once missed a rating; and once its subagent didn't fetch the image of its first turn. Since the model often notes small details in the upload turn, the Auto-select test now also accepts an answer taken from the model's own notes.
+- In Claude Desktop with Claude Code 2.1.299 and Claude Haiku 5.5, in Chinese and English, the notes were written at the start of replies and stayed hidden, and ratings were noted on the right image. Those ratings were relayed from another session, worded as the user's own. Ratings typed in the session itself, whether a note shows for a moment while a reply streams in, and the notes after `/compact` are not tested yet.
+- GPT-6 Luna at low effort sometimes missed a rating, more often in English, and twice gave no visible reply in a turn where the user only rated images. Claude Haiku 5.5 in English opened its reply to a rating with "Noted:".
+- Claude Desktop shows a link definition that ends the latest reply, which is why the notes go at the start. A place that shows the raw reply may show them; Claude Code in a terminal is not checked yet.
+
 ## [0.7.1] - 2026-10-16
 
 Bug fixes for child tracking and interrupted HTTP requests.
