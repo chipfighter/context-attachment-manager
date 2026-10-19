@@ -9,8 +9,9 @@
 // — thinking blocks included — is passed on unchanged.
 // Matching to the index (claude-index.ts): an image inside a tool result by its tool_use_id; pasted images by
 // content, a request message to the transcript record(s) holding the same images in the same order.
-// v0.8: the feature line note follows the message holding the first image (a system message, as the other notes), and
-// every image sent gets its id, also the ones new in this turn; placeholders carry what the model noted.
+// v0.8: the feature line note follows the user's own message of the turn holding the first image (a system message, as
+// the other notes, but never right after a tool result), and every image sent gets its id, also the ones new in this
+// turn; placeholders carry what the model noted.
 // Input: the request's messages, the session's index, the keys to leave out. Output: new messages plus a report.
 
 import type { ClaudeIndex, ClaudeImage } from "./claude-index.ts";
@@ -190,13 +191,29 @@ export function rewriteMessages(
     noteAfter(next, msg, `${msg === holding[0] && !noted ? `${claudeNote(lang, auto !== undefined)}\n` : ""}${hereNote(plainBy.get(msg)!, lang, auto !== undefined)}`);
   }
   if (holding.length && !noted) report.noteAt = holding[0] + 1;
-  // v0.8: after the message holding the first image, at or before the others; joined with a note already there.
+  // v0.8: after the user's own message of the turn holding the first image, at or before the others; joined with a
+  // note already there.
   if (first) {
-    const added = noteAfter(next, first.msg, featureNote(lang));
-    report.featureAt = first.msg + 1;
-    if (added && report.noteAt !== undefined && report.noteAt > first.msg) report.noteAt += 1;
+    const at = promptOf(messages, first.msg);
+    const added = noteAfter(next, at, featureNote(lang));
+    report.featureAt = at + 1;
+    if (added && report.noteAt !== undefined && report.noteAt > at) report.noteAt += 1;
   }
   return { messages: next, report };
+}
+
+// The user's own message of the turn holding message `msg` (its prompt, or the summary after a compaction). Sonnet 5.5
+// and Haiku 5.5 may take a system message right after a tool result for part of it and ignore it (Anthropic's page on
+// mid-conversation system messages; desktop test 2026-10-19: Haiku called the feature line note something the Read
+// tool returned, did not follow it and told the user). Without such a message right before an assistant's, `msg`.
+const holdsToolResult = (message: Json) => Array.isArray(message?.content) && message.content.some((block: Json) => block?.type === "tool_result");
+function promptOf(messages: Json[], msg: number): number {
+  for (let at = msg; at >= 0; at--) {
+    const message = messages[at];
+    if (message?.role !== "user" || holdsToolResult(message)) continue;
+    return messages[at + 1]?.role === "user" ? msg : at;
+  }
+  return msg;
 }
 
 // A note goes right after a user message, the only place Anthropic allows a system message; when Claude Code put a

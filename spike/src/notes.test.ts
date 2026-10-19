@@ -154,6 +154,29 @@ test("Claude: the feature line note follows the message holding the first image,
   assert.deepEqual([some.report.featureAt, some.report.noteAt], [1, 4]);
 });
 
+// 2026-10-19: right after a tool result, Haiku 5.5 took the note for part of what the tool returned and refused it.
+test("Claude: when the first image came from a tool, the feature line note follows the user's message of that turn", () => {
+  const t = transcript();
+  t.prompt("Read a.png");
+  t.assistant({ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "C:\\work\\a.png" } });
+  t.toolResult("toolu_1", [image(pngA)]);
+  const index = buildClaudeIndex("s", t.records);
+  const messages = [
+    { role: "user", content: [text("Read a.png")] },
+    { role: "system", content: "SessionStart hook additional context" },
+    { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "C:\\work\\a.png" } }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: [image(pngA)] }] },
+  ];
+  const out = rewriteMessages(messages, index, new Set(), () => null, { features: true });
+  assert.deepEqual(out.messages.map((message) => message.role), ["user", "system", "assistant", "user"]);
+  assert.deepEqual(out.messages[1].content.map((block: Record<string, any>) => block.text), [featureNote("zh"), "SessionStart hook additional context"]);
+  assert.match(out.messages[3].content[0].content[0].text, /^\[图片 IMG-001 已提供｜a\.png｜工具查看的图片｜第 1 轮｜8×8\]$/);
+  assert.deepEqual([out.report.featureAt, out.report.labeled], [1, 1]);
+  // No message of the user's before it (a request cut short): after the image's own message, as before.
+  const bare = rewriteMessages(messages.slice(2), index, new Set(), () => null, { features: true });
+  assert.deepEqual([bare.messages.map((message) => message.role), bare.report.featureAt], [["assistant", "user", "system"], 2]);
+});
+
 test("a subagent's model writes no feature lines; the user's own task does, also before its rollout's first line", () => {
   const sessions = mkdtempSync(join(tmpdir(), "cam-notes-sessions-"));
   const day = join(sessions, "2026", "10", "19");
