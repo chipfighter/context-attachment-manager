@@ -10,6 +10,7 @@ Context Attachment Manager（上下文素材管理器，2026-10-11 前叫 Codex 
 - [docs/v0.5/plan.md](docs/v0.5/plan.md)：v0.5 方案，Claude Code 压缩后保留图片（已发布 0.5.0）。
 - [docs/v0.6/plan.md](docs/v0.6/plan.md)：v0.6 方案，默认开启自动选图、Claude 桌面版自动打开面板（已发布 0.6.0）。
 - [docs/v0.7/plan.md](docs/v0.7/plan.md)：v0.7 方案，Codex 的子代理和旁聊也自动选图（已发布 0.7.0）。
+- [docs/v0.8/plan.md](docs/v0.8/plan.md)：v0.8 方案，模型给每张图写特征行、压缩后照样拿对图，面板改成搜索加缩略图（待确认）。
 - [docs/history/v0.1/](docs/history/v0.1/)：v0.1 的开发记录（原方案、任务记录、各阶段报告、最初的构想），只作参考，不作依据。
 - [CHANGELOG.md](CHANGELOG.md)：每个版本的更新记录，发布时就是 Release 说明。
 
