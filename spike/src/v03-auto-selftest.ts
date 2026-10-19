@@ -10,6 +10,9 @@
 // leave out. Drafts of the wording were tried the same way before it was built, with the rewrite done by a stand-in.
 // v0.6 — thread D sets no switch: a new task has automatic selection on by default. Its question needs two images the
 // model has not fetched before, at once (user 2026-10-13: does it fetch every image it needs?).
+// v0.8 — the model now notes each new image in a feature line, often with the corner digit ("右下黑色7"), and the
+// placeholder carries it: in threads B and C, answering from that note without fetching counts as right too (release
+// run, 2026-10-19). Thread D's upload keeps the corners out of the description, so its notes leave them out.
 // Input: [--label name] [--lang zh|en] [--port 17897] [--threads A,B,C,D]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
 // Output: local/v03/auto-<label>.json (synthetic images only).
 
@@ -128,6 +131,8 @@ async function main(): Promise<void> {
       const rewrite = readRequestStats(threadId, requestStatsDirOf(data))?.lastHttp?.rewrite ?? null;
       return { ...done, fetched, lastRewrite: rewrite && { auto: rewrite.auto ?? false, replaced: (rewrite.replaced ?? []).map((r: Json) => `${r.id}:${r.mode}`), copies: rewrite.copies ?? [] } };
     };
+    // v0.8: the feature line the model wrote for each image, by id.
+    const notesOf = (threadId: string) => Object.fromEntries([...loadThreadIndex(sessionsDir, threadId).notes].map(([image, notes]) => [image, notes.line]));
     const threads: Record<string, () => Promise<Json>> = {
       A: async () => {
         const id = await start("A");
@@ -143,14 +148,14 @@ async function main(): Promise<void> {
         turns.describe = await turn(id, words.describe);
         await switchOn(id);
         for (const name of ["recall", "detail", "byLook", "textOnly", "sum"] as const) turns[name] = await turn(id, words[name]);
-        return { threadId: id, turns, images: loadThreadIndex(sessionsDir, id).images.map((image) => image.id) };
+        return { threadId: id, turns, images: loadThreadIndex(sessionsDir, id).images.map((image) => image.id), notes: notesOf(id) };
       },
       C: async () => {
         const id = await start("C");
         const turns: Json = { upload: await turn(id, words.uploadOne, ["c.png"]) };
         await switchOn(id);
         turns.corner = await turn(id, words.corner);
-        return { threadId: id, turns };
+        return { threadId: id, turns, notes: notesOf(id) };
       },
       // v0.6: no switch set; described while the images are still this turn's.
       D: async () => {
@@ -173,6 +178,13 @@ async function main(): Promise<void> {
   const D = result.threads.D?.turns ?? {};
   const reply = (t: Json) => String(t?.reply ?? "");
   const ran = (name: string) => !!result.threads[name];
+  // v0.8: the digit is in the image's feature line (a numeral, or the English word).
+  const WORDS: Record<number, string> = { 3: "three", 5: "five", 7: "seven" };
+  const noted = (thread: string, id: string, n: number) => {
+    const line = String(result.threads[thread]?.notes?.[id] ?? "");
+    return new RegExp(`(^|[^0-9])${n}([^0-9]|$)`).test(line) || new RegExp(`\\b${WORDS[n]}\\b`, "i").test(line);
+  };
+  const fetchedOrNoted = (thread: string, t: Json, id: string, n: number) => !!t?.fetched.includes(id) || noted(thread, id, n);
   result.checks = {
     ...(ran("A") ? {
       A_explicitFetchesImg001: A.explicit.fetched.includes("IMG-001"),
@@ -185,16 +197,16 @@ async function main(): Promise<void> {
     ...(ran("B") ? {
       B_earlierTurnsLeftOut: !!B.recall.lastRewrite?.auto && ["IMG-001", "IMG-002", "IMG-003"].every((id) => B.recall.lastRewrite.replaced.includes(`${id}:plain`)),
       B_recallNoFetch: B.recall.fetched.length === 0 && words.recallWords.every((word) => word.test(reply(B.recall))),
-      B_detailFetchesImg001: B.detail.fetched.includes("IMG-001"),
+      B_detailFetchesOrNotedImg001: fetchedOrNoted("B", B.detail, "IMG-001", 7),
       B_detailAnswers7: says(reply(B.detail), 7),
-      B_byLookFetchesImg003: B.byLook.fetched.includes("IMG-003"),
+      B_byLookFetchesOrNotedImg003: fetchedOrNoted("B", B.byLook, "IMG-003", 5),
       B_byLookAnswers5: says(reply(B.byLook), 5),
       B_textOnlyNoFetch: B.textOnly.fetched.length === 0,
-      B_sumFetchesImg002: B.sum.fetched.includes("IMG-002"),
+      B_sumFetchesOrNotedImg002: fetchedOrNoted("B", B.sum, "IMG-002", 3),
       B_sumAnswers10: says(reply(B.sum), 10),
     } : {}),
     ...(ran("C") ? {
-      C_cornerFetchesImg001: C.corner.fetched.includes("IMG-001"),
+      C_cornerFetchesOrNotedImg001: fetchedOrNoted("C", C.corner, "IMG-001", 5),
       C_cornerAnswers5: says(reply(C.corner), 5),
     } : {}),
     ...(ran("D") ? {
@@ -202,10 +214,16 @@ async function main(): Promise<void> {
       D_pairFetchesBoth: ["IMG-001", "IMG-003"].every((id) => D.pair.fetched.includes(id)),
       D_pairAnswers12: says(reply(D.pair), 12),
     } : {}),
-    noErrors: [...Object.values(A), ...Object.values(B), ...Object.values(C), ...Object.values(D)].every((t: Json) => t.status === "completed" && !t.errors.length),
+    // A retried reconnect is Codex moving the task to HTTP (the engine declines its WebSocket), not a failure.
+    noErrors: [...Object.values(A), ...Object.values(B), ...Object.values(C), ...Object.values(D)].every((t: Json) => t.status === "completed" && !t.errors.some((error: Json) => !error.willRetry)),
   };
   // Fetching an image it already answered about is not wrong, only slower.
-  result.notes = { refetched: [A.again?.fetched.length ? "A.again" : null, B.sum?.fetched.includes("IMG-001") ? "B.sum" : null].filter(Boolean) };
+  result.notes = {
+    refetched: [A.again?.fetched.length ? "A.again" : null, B.sum?.fetched.includes("IMG-001") ? "B.sum" : null].filter(Boolean),
+    // v0.8: answered from the feature line, without fetching.
+    fromNotes: ([["B.detail", B.detail, "IMG-001"], ["B.byLook", B.byLook, "IMG-003"], ["B.sum", B.sum, "IMG-002"], ["C.corner", C.corner, "IMG-001"]] as Array<[string, Json, string]>)
+      .filter(([, t, id]) => t && !t.fetched.includes(id)).map(([name]) => name),
+  };
   writeFileSync(join(root, `auto-${label}.json`), JSON.stringify(result, null, 2));
   const brief = (t: Json) => ({ fetched: t.fetched, reply: t.reply });
   console.log(JSON.stringify({
