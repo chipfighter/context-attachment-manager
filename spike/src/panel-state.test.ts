@@ -243,27 +243,21 @@ test("a fork whose earlier history is gone lists the images left and says part o
 });
 
 // v0.7: the task's subagents and side chats, from the engine's record of them and their own requests.
-test("the task's panel lists its subagents and side chats with their last request, and the switch for them", () => {
+test("the task's panel lists its subagents and side chats with their last request", () => {
   const options = sampleSessions();
   const CHILD = "01a0d307-0000-7000-8000-0000000000e1";
   const SIDE = "01a0d307-0000-7000-8000-0000000000e2";
-  assert.deepEqual([loadPanelState(THREAD, options).childrenAuto, loadPanelState(THREAD, options).children], [true, []]);
+  assert.deepEqual(loadPanelState(THREAD, options).children, []);
   // A subagent has a rollout naming its parent, started now (today's folder); a side chat has none.
   startThread(options.sessionsDir, CHILD, { parent_thread_id: THREAD, source: { subagent: { thread_spawn: { parent_thread_id: THREAD, depth: 1, agent_path: "/root/reviewer", agent_nickname: "Franklin" } } }, thread_source: "subagent" });
   const children = childrenDirOf(options.dataRoot);
   recordChild(THREAD, SIDE, { kind: "side", from: THREAD, at: "2026-09-24T10:06:00Z" }, children);
   recordChild(THREAD, CHILD, { kind: "subagent", from: THREAD, at: "2026-09-24T10:05:00Z" }, children);
   recordRequest(SIDE, { at: "2026-09-24T10:07:00Z", transport: "http", images: 3, decodedBytes: 9000, rewrite: { images: 3, replaced: [{ id: "IMG-001" }, { id: "IMG-002" }, { id: "IMG-003" }], decodedAfter: 1000, auto: true, sideChatOf: THREAD } }, requestStatsDirOf(options.dataRoot));
-  let state = loadPanelState(THREAD, options);
-  assert.equal(state.childrenAuto, true);
+  const state = loadPanelState(THREAD, options);
   // Oldest first; the subagent has sent nothing through the engine yet.
-  assert.deepEqual(state.children.map((child) => [child.threadId, child.kind, child.name, child.startedAt, child.auto, child.images, child.last?.replaced ?? null, child.last?.bytesAfter ?? null]), [
-    [CHILD, "subagent", "Franklin", "2026-09-24T10:05:00Z", true, null, null, null],
-    [SIDE, "side", null, "2026-09-24T10:06:00Z", true, 3, 3, 1000],
+  assert.deepEqual(state.children.map((child) => [child.threadId, child.kind, child.name, child.startedAt, child.images, child.last?.replaced ?? null, child.last?.bytesAfter ?? null]), [
+    [CHILD, "subagent", "Franklin", "2026-09-24T10:05:00Z", null, null, null],
+    [SIDE, "side", null, "2026-09-24T10:06:00Z", 3, 3, 1000],
   ]);
-  // Switched off in the panel: neither is managed; the task's own switch and checks stay as they were.
-  state = applySelection(THREAD, { childrenAuto: false }, options);
-  assert.deepEqual([state.childrenAuto, state.children.map((child) => child.auto)], [false, [false, false]]);
-  assert.deepEqual(readSelection(THREAD, join(options.dataRoot, "selection")), { threadId: THREAD, unchecked: {}, childrenAuto: false });
-  assert.deepEqual(applySelection(THREAD, { childrenAuto: true }, options).children.map((child) => child.auto), [true, true]);
 });

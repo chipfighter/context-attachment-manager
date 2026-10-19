@@ -164,9 +164,9 @@ test("v0.7: a subagent started without history belongs to the task at the top of
   for (const other of [FORKED_CHILD, MAIN, REVIEW, "01a0d307-0000-7000-8000-0000000000af"]) assert.equal(mainTaskOf(sessionsDir, other), null, other);
 });
 
-test("v0.7: a subagent follows its task's switch for subagents and side chats, on unless the user turned it off", () => {
+test("v0.7: a subagent has automatic selection, whatever its task's own switch says", () => {
   const { sessionsDir, dir } = family();
-  // No default for the task itself here (no auto-default.json): the subagents' switch is on regardless.
+  // No default for the task itself here (no auto-default.json): its subagents have it regardless.
   const child = effectiveSelection(CHILD, sessionsDir, dir);
   assert.deepEqual([child.auto, child.autoSince], [true, "2026-09-24T10:05:00Z"], "from the subagent's start");
   assert.equal(needsRewrite(CHILD, dir, sessionsDir), true);
@@ -174,25 +174,25 @@ test("v0.7: a subagent follows its task's switch for subagents and side chats, o
   // The task's own switch is a different one.
   writeSelection({ threadId: MAIN, unchecked: {}, auto: false, autoAt: "2026-09-24T10:01:00Z", autoSince: "2026-09-24T10:00:30Z" }, dir);
   assert.equal(effectiveSelection(CHILD, sessionsDir, dir).auto, true);
-  // Turned off: nothing is managed, so the requests go out as they are.
-  writeSelection({ threadId: MAIN, unchecked: {}, childrenAuto: false }, dir);
-  assert.equal(effectiveSelection(CHILD, sessionsDir, dir).auto, false);
-  assert.equal(effectiveSelection(GRANDCHILD, sessionsDir, dir).auto, false);
-  assert.equal(needsRewrite(CHILD, dir, sessionsDir), false);
+  // v0.8: the switch v0.7 had for them is gone; one it turned off stays without effect.
+  writeSelection({ threadId: MAIN, unchecked: {}, childrenAuto: false } as Parameters<typeof writeSelection>[0], dir);
+  assert.equal(effectiveSelection(CHILD, sessionsDir, dir).auto, true);
+  assert.equal(effectiveSelection(GRANDCHILD, sessionsDir, dir).auto, true);
+  assert.equal(needsRewrite(CHILD, dir, sessionsDir), true);
   // A switch of the subagent's own wins.
   writeSelection({ threadId: CHILD, unchecked: {}, auto: true, autoAt: "2026-09-24T10:10:00Z", autoSince: "2026-09-24T10:10:00Z" }, dir);
   assert.equal(effectiveSelection(CHILD, sessionsDir, dir).auto, true);
 });
 
-test("v0.7: a side chat uses the selection of the task it came from, keeping what is pinned there; none with the switch off", () => {
+test("v0.7: a side chat uses the selection of the task it came from, keeping what is pinned there", () => {
   const { sessionsDir, dir } = family();
   const pinned = { "msg_9#0": { id: "IMG-009", at: "2026-09-24T10:02:00Z" } };
   writeSelection({ threadId: MAIN, unchecked: {}, auto: true, autoAt: "2026-09-24T10:01:00Z", autoSince: "2026-09-24T10:01:00Z", pinned }, dir);
   const side = sideChatSelection(MAIN, sessionsDir, dir);
-  assert.deepEqual([side?.threadId, side?.auto, side?.pinned], [MAIN, true, pinned]);
-  // Forked from a subagent: its images, its task's switch.
-  assert.deepEqual([sideChatSelection(CHILD, sessionsDir, dir)?.threadId, sideChatSelection(CHILD, sessionsDir, dir)?.auto], [CHILD, true]);
-  writeSelection({ threadId: MAIN, unchecked: {}, auto: true, autoAt: "2026-09-24T10:01:00Z", autoSince: "2026-09-24T10:01:00Z", pinned, childrenAuto: false }, dir);
-  assert.equal(sideChatSelection(MAIN, sessionsDir, dir), null);
-  assert.equal(sideChatSelection(CHILD, sessionsDir, dir), null);
+  assert.deepEqual([side.threadId, side.auto, side.pinned], [MAIN, true, pinned]);
+  // Forked from a subagent: its images.
+  assert.deepEqual([sideChatSelection(CHILD, sessionsDir, dir).threadId, sideChatSelection(CHILD, sessionsDir, dir).auto], [CHILD, true]);
+  // v0.8: a switch v0.7 turned off changes nothing.
+  writeSelection({ threadId: MAIN, unchecked: {}, auto: true, autoAt: "2026-09-24T10:01:00Z", autoSince: "2026-09-24T10:01:00Z", pinned, childrenAuto: false } as Parameters<typeof writeSelection>[0], dir);
+  assert.deepEqual([sideChatSelection(MAIN, sessionsDir, dir).auto, sideChatSelection(CHILD, sessionsDir, dir).auto], [true, true]);
 });

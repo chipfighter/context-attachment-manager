@@ -93,7 +93,7 @@ test("the model fetches originals by id only where automatic selection is on (v0
 });
 
 // v0.7: Codex keeps a side chat in memory only; the model's calls there name the task it was forked from.
-test("in a side chat the model fetches the originals of the task it came from, unless the user turned that off", () => {
+test("in a side chat the model fetches the originals of the task it came from", () => {
   const { sessionsDir, dataRoot } = sampleSessions();
   process.env.CAM_DATA_DIR = dataRoot;
   try {
@@ -104,13 +104,9 @@ test("in a side chat the model fetches the originals of the task it came from, u
     assert.equal(on.isError, false);
     assert.equal(on.content[0].text, "[图片 IMG-001 取回的原图｜a.png｜用户上传｜第 1 轮｜64×32]");
     assert.equal(Buffer.from(on.content[1].data, "base64").equals(red), true);
-    assert.equal(callTool("cam_panel", {}, panelMeta, sessionsDir).structuredContent.childrenAuto, true);
-    // Only the user switches it, in the task's panel.
-    assert.throws(() => callTool("cam_set_selection", { childrenAuto: false }, modelMeta, sessionsDir), /只有用户能勾选或取消/);
-    assert.equal(callTool("cam_set_selection", { childrenAuto: false }, panelMeta, sessionsDir).structuredContent.childrenAuto, false);
-    const off = callTool("cam_view_image", { ids: ["IMG-001"] }, sideMeta, sessionsDir);
-    assert.equal(off.isError, true);
-    assert.match(off.content[0].text, /没有开自动选图/);
+    // v0.8: no switch for side chats any more; one v0.7 turned off changes nothing.
+    writeSelection({ threadId: THREAD, unchecked: {}, childrenAuto: false } as Parameters<typeof writeSelection>[0], join(dataRoot, "selection"));
+    assert.equal(callTool("cam_view_image", { ids: ["IMG-001"] }, sideMeta, sessionsDir).isError, false);
   } finally {
     delete process.env.CAM_DATA_DIR;
   }

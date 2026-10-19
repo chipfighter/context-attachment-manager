@@ -13,7 +13,9 @@ import { findImages, type ImageRef } from "../../plugin/src/images.ts";
 import { addNotes, sceneOf, type Notes } from "../../plugin/src/notes.ts";
 import { autoPlaceholder, clip, featureNote, plainPlaceholder, rewriteItems, type Described } from "../../plugin/src/rewrite.ts";
 import { buildIndex, writesNotes, type Parsed } from "../../plugin/src/thread-index.ts";
+import { claudeTurnTexts, loadPanelState, panelStateOf } from "../../plugin/src/panel-state.ts";
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
+import { assistant, line, sampleSessions, THREAD, turn } from "./testfixtures.ts";
 import { png } from "./testkit.ts";
 
 const notesOf = (text: string, turn: number | null = 1) => {
@@ -192,4 +194,37 @@ test("a subagent's model writes no feature lines; the user's own task does, also
   assert.equal(writesNotes(sessions, sub), false);
   assert.equal(writesNotes(sessions, forkedSub), false);
   assert.equal(writesNotes(sessions, "01a15100-0000-7000-8000-000000000009"), true, "no rollout yet");
+});
+
+// The panel searches and groups by these and never shows them (docs/v0.8/plan.md).
+test("the panel's data: each image's scene and noted words, and per turn what was said, without the record lines", () => {
+  const long = "很长的一段话".repeat(60);
+  const options = sampleSessions(
+    turn("t3") +
+    line("response_item", { type: "message", role: "user", content: [{ type: "input_text", text: "<environment_context>…</environment_context>" }, { type: "input_text", text: "第一张太暗了" }], internal_chat_message_metadata_passthrough: { turn_id: "t3" } }) +
+    line("response_item", { type: "function_call", name: "imagegen", arguments: "{\"prompt\":\"深蓝雨夜 近景\"}", call_id: "c1" }) +
+    assistant(`[//]: # (cam IMG-001 深蓝雨夜｜近景，正脸)\n[//]: # (cam IMG-002 评价：太暗)\n\n明白。${long}`, "t3"),
+  );
+  const state = loadPanelState(THREAD, options);
+  assert.deepEqual(state.images.map((image) => [image.id, image.scene, image.search]), [
+    ["IMG-001", "深蓝雨夜", "深蓝雨夜｜近景，正脸"],
+    ["IMG-002", null, "太暗"],
+    ["IMG-003", null, ""],
+  ]);
+  // Turn 1's own message holds only the images' tags; what the client adds is left out.
+  assert.deepEqual([state.turnTexts["1"], state.turnTexts["2"]], ["收到", "需要 IMG-001。IMG-003 与 IMG-002 相同。"]);
+  assert.match(state.turnTexts["3"], /^第一张太暗了 \{"prompt":"深蓝雨夜 近景"\} 明白。很长的一段话/);
+  assert.ok(!state.turnTexts["3"].includes("[//]") && !state.turnTexts["3"].includes("environment_context"));
+  assert.ok(state.turnTexts["3"].length <= 600, "cut short");
+
+  const t = transcript();
+  t.prompt([image(pngA), text("看这张")]);
+  t.assistant({ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "C:\\work\\b.png" } });
+  t.assistant(text("[//]: # (cam IMG-001 white room | wide shot)\n\nA white room."));
+  t.prompt("<system-reminder>x</system-reminder>", { isMeta: true });
+  t.prompt("Too bright");
+  const index = buildClaudeIndex("s", t.records);
+  assert.deepEqual(claudeTurnTexts(index.chain), { "1": "看这张 {\"file_path\":\"C:\\\\work\\\\b.png\"} A white room.", "2": "Too bright" });
+  const claude = panelStateOf("s", index, new Set(), null, null, true, [], true, claudeTurnTexts(index.chain));
+  assert.deepEqual([claude.images[0].scene, claude.images[0].search], ["white room", "white room | wide shot"]);
 });

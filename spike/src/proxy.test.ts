@@ -455,10 +455,10 @@ test("a side chat's request is rewritten with the images of the task it came fro
   writeSelection({ threadId, unchecked: {}, auto: true, autoAt: "2026-10-06T10:00:00Z", autoSince: "2026-10-06T10:00:00Z", pinned }, selections);
   const kept = zlib.zstdDecompressSync(rewriteBody(original, "zstd", SIDE, sessions, selections, "side-turn", threadId).body).toString("utf8");
   assert.ok(!kept.includes(red.slice(30)) && kept.includes(blue.slice(30)));
-  // Turned off in the task's panel.
-  writeSelection({ threadId, unchecked: {}, auto: true, autoAt: "2026-10-06T10:00:00Z", autoSince: "2026-10-06T10:00:00Z", pinned, childrenAuto: false }, selections);
-  assert.equal(needsRewrite(SIDE, selections, sessions, threadId), false);
-  assert.equal(rewriteBody(original, "zstd", SIDE, sessions, selections, "side-turn", threadId).body, original);
+  // v0.8: a switch v0.7 turned off in the task's panel changes nothing.
+  writeSelection({ threadId, unchecked: {}, auto: true, autoAt: "2026-10-06T10:00:00Z", autoSince: "2026-10-06T10:00:00Z", pinned, childrenAuto: false } as Parameters<typeof writeSelection>[0], selections);
+  assert.equal(needsRewrite(SIDE, selections, sessions, threadId), true);
+  assert.notEqual(rewriteBody(original, "zstd", SIDE, sessions, selections, "side-turn", threadId).body, original);
   // A thread with a rollout of its own is no side chat, whatever its requests say (a fork the user made).
   assert.equal(needsRewrite(threadId, selections, sessions, "01a0d307-0000-7000-8000-0000000000b9"), true);
 });

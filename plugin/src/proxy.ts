@@ -254,12 +254,11 @@ export function hasUnchecked(threadId: string | null, dir = selectionDir, sessio
 
 // Whether a thread's requests go through the rewrite (and so over HTTP): something unchecked, or automatic selection
 // used at some point (v0.3), since from then on the history may hold copies the model fetched, left out of later turns.
-// v0.7: a side chat's, unless its task's switch for subagents and side chats is off.
+// v0.7: a side chat's, always (v0.8: the switch for subagents and side chats is gone).
 export function needsRewrite(threadId: string | null, dir = selectionDir, sessionsDir = join(codexHome(), "sessions"), forkedFrom: string | null = null): boolean {
   if (!threadId) return false;
   try {
-    const origin = sideChatOrigin(threadId, forkedFrom, sessionsDir);
-    if (origin) return sideChatSelection(origin, sessionsDir, dir) !== null;
+    if (sideChatOrigin(threadId, forkedFrom, sessionsDir)) return true;
     const selection = effectiveSelection(threadId, sessionsDir, dir);
     return Object.keys(selection.unchecked).length > 0 || !!selection.autoSince;
   } catch { return false; }
@@ -281,7 +280,6 @@ export function currentTurnOf(index: ThreadIndex, turnId: string | null): number
 export function rewriteBody(original: Buffer, encoding: string | undefined, threadId: string, sessionsDir: string, dir = selectionDir, turnId: string | null = null, forkedFrom: string | null = null): { body: Buffer; report: Json } {
   const origin = sideChatOrigin(threadId, forkedFrom, sessionsDir);
   const side = origin ? sideChatSelection(origin, sessionsDir, dir) : null;
-  if (origin && !side) return { body: original, report: { sideChatOf: origin, off: true } };
   const decoded = decodeBody(original, encoding);
   if (!decoded) return { body: original, report: { skipped: "undecodable body" } };
   const text = decoded.toString("utf8");

@@ -1,4 +1,4 @@
-// Purpose: v0.8 — the record lines the model writes at the end of a reply (docs/v0.8/plan.md): a feature line for each
+// Purpose: v0.8 — the record lines the model writes at the start of a reply (docs/v0.8/plan.md): a feature line for each
 // image new in that turn, or a rating the user gave an image, each as a Markdown link definition, which neither Codex
 // Desktop nor Claude Desktop shows (gate 1, 2026-10-19): `[//]: # (cam IMG-015 深蓝雨夜｜近景，正脸)`,
 // `[//]: # (cam IMG-003 评价：太暗)`; in English `… (cam IMG-003 rated: too dark)`.
@@ -25,6 +25,9 @@ export function addNotes(notes: Map<string, Notes>, text: string, turn: number |
     notes.set(id, entry);
   }
 }
+
+// A reply as the user reads it: without its record lines.
+export const withoutRecords = (text: string): string => text.replace(RECORD, "").trim();
 
 // The scene: the feature line's first part, before "｜" (or " | " in English).
 export function sceneOf(line: string | null): string | null {
