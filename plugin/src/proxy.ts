@@ -41,7 +41,7 @@ import { recordRequest } from "./request-stats.ts";
 import { rewriteItems, type Described } from "./rewrite.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./setup.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, selectionDir, sideChatSelection } from "./selection.ts";
-import { loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, type ThreadIndex } from "./thread-index.ts";
+import { loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -294,7 +294,9 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
   const selection = side ?? effectiveSelection(threadId, sessionsDir, dir);
   const describe = (ref: ImageRef): Described | undefined => {
     const known = index.byKey.get(ref.key);
-    if (known) return known;
+    // v0.8: with what the model noted about it, for its placeholder.
+    const notes = known ? index.notes.get(known.id) : undefined;
+    if (known) return notes ? { ...known, notes } : known;
     const stored = selection.unchecked[ref.key];
     return stored ? { id: stored.id, name: ref.name, label: ref.label, kind: ref.kind, turn: null, width: ref.width, height: ref.height } : undefined;
   };
@@ -306,7 +308,9 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
     const pinned = selection.pinned ?? {};
     leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key]).map((image) => image.key));
   }
-  const { items, report } = rewriteItems(json.input, describe, leaveOut, pixels, { lang: currentLang(), copies, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  // v0.8: feature lines in a task's own requests, not a side chat's or a subagent's.
+  const features = !origin && writesNotes(sessionsDir, threadId);
+  const { items, report } = rewriteItems(json.input, describe, leaveOut, pixels, { lang: currentLang(), copies, features, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
   const summary: Json = {
     images: report.images,
     replaced: report.replaced.map(({ key: _key, ...rest }) => rest),
@@ -315,8 +319,10 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
     ...(selection.auto ? { auto: true } : {}),
     ...(report.copies.length ? { copies: report.copies } : {}),
     ...(origin ? { sideChatOf: origin } : {}),
+    ...(report.featureAt !== undefined ? { featureAt: report.featureAt, labeled: report.labeled ?? 0 } : {}),
+    ...(report.unknown ? { unknown: report.unknown } : {}),
   };
-  if (!report.replaced.length && !report.copies.length) return { body: original, report: summary };
+  if (!report.replaced.length && !report.copies.length && report.featureAt === undefined) return { body: original, report: summary };
   json.input = items;
   const next = Buffer.from(JSON.stringify(json), "utf8");
   const body = encodeBody(next, encoding);
@@ -325,7 +331,8 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
 
 // v0.4: a Claude Code session's requests are rewritten once something is unchecked there, or automatic selection was
 // used (copies the model fetched may be in its history from then on). v0.5: or once it was compacted with images
-// before the compaction, which the user may keep sending.
+// before the compaction, which the user may keep sending. v0.8: or once it has any image, for the feature line note
+// and the ids (Claude Code sends the whole history every time, so this costs no upload; docs/v0.8/plan.md).
 export function claudeNeedsRewrite(sessionId: string | null, dir = claudeSelectionDirOf(), home = claudeHome()): boolean {
   if (!sessionId) return false;
   let index: ClaudeIndex | null = null;
@@ -334,7 +341,7 @@ export function claudeNeedsRewrite(sessionId: string | null, dir = claudeSelecti
     const selection = claudeSelection(sessionId, dir, index ? claudeStartedAt(index) : null);
     if (Object.keys(selection.unchecked).length > 0 || selection.autoSince) return true;
   } catch { /* the transcript still decides */ }
-  return !!index?.images.some((image) => image.compacted);
+  return !!index?.images.length;
 }
 
 // The images a Claude Code request carried, by index key, with the base64 characters each took (the panel's
@@ -385,14 +392,19 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   // v0.5: after a compaction, the images from before it go back right after the summary (claude-rewrite.ts): the ones
   // the user keeps sending (checked, or pinned with automatic selection) read from the transcript, the others as
   // placeholders. With any of those, the full note follows the summary, and later messages get only their short notes.
-  const compactedImages = index.images.filter((image) => image.compacted);
+  // v0.8: each with what the model noted about it, for its placeholder.
+  const compactedImages = index.images.filter((image) => image.compacted).map((image) => {
+    const notes = index.notes.get(image.id);
+    return notes ? { ...image, notes } : image;
+  });
   const summaryIn = index.summary && compactedImages.length ? summaryAt(json.messages, index.summary) : null;
   const resend: Resend[] = summaryIn === null ? [] : compactedImages.filter((image) => !leaveOut.has(image.key)).flatMap((image) => {
     const data = claudeImageData(index, image);
     return data && image.mime ? [{ image, block: { type: "image", source: { type: "base64", media_type: image.mime, data } } }] : [];
   });
   const compactedOut = summaryIn !== null && resend.length < compactedImages.length;
-  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, noted: compactedOut, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  // v0.8: feature lines in every main conversation (a subagent's requests do not come here).
+  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, noted: compactedOut, features: true, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
   const report = rewrote.report;
   let messages = rewrote.messages;
   let compacted: Json | null = null;
@@ -403,6 +415,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
       // The note's place: after the summary when it holds placeholders; a later one moves down with a message added.
       if (compactedOut) report.noteAt = added.at + 1;
       else if (added.inserted && report.noteAt !== undefined && report.noteAt > added.at) report.noteAt += 1;
+      if (added.inserted && report.featureAt !== undefined && report.featureAt > added.at) report.featureAt += 1;
       compacted = { at: added.at, listed: compactedImages.length, resent: resend.map(({ image }) => image.id) };
     }
   }
@@ -416,8 +429,10 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
     ...(selection.auto ? { auto: true } : {}),
     ...(report.copies.length ? { copies: report.copies } : {}),
     ...(compacted ? { compacted } : {}),
+    ...(report.featureAt !== undefined ? { featureAt: report.featureAt, labeled: report.labeled ?? 0 } : {}),
+    ...(report.unknown ? { unknown: report.unknown } : {}),
   };
-  const changed = report.replaced.length > 0 || report.copies.length > 0 || compacted !== null;
+  const changed = report.replaced.length > 0 || report.copies.length > 0 || compacted !== null || report.featureAt !== undefined;
   // Once the engine has sent the session a changed history, thinking made after it may be in every later request, even
   // with nothing left out now (an image checked again).
   if (!changed && !thinking?.edited) return { body: original, report: summary, attempts: [] };

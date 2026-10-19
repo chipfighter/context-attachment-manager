@@ -111,7 +111,8 @@ test("v0.6: a session started after the default began has automatic selection on
   assert.equal(get(`/__cam/claude/panel?session=${session}`, fresh).body.auto, false);
   const old = started("2026-10-12T23:00:00Z");
   assert.equal(get(`/__cam/claude/panel?session=${session}`, old).body.auto, false);
-  assert.equal(claudeNeedsRewrite(session, claudeSelectionDirOf(old.dataRoot), old.home), false);
+  // v0.8: still rewritten, as every session with images is (the feature line note), though nothing is left out.
+  assert.equal(claudeNeedsRewrite(session, claudeSelectionDirOf(old.dataRoot), old.home), true);
 });
 
 test("the panel page and API answer only requests naming the engine by a loopback name, from no other site", () => {

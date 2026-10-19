@@ -129,7 +129,8 @@ test("rewriteBody swaps the unchecked image for a placeholder and re-encodes the
 test("rewriteBody forwards the original bytes when nothing applies or the body is not safe to re-serialize", () => {
   const { threadId, sessions, selections, body } = fixture();
   writeSelection({ threadId, unchecked: { "msg_other#0": { id: "IMG-009", at: "2026-09-24T10:00:00Z" } } }, selections);
-  const original = body();
+  // v0.8: a request with images gets the feature line note (next test), so nothing applies to one without any.
+  const original = zlib.zstdCompressSync(Buffer.from('{"model":"m","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}],"stream":true}'));
   assert.equal(rewriteBody(original, "zstd", threadId, sessions, selections).body, original);
   writeSelection({ threadId, unchecked: { "msg_1#0": { id: "IMG-001", at: "2026-09-24T10:00:00Z" } } }, selections);
   const risky = body(',"big":12345678901234567');
@@ -151,11 +152,17 @@ test("with automatic selection, rewriteBody leaves out earlier turns' images tha
   const text = zlib.zstdDecompressSync(out).toString("utf8");
   assert.ok(!text.includes(red.slice(30)), "turn 1's IMG-001 is left out");
   assert.ok(text.includes(blue.slice(30)), "the pinned IMG-002 is still sent");
-  assert.match(text, /\[图片 IMG-001（\[Image #1\]） 已省略｜a\.png｜用户上传｜第 1 轮｜64×64\]\\n之前各轮的图片默认省略/);
+  assert.match(text, /\[图片 IMG-001（\[Image #1\]） 已省略｜a\.png｜用户上传｜第 1 轮｜64×64\]\\n需要原图时调用 cam_view_image/);
   assert.match(text, /\[图片 IMG-002（\[Image #2\]） 已提供｜b\.png/);
   assert.match(text, /上下文管理说明（来自用户安装的上下文素材管理工具）：这个任务开着“自动选图”/);
   assert.deepEqual([report.auto, report.replaced.map((r: Record<string, unknown>) => [r.id, r.mode])], [true, [["IMG-001", "plain"]]]);
-  assert.equal(rewriteBody(original, "zstd", threadId, sessions, selections, "t1").body, original, "turn 1's own requests send its images");
+  // Turn 1's own requests send its images, each with its id now (v0.8), under the feature line note.
+  const own = rewriteBody(original, "zstd", threadId, sessions, selections, "t1");
+  const ownText = zlib.zstdDecompressSync(own.body).toString("utf8");
+  assert.ok(ownText.includes(red.slice(30)) && ownText.includes(blue.slice(30)), "turn 1's own requests send its images");
+  assert.deepEqual([own.report.replaced, own.report.featureAt, own.report.labeled], [[], 0, 2]);
+  assert.match(ownText, /特征行说明（来自用户安装的上下文素材管理工具）/);
+  assert.match(ownText, /\[图片 IMG-001（\[Image #1\]） 已提供｜a\.png/);
 });
 
 // v0.4: Claude Code through the same engine.
@@ -212,7 +219,7 @@ test("the panel's last request is the session's conversation, not Claude Desktop
   assert.equal(claudeConversationRequest(describeBody("/backend-api/codex/responses", { input: [] })), false);
 });
 
-test("a Claude Code request is rewritten from the session's transcript and selection; nothing to do keeps the bytes", async () => {
+test("a Claude Code request is rewritten from the session's transcript and selection, with images also with nothing unchecked", async () => {
   const { usualSession, usualRequest } = await import("./claude-fixtures.ts");
   const { claudeNeedsRewrite, rewriteClaudeBody, claudeImageSizes } = await import("../../plugin/src/proxy.ts");
   const { buildClaudeIndex } = await import("../../plugin/src/claude-index.ts");
@@ -223,8 +230,12 @@ test("a Claude Code request is rewritten from the session's transcript and selec
   mkdirSync(join(home, "projects", "D--work"), { recursive: true });
   writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
   const body = Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", thinking: { type: "adaptive" }, messages: usualRequest() }));
-  assert.equal(claudeNeedsRewrite(session, dir), false);
-  assert.equal(rewriteClaudeBody(body, undefined, session, dir, home, {}).body, body);
+  // v0.8: a session with images is rewritten with nothing unchecked too: the feature line note follows the first
+  // image's message, and every image says its id.
+  assert.equal(claudeNeedsRewrite(session, dir, home), true);
+  const plain = rewriteClaudeBody(body, undefined, session, dir, home, {});
+  assert.deepEqual([plain.report.replaced, plain.report.featureAt, plain.report.labeled], [[], 1, 4]);
+  assert.equal(JSON.parse(plain.body.toString("utf8")).messages[1].role, "system");
   writeSelection({ threadId: session, unchecked: { [`${p1}#1`]: { id: "IMG-002", at: "2026-10-10T00:00:00Z" } } }, dir);
   assert.equal(claudeNeedsRewrite(session, dir), true);
   const out = rewriteClaudeBody(body, undefined, session, dir, home, {});
@@ -278,20 +289,24 @@ test("an account that refuses thinking after an edited history gets the rewrite 
   assert.deepEqual(steps(strict), [[null, null, { kept: 0, left: 1 }], [null, "thinking-signature", null]]);
   const went = strict.attempts[0];
   recordSent(record, went.history!, went.sent!, went.made);
-  // The next request carries thinking made after that; with the image checked again it no longer fits, while the
-  // thinking made before the edit fits again. Should the record be wrong, the request goes without any thinking.
+  // The next request carries thinking made after that; with the image checked again it no longer fits. v0.8: neither
+  // does the thinking made before the edit, which v0.7 put back: with the feature line note and the ids the history
+  // never goes back to how Claude Code built it (in a session that had them from its first image, that thinking was
+  // made after them, and fits). Should the record be wrong, the request goes as built.
   const next = [...usualRequest(), { role: "assistant", content: [{ type: "thinking", thinking: "", signature: "sig-9" }, text("Blue.")] }, { role: "user", content: [text("More?")] }];
   writeSelection({ threadId: session, unchecked: {} }, dir);
   const again = rewriteClaudeBody(request(next), undefined, session, dir, home, {}, record);
-  assert.deepEqual(steps(again), [[null, null, { kept: 1, left: 1 }], ["thinking-signature", null, { kept: 0, left: 2 }], [null, null, null]]);
-  assert.deepEqual(again.attempts.map((attempt: any) => attempt.sure), [true, false, false]);
+  assert.deepEqual(steps(again), [[null, null, { kept: 0, left: 2 }], [null, "thinking-signature", null]]);
+  assert.deepEqual(again.attempts.map((attempt: any) => attempt.sure), [true, false]);
   const sent = JSON.parse(again.attempts[0].body.toString("utf8")).messages;
-  assert.deepEqual(sent[1].content.map((block: any) => block.type), ["thinking", "text"]);
-  assert.deepEqual(sent[9].content.map((block: any) => block.type), ["text"]);
-  // An account not known to check: the request as Claude Code built it first.
+  assert.match(sent[1].content, /^特征行说明/);
+  assert.deepEqual(sent[2].content.map((block: any) => block.type), ["text"]);
+  assert.deepEqual(sent[10].content.map((block: any) => block.type), ["text"]);
+  // An account not known to check: the rewrite with all its thinking first, the request as built last.
   const lenient = rewriteClaudeBody(request(next), undefined, session, dir, home, {}, { ...record, strict: false });
-  assert.deepEqual(steps(lenient), [[null, null, null], ["thinking-signature", null, { kept: 1, left: 1 }], ["thinking-signature", null, { kept: 0, left: 2 }]]);
-  assert.equal(lenient.attempts[0].body.equals(request(next)), true);
+  assert.deepEqual(steps(lenient), [[null, null, null], ["thinking-signature", null, { kept: 0, left: 2 }], [null, "thinking-signature", null]]);
+  assert.equal(lenient.attempts[0].body.equals(request(next)), false);
+  assert.equal(lenient.attempts.at(-1)!.body.equals(request(next)), true);
   // Another image unchecked: nothing made so far fits.
   writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-10T00:00:00Z" } } }, dir);
   const other = rewriteClaudeBody(request(next), undefined, session, dir, home, {}, record);
@@ -325,8 +340,8 @@ test("v0.5: after a compaction, the images from before it go back after the summ
   mkdirSync(join(home, "projects", "D--work"), { recursive: true });
   const file = join(home, "projects", "D--work", `${session}.jsonl`);
   writeFileSync(file, t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
-  // Before the compaction, with nothing unchecked: nothing to look at.
-  assert.equal(claudeNeedsRewrite(session, dir, home), false);
+  // Before the compaction, with nothing unchecked: rewritten only for the feature line note and the ids (v0.8).
+  assert.equal(claudeNeedsRewrite(session, dir, home), true);
   t.boundary();
   t.summary();
   const p3 = t.prompt([image(pngB), text("And now?")]);
@@ -361,7 +376,9 @@ test("v0.5: after a compaction, the images from before it go back after the summ
   const both = sent(rewriteClaudeBody(request, undefined, session, dir, home, {}));
   assert.deepEqual(both.map((message: any) => message.role), ["user", "system", "assistant", "user", "system"]);
   assert.deepEqual(partsOf(both[3]), ["omitted:IMG-003", "And now?"]);
-  assert.match(both[4].content, /^上下文管理说明：上面这条消息里的 IMG-003/);
+  // v0.8: IMG-003 is also the request's own first image, so the feature line note joins its short note, first.
+  assert.deepEqual(both[4].content.map((block: any) => block.text.slice(0, 5)), ["特征行说明", "上下文管理"]);
+  assert.match(both[4].content[1].text, /^上下文管理说明：上面这条消息里的 IMG-003/);
   // Automatic selection: only the pinned ones go out again; the others are placeholders in its words.
   writeSelection({ threadId: session, unchecked: {}, auto: true, autoSince: "2026-10-12T00:00:00Z", pinned: { "tool:toolu_1#0": { id: "IMG-002", at: "2026-10-12T00:00:00Z" } } } as any, dir);
   const auto = rewriteClaudeBody(request, undefined, session, dir, home, {});
@@ -401,7 +418,9 @@ test("v0.5: the request writing a second summary is rewritten as usual; after it
   ]), undefined, session, dir, home, {});
   assert.deepEqual(writing.report.compacted, { at: 0, listed: 1, resent: ["IMG-001"] });
   assert.deepEqual(partsOf(sent(writing)[0]), ["first summary", "IMG-001", "image:A"]);
-  assert.deepEqual(partsOf(sent(writing)[3]), ["image:B", "second"]);
+  // v0.8: B, the request's own first image, says its id; the feature line note follows its message.
+  assert.deepEqual(partsOf(sent(writing)[3]), ["IMG-002", "image:B", "second"]);
+  assert.match(sent(writing)[4].content, /^特征行说明/);
   // After the second compaction both are from before it: listed, and sent again after the new summary.
   t.boundary();
   t.summary("second summary");
