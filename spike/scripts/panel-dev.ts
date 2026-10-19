@@ -140,7 +140,7 @@ writeFileSync(join(day, `rollout-2026-09-24T12-00-00-${MANY}.jsonl`), manyLog);
 // ?thread=v08 (v0.8): keyframes of one character in two scenes, the model's feature lines opening its replies, a rating
 // noted turns later, a PDF storyboard page, a web page, a hand sketch pinned, and a last turn in which the model fetched
 // IMG-006 and IMG-011; automatic selection on. ?thread=v08m: the same task in manual mode, three images off, the last
-// reply asking for two of them.
+// reply asking for two of them. With ?lang=en both are in English, for the English README's screenshots.
 const V08 = `${THREAD.slice(0, -4)}a080`;
 const V08M = `${THREAD.slice(0, -4)}a081`;
 const SKIN = [235, 190, 160], COAT = [36, 44, 58];
@@ -172,43 +172,99 @@ const ask = (id: string, turnId: string, text: string, files: Array<[string, Buf
 });
 const made = (callId: string, name: string, bytes: Buffer, prompt: string) =>
   toolImage(callId, `const r = await tools.image_gen__imagegen({prompt:${JSON.stringify(prompt)}}); generatedImage(r);`, bytes, `Generated images are saved to C:\\g\\t as C:\\g\\t\\${name} by default.`);
-const v08Story =
-  turn("v1") + ask("msg_v1", "v1", "这是角色的参考图，人物半身正面。", [["角色参考.png", reference]]) + say("收到。", "v1") +
-  turn("v2") + ask("msg_v2", "v2", "生成两张深蓝雨夜的画面：一张中景撑伞，一张远景街道。") +
-  made("g1", "rain-1.png", rain[0], "深蓝雨夜 中景 撑伞 霓虹") + made("g2", "rain-2.png", rain[1], "深蓝雨夜 远景 街道") +
-  say("[//]: # (cam IMG-002 深蓝雨夜｜中景，人物靠右，撑伞，霓虹)\n[//]: # (cam IMG-003 深蓝雨夜｜远景，人物居中，街道)\n\n两张都生成好了。", "v2") +
+// The task's words: asks[2] is the request under the PDF comment; the replies open with the model's record lines.
+// With ?lang=en the same task is in English (V08E, V08ME), for the English README's screenshots.
+const V08_TEXT = {
+  zh: {
+    name: "人物雨夜关键帧",
+    files: { reference: "角色参考.png", sketch: "构图草图.png", pdf: "分镜脚本.pdf" },
+    asks: [
+      "这是角色的参考图，人物半身正面。",
+      "生成两张深蓝雨夜的画面：一张中景撑伞，一张远景街道。",
+      "按分镜再出一张近景、一张特写",
+      "第三轮那个特写正脸最好。再试试暖色灯光的室内，配色参考这个网站。",
+      "深蓝雨夜再来两张：人物回头，俯拍积水。暖色的加一张窗边剪影。",
+      "这是我手绘的构图草图，按它出一张近景正脸；暖色的出一张全身。",
+      "用之前最好的那张脸和俯拍那张，合成一张海报草案。",
+    ],
+    pdfComment: "按这一页的第二格",
+    prompts: ["深蓝雨夜 中景 撑伞 霓虹", "深蓝雨夜 远景 街道", "深蓝雨夜 近景 侧脸 雨滴", "深蓝雨夜 特写 正脸", "暖色灯光 室内 坐姿 中景", "暖色灯光 近景 微笑",
+      "深蓝雨夜 中景 回头", "深蓝雨夜 俯拍 积水倒影", "暖色灯光 窗边 剪影", "深蓝雨夜 近景 正脸 霓虹反光", "暖色灯光 全身 走廊"],
+    replies: [
+      "收到。",
+      "[//]: # (cam IMG-002 深蓝雨夜｜中景，人物靠右，撑伞，霓虹)\n[//]: # (cam IMG-003 深蓝雨夜｜远景，人物居中，街道)\n\n两张都生成好了。",
+      "[//]: # (cam IMG-004 分镜脚本｜第 3 页，四格分镜)\n[//]: # (cam IMG-005 深蓝雨夜｜近景，侧脸，雨滴)\n[//]: # (cam IMG-006 深蓝雨夜｜特写，正脸，五官清晰)\n\n近景和特写都在这里。",
+      "[//]: # (cam IMG-006 评价：脸最好)\n[//]: # (cam IMG-007 参考网站｜首页，深色顶栏，蓝色横幅)\n[//]: # (cam IMG-008 暖色灯光｜室内，坐姿，中景)\n[//]: # (cam IMG-009 暖色灯光｜近景，微笑)\n\n暖色的两张在这里。",
+      "[//]: # (cam IMG-010 深蓝雨夜｜中景，人物靠右，回头)\n[//]: # (cam IMG-011 深蓝雨夜｜远景，俯拍，积水倒影)\n[//]: # (cam IMG-012 暖色灯光｜窗边，剪影)\n\n三张都好了。",
+      "[//]: # (cam IMG-013 深蓝雨夜｜手绘草图，构图)\n[//]: # (cam IMG-014 深蓝雨夜｜近景，正脸，霓虹反光)\n[//]: # (cam IMG-015 暖色灯光｜全身，走廊)\n\n按草图出好了。",
+      "海报草案：上半部分用 IMG-006 的正脸特写，下半部分接 IMG-011 的俯拍积水倒影，标题放在两者交界的霓虹里。",
+    ],
+    fetched: ["[图片 IMG-006 取回的原图｜rain-4.png｜生成的图片｜第 3 轮｜480×480]", "[图片 IMG-011 取回的原图｜rain-6.png｜生成的图片｜第 5 轮｜480×480]"],
+    needs: "需要 IMG-008 和 IMG-009 才能比较暖色的两张。",
+  },
+  en: {
+    name: "Rainy night keyframes",
+    files: { reference: "character-reference.png", sketch: "composition-sketch.png", pdf: "storyboard.pdf" },
+    asks: [
+      "Here is the character reference: half-length, facing the camera.",
+      "Make two rainy blue night shots: a medium shot with an umbrella, and a wide shot of the street.",
+      "Following the storyboard, make a close-up and an extreme close-up",
+      "The extreme close-up from turn 3 has the best face. Now try a room in warm lamplight, with colors like this website.",
+      "Two more rainy blue night shots: the character looking back, and a high angle on the puddles. And a warm one: a silhouette by the window.",
+      "Here is my hand sketch of the composition. Make a close-up facing the camera from it, and a full-length warm one.",
+      "Make a poster draft from the best face so far and the high-angle shot.",
+    ],
+    pdfComment: "Like the second panel on this page",
+    prompts: ["rainy blue night, medium shot, umbrella, neon", "rainy blue night, wide shot, street", "rainy blue night, close-up, profile, raindrops",
+      "rainy blue night, extreme close-up, facing the camera", "warm lamplight, indoors, seated, medium shot", "warm lamplight, close-up, smiling",
+      "rainy blue night, medium shot, looking back", "rainy blue night, high angle, puddle reflections", "warm lamplight, by the window, silhouette",
+      "rainy blue night, close-up, facing the camera, neon reflections", "warm lamplight, full length, hallway"],
+    replies: [
+      "Got it.",
+      "[//]: # (cam IMG-002 rainy blue night | medium shot, character on the right, umbrella, neon)\n[//]: # (cam IMG-003 rainy blue night | wide shot, character centered, street)\n\nBoth are ready.",
+      "[//]: # (cam IMG-004 storyboard | page 3, four panels)\n[//]: # (cam IMG-005 rainy blue night | close-up, profile, raindrops)\n[//]: # (cam IMG-006 rainy blue night | extreme close-up, facing the camera, clear features)\n\nHere are the close-up and the extreme close-up.",
+      "[//]: # (cam IMG-006 rated: best face)\n[//]: # (cam IMG-007 reference site | home page, dark top bar, blue banner)\n[//]: # (cam IMG-008 warm lamplight | indoors, seated, medium shot)\n[//]: # (cam IMG-009 warm lamplight | close-up, smiling)\n\nHere are the two warm ones.",
+      "[//]: # (cam IMG-010 rainy blue night | medium shot, character on the right, looking back)\n[//]: # (cam IMG-011 rainy blue night | wide shot, high angle, puddle reflections)\n[//]: # (cam IMG-012 warm lamplight | by the window, silhouette)\n\nAll three are ready.",
+      "[//]: # (cam IMG-013 rainy blue night | hand sketch, composition)\n[//]: # (cam IMG-014 rainy blue night | close-up, facing the camera, neon reflections)\n[//]: # (cam IMG-015 warm lamplight | full length, hallway)\n\nDone, following the sketch.",
+      "Poster draft: the face from IMG-006 on top, the puddle reflections from IMG-011 below, and the title in the neon where they meet.",
+    ],
+    fetched: ["[Image IMG-006 fetched original | rain-4.png | generated image | turn 3 | 480×480]", "[Image IMG-011 fetched original | rain-6.png | generated image | turn 5 | 480×480]"],
+    needs: "I need IMG-008 and IMG-009 to compare the two warm ones.",
+  },
+};
+const v08Story = (w: typeof V08_TEXT.zh) =>
+  turn("v1") + ask("msg_v1", "v1", w.asks[0], [[w.files.reference, reference]]) + say(w.replies[0], "v1") +
+  turn("v2") + ask("msg_v2", "v2", w.asks[1]) +
+  made("g1", "rain-1.png", rain[0], w.prompts[0]) + made("g2", "rain-2.png", rain[1], w.prompts[1]) + say(w.replies[1], "v2") +
   turn("v3") + commented("msg_v3", "v3", [
-    { type: "input_text", text: "\n# Diff comments:\n\n## User Comment 1\nFile: pdf:分镜脚本.pdf\nSide: R\nLines: 1\nPDF path: C:/docs/分镜脚本.pdf\nPDF page: 3/8\nPDF annotation: region at top-left (40, 60) on 595x842 page\nAnnotated PDF screenshot: attached as a labeled image for Comment 1\nComment:\n按这一页的第二格\n\n## My request:\n按分镜再出一张近景、一张特写\n" },
+    { type: "input_text", text: `\n# Diff comments:\n\n## User Comment 1\nFile: pdf:${w.files.pdf}\nSide: R\nLines: 1\nPDF path: C:/docs/${w.files.pdf}\nPDF page: 3/8\nPDF annotation: region at top-left (40, 60) on 595x842 page\nAnnotated PDF screenshot: attached as a labeled image for Comment 1\nComment:\n${w.pdfComment}\n\n## My request:\n${w.asks[2]}\n` },
     { type: "input_text", text: "The next image shows PDF page 3 at the time of Comment 1. The selected region is outlined in blue and marked by comment marker 1." },
     { type: "input_image", image_url: url(pdfPage(3)) },
-  ]) + made("g3", "rain-3.png", rain[2], "深蓝雨夜 近景 侧脸 雨滴") + made("g4", "rain-4.png", rain[3], "深蓝雨夜 特写 正脸") +
-  say("[//]: # (cam IMG-004 分镜脚本｜第 3 页，四格分镜)\n[//]: # (cam IMG-005 深蓝雨夜｜近景，侧脸，雨滴)\n[//]: # (cam IMG-006 深蓝雨夜｜特写，正脸，五官清晰)\n\n近景和特写都在这里。", "v3") +
+  ]) + made("g3", "rain-3.png", rain[2], w.prompts[2]) + made("g4", "rain-4.png", rain[3], w.prompts[3]) + say(w.replies[2], "v3") +
   turn("v4") + commented("msg_v4", "v4", [
-    { type: "input_text", text: "第三轮那个特写正脸最好。再试试暖色灯光的室内，配色参考这个网站。" },
+    { type: "input_text", text: w.asks[3] },
     { type: "input_text", text: "The next image shows the browser page at the time of Comment 1." },
     { type: "input_image", image_url: url(webPage) },
-  ]) + made("g5", "warm-1.png", warm[0], "暖色灯光 室内 坐姿 中景") + made("g6", "warm-2.png", warm[1], "暖色灯光 近景 微笑") +
-  say("[//]: # (cam IMG-006 评价：脸最好)\n[//]: # (cam IMG-007 参考网站｜首页，深色顶栏，蓝色横幅)\n[//]: # (cam IMG-008 暖色灯光｜室内，坐姿，中景)\n[//]: # (cam IMG-009 暖色灯光｜近景，微笑)\n\n暖色的两张在这里。", "v4") +
-  turn("v5") + ask("msg_v5", "v5", "深蓝雨夜再来两张：人物回头，俯拍积水。暖色的加一张窗边剪影。") +
-  made("g7", "rain-5.png", rain[4], "深蓝雨夜 中景 回头") + made("g8", "rain-6.png", rain[5], "深蓝雨夜 俯拍 积水倒影") + made("g9", "warm-3.png", warm[2], "暖色灯光 窗边 剪影") +
-  say("[//]: # (cam IMG-010 深蓝雨夜｜中景，人物靠右，回头)\n[//]: # (cam IMG-011 深蓝雨夜｜远景，俯拍，积水倒影)\n[//]: # (cam IMG-012 暖色灯光｜窗边，剪影)\n\n三张都好了。", "v5") +
-  turn("v6") + ask("msg_v6", "v6", "这是我手绘的构图草图，按它出一张近景正脸；暖色的出一张全身。", [["构图草图.png", sketch]]) +
-  made("g10", "rain-7.png", rain[6], "深蓝雨夜 近景 正脸 霓虹反光") + made("g11", "warm-4.png", warm[3], "暖色灯光 全身 走廊") +
-  say("[//]: # (cam IMG-013 深蓝雨夜｜手绘草图，构图)\n[//]: # (cam IMG-014 深蓝雨夜｜近景，正脸，霓虹反光)\n[//]: # (cam IMG-015 暖色灯光｜全身，走廊)\n\n按草图出好了。", "v6") +
-  turn("v7") + ask("msg_v7", "v7", "用之前最好的那张脸和俯拍那张，合成一张海报草案。");
-writeFileSync(join(day, `rollout-2026-09-24T13-00-00-${V08}.jsonl`),
-  line("session_meta", { id: V08 }) + v08Story +
-  fetchedBy("cv7", [["[图片 IMG-006 取回的原图｜rain-4.png｜生成的图片｜第 3 轮｜480×480]", rain[3]], ["[图片 IMG-011 取回的原图｜rain-6.png｜生成的图片｜第 5 轮｜480×480]", rain[5]]]) +
-  say("海报草案：上半部分用 IMG-006 的正脸特写，下半部分接 IMG-011 的俯拍积水倒影，标题放在两者交界的霓虹里。", "v7"));
-writeFileSync(join(day, `rollout-2026-09-24T13-30-00-${V08M}.jsonl`),
-  line("session_meta", { id: V08M }) + v08Story + say("需要 IMG-008 和 IMG-009 才能比较暖色的两张。", "v7"));
+  ]) + made("g5", "warm-1.png", warm[0], w.prompts[4]) + made("g6", "warm-2.png", warm[1], w.prompts[5]) + say(w.replies[3], "v4") +
+  turn("v5") + ask("msg_v5", "v5", w.asks[4]) +
+  made("g7", "rain-5.png", rain[4], w.prompts[6]) + made("g8", "rain-6.png", rain[5], w.prompts[7]) + made("g9", "warm-3.png", warm[2], w.prompts[8]) + say(w.replies[4], "v5") +
+  turn("v6") + ask("msg_v6", "v6", w.asks[5], [[w.files.sketch, sketch]]) +
+  made("g10", "rain-7.png", rain[6], w.prompts[9]) + made("g11", "warm-4.png", warm[3], w.prompts[10]) + say(w.replies[5], "v6") +
+  turn("v7") + ask("msg_v7", "v7", w.asks[6]);
+const V08E = `${THREAD.slice(0, -4)}a082`;
+const V08ME = `${THREAD.slice(0, -4)}a083`;
+const V08_TASKS = [[V08, V08M, V08_TEXT.zh], [V08E, V08ME, V08_TEXT.en]] as const;
+for (const [auto, manual, w] of V08_TASKS) {
+  writeFileSync(join(day, `rollout-2026-09-24T13-00-00-${auto}.jsonl`),
+    line("session_meta", { id: auto }) + v08Story(w) + fetchedBy("cv7", [[w.fetched[0], rain[3]], [w.fetched[1], rain[5]]]) + say(w.replies[6], "v7"));
+  writeFileSync(join(day, `rollout-2026-09-24T13-30-00-${manual}.jsonl`), line("session_meta", { id: manual }) + v08Story(w) + say(w.needs, "v7"));
+}
 
 // Their names, as Codex keeps them next to the sessions folder (the panel's title).
 writeFileSync(join(root, "session_index.jsonl"), `${JSON.stringify({ id: THREAD, thread_name: "海报配色调整", updated_at: "2026-09-24T10:00:00Z" })}
 ${JSON.stringify({ id: MANY, thread_name: "产品图批量修图", updated_at: "2026-09-24T12:00:00Z" })}
 ${JSON.stringify({ id: AUTO, thread_name: "海报配色调整", updated_at: "2026-09-24T10:30:00Z" })}
-${JSON.stringify({ id: V08, thread_name: "人物雨夜关键帧", updated_at: "2026-09-24T13:00:00Z" })}
-${JSON.stringify({ id: V08M, thread_name: "人物雨夜关键帧", updated_at: "2026-09-24T13:30:00Z" })}
+${V08_TASKS.flatMap(([auto, manual, w]) => [auto, manual].map((id) => JSON.stringify({ id, thread_name: w.name, updated_at: "2026-09-24T13:00:00Z" }))).join("\n")}
 `);
 
 // New tasks the user starts after opening the panel on a new chat (?newtask=): Codex files them in today's folder.
@@ -247,12 +303,13 @@ const autoMeta = { threadId: AUTO, thread_id: AUTO };
 callTool("cam_set_selection", { auto: true }, autoMeta, sessionsDir);
 callTool("cam_set_selection", { check: ["IMG-002"], mode: "auto" }, autoMeta, sessionsDir);
 // v0.8: the hand sketch sent every turn; in the manual copy, a far shot and the two warm ones off.
-const v08Meta = { threadId: V08, thread_id: V08 };
-const v08mMeta = { threadId: V08M, thread_id: V08M };
-callTool("cam_set_selection", { auto: true }, v08Meta, sessionsDir);
-callTool("cam_set_selection", { check: ["IMG-013"], mode: "auto" }, v08Meta, sessionsDir);
-callTool("cam_set_selection", { auto: false }, v08mMeta, sessionsDir);
-callTool("cam_set_selection", { uncheck: ["IMG-003", "IMG-008", "IMG-009"] }, v08mMeta, sessionsDir);
+const metaOf = (id: string) => ({ threadId: id, thread_id: id });
+for (const [auto, manual] of V08_TASKS) {
+  callTool("cam_set_selection", { auto: true }, metaOf(auto), sessionsDir);
+  callTool("cam_set_selection", { check: ["IMG-013"], mode: "auto" }, metaOf(auto), sessionsDir);
+  callTool("cam_set_selection", { auto: false }, metaOf(manual), sessionsDir);
+  callTool("cam_set_selection", { uncheck: ["IMG-003", "IMG-008", "IMG-009"] }, metaOf(manual), sessionsDir);
+}
 
 // What the engine would have recorded: the last full request came in turn 3 (turn 4's images are new since) and had
 // IMG-001, IMG-005 and IMG-006 replaced. ?stats=skipped|websocket|none shows the other cases.
@@ -285,19 +342,21 @@ function writeStats(kind: string): void {
   const { recordChild } = await import("../../plugin/src/children.ts");
   const { childrenDirOf } = await import("../../plugin/src/paths.ts");
   const stats = requestStatsDirOf(process.env.CAM_DATA_DIR);
-  for (const [id, file, auto] of [[V08, `rollout-2026-09-24T13-00-00-${V08}.jsonl`, true], [V08M, `rollout-2026-09-24T13-30-00-${V08M}.jsonl`, false]] as const) {
+  for (const [id, file, auto] of V08_TASKS.flatMap(([main, manual]) => [[main, `rollout-2026-09-24T13-00-00-${main}.jsonl`, true], [manual, `rollout-2026-09-24T13-30-00-${manual}.jsonl`, false]] as const)) {
     const items = readFileSync(join(day, file), "utf8").trim().split("\n").map((raw) => JSON.parse(raw)).filter((record) => record.type === "response_item").map((record) => record.payload);
     const sizes = imageSizesOf(items);
     const before = Object.values(sizes).reduce((sum, chars) => sum + chars, 0) + 180_000;
     const replaced = (auto ? ["IMG-001", "IMG-002", "IMG-003", "IMG-004", "IMG-005", "IMG-007", "IMG-008", "IMG-009", "IMG-010", "IMG-012", "IMG-014", "IMG-015"] : ["IMG-003", "IMG-008", "IMG-009"]).map((image) => ({ id: image, mode: "plain" }));
     recordRequest(id, { at: new Date(Date.now() - 3 * 60_000).toISOString(), transport: "http", turnId: "v7", decodedBytes: before, imageSizes: sizes, rewrite: { auto, replaced, decodedBefore: before, decodedAfter: Math.round(before * (auto ? 0.22 : 0.8)) } }, stats);
   }
-  const SUB = `${THREAD.slice(0, -4)}a0c1`;
-  const SIDE = `${THREAD.slice(0, -4)}a0c2`;
-  recordChild(V08, SUB, { kind: "subagent", from: V08, at: new Date(Date.now() - 20 * 60_000).toISOString() }, childrenDirOf(process.env.CAM_DATA_DIR));
-  recordChild(V08, SIDE, { kind: "side", from: V08, at: new Date(Date.now() - 10 * 60_000).toISOString() }, childrenDirOf(process.env.CAM_DATA_DIR));
-  recordRequest(SUB, { at: new Date(Date.now() - 19 * 60_000).toISOString(), transport: "http", images: 4, decodedBytes: 1_800_000, rewrite: { auto: true, replaced: [{ id: "IMG-001" }, { id: "IMG-002" }], decodedBefore: 1_800_000, decodedAfter: 420_000 } }, stats);
-  recordRequest(SIDE, { at: new Date(Date.now() - 9 * 60_000).toISOString(), transport: "http", images: 12, decodedBytes: 4_100_000, rewrite: { auto: true, replaced: [{ id: "IMG-003" }], sideChatOf: V08, decodedBefore: 4_100_000, decodedAfter: 900_000 } }, stats);
+  V08_TASKS.forEach(([main], n) => {
+    const SUB = `${THREAD.slice(0, -4)}a0c${2 * n + 1}`;
+    const SIDE = `${THREAD.slice(0, -4)}a0c${2 * n + 2}`;
+    recordChild(main, SUB, { kind: "subagent", from: main, at: new Date(Date.now() - 20 * 60_000).toISOString() }, childrenDirOf(process.env.CAM_DATA_DIR));
+    recordChild(main, SIDE, { kind: "side", from: main, at: new Date(Date.now() - 10 * 60_000).toISOString() }, childrenDirOf(process.env.CAM_DATA_DIR));
+    recordRequest(SUB, { at: new Date(Date.now() - 19 * 60_000).toISOString(), transport: "http", images: 4, decodedBytes: 1_800_000, rewrite: { auto: true, replaced: [{ id: "IMG-001" }, { id: "IMG-002" }], decodedBefore: 1_800_000, decodedAfter: 420_000 } }, stats);
+    recordRequest(SIDE, { at: new Date(Date.now() - 9 * 60_000).toISOString(), transport: "http", images: 12, decodedBytes: 4_100_000, rewrite: { auto: true, replaced: [{ id: "IMG-003" }], sideChatOf: main, decodedBefore: 4_100_000, decodedAfter: 900_000 } }, stats);
+  });
 }
 
 // ---- the host page: a stand-in for Codex's side panel ----
@@ -335,7 +394,9 @@ const HOST = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><tit
   // ?thread=fresh: a thread that has no rollout, like a panel opened on a new chat whose prepared thread was replaced.
   // Each page load gets a thread of its own, so a switch made on an earlier load does not carry over.
   const fresh = params.get("thread") === "fresh" ? Math.random().toString(16).slice(2, 6).padEnd(4, "0") : null;
-  const query = fresh ? "?fresh=" + fresh : ["gap", "many", "auto", "v08", "v08m"].includes(params.get("thread")) ? "?" + params.get("thread") + "=1" : "";
+  // ?thread=v08 and v08m with ?lang=en: the same task in English.
+  const english = params.get("thread")?.startsWith("v08") && params.get("lang") === "en" ? "&en=1" : "";
+  const query = fresh ? "?fresh=" + fresh : ["gap", "many", "auto", "v08", "v08m"].includes(params.get("thread")) ? "?" + params.get("thread") + "=1" + english : "";
   const call = (name, args) => fetch("/call" + query, { method: "POST", body: JSON.stringify({ name, arguments: args }) }).then((r) => r.json());
   window.addEventListener("message", async (event) => {
     const m = event.data;
@@ -407,7 +468,8 @@ createServer((request, response) => {
       const auto = new URL(request.url, "http://x").searchParams.has("auto");
       const v08 = new URL(request.url, "http://x").searchParams.has("v08");
       const v08m = new URL(request.url, "http://x").searchParams.has("v08m");
-      const threadMeta = fresh && /^[0-9a-f]{4}$/.test(fresh) ? { threadId: freshId, thread_id: freshId } : gap ? { threadId: GAP, thread_id: GAP } : many ? manyMeta : auto ? autoMeta : v08 ? v08Meta : v08m ? v08mMeta : meta;
+      const [v08Task, v08mTask] = V08_TASKS[new URL(request.url, "http://x").searchParams.has("en") ? 1 : 0];
+      const threadMeta = fresh && /^[0-9a-f]{4}$/.test(fresh) ? { threadId: freshId, thread_id: freshId } : gap ? { threadId: GAP, thread_id: GAP } : many ? manyMeta : auto ? autoMeta : v08 ? metaOf(v08Task) : v08m ? metaOf(v08mTask) : meta;
       try { reply(200, "application/json", JSON.stringify(callTool(name, args ?? {}, threadMeta, sessionsDir))); }
       catch (error) { reply(200, "application/json", JSON.stringify({ isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }] })); }
     });
