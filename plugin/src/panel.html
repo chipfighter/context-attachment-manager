@@ -25,9 +25,9 @@
   default: the estimate, the bar and the next message; unfolded: the last request, what the model fetched in the latest
   turn, the subagents' and side chats' savings); a search over the scene, the words the model noted and what was said in
   that turn; one filter at a time (全部, 上传, 生成, then the scenes); thumbnails by turn, newest first, with small marks
-  only; a preview that fills the panel as in v0.7, closed by a click beside the image, with the image's switch
-  (每轮都发 / 发送); in manual mode, a bar of the images the
-  model asked for, and 整轮不发 / 整轮发送 on each turn. An id button finds its thumbnail: scrolls it to the middle,
+  only, gray while not sent (every turn, with automatic selection); a preview that fills the panel as in v0.7, closed by a
+  click beside the image, with the image's checkbox (每轮都发 / 发送); a checkbox at the end of each turn's line, as in
+  v0.7; in manual mode, a bar of the images the model asked for. An id button finds its thumbnail: scrolls it to the middle,
   flashes it twice and focuses it. The v0.2 source filter and the v0.7 switch for subagents and side chats are gone.
 -->
 <style>
@@ -136,11 +136,28 @@
   .chips .sep { width: 1px; height: 16px; background: var(--border-strong); }
 
   main { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 16px; border-top: 1px solid var(--border); scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-  .turn { display: flex; align-items: center; gap: 10px; margin: 14px 4px 6px; color: var(--text-3); font-size: 12px; font-weight: 500; }
-  .turn::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-  .turn .act { order: 2; flex: none; padding: 0 2px; border: 0; background: none; color: var(--info); font-size: 12px; font-weight: 500; cursor: pointer; }
-  .turn .act:hover { text-decoration: underline; }
-  .turn::after { order: 1; }
+  .turn { position: relative; display: flex; align-items: center; gap: 10px; margin: 14px 4px 6px; color: var(--text-3); font-size: 12px; font-weight: 500; }
+  .turn::after { content: ""; flex: 1; height: 1px; background: var(--border); order: 1; }
+  /* v0.1-18, as in v0.7 (user 2026-10-19): the turn's checkbox at the end of its line, quieter than an image's. */
+  .turn .check { flex: none; order: 2; }
+  .turn .check input:checked + .box, .turn .check input:indeterminate + .box { background: transparent; border-color: var(--text-3); }
+  .turn .check:hover .box { border-color: var(--text-2); }
+  .turn .box::after { border-color: var(--text-2); }
+  .check input:indeterminate + .box::after { opacity: 1; width: 8px; height: 0; margin-top: 0; border: 0; border-top: 2px solid var(--text-2); transform: none; }
+  /* A checkbox, as in v0.7: the turn's, and the preview's (每轮都发 / 发送), its box before its words. */
+  .check { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .check input { position: absolute; opacity: 0; pointer-events: none; }
+  .box {
+    flex: none; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--border-strong);
+    display: grid; place-items: center; transition: background .15s, border-color .15s;
+  }
+  .check:hover .box { border-color: var(--text-3); }
+  .box::after { content: ""; width: 8px; height: 4.5px; margin-top: -2px; border: 2px solid var(--accent-text); border-top: 0; border-right: 0; transform: rotate(-45deg); opacity: 0; transition: opacity .12s; }
+  .check input:checked + .box { background: var(--accent); border-color: var(--accent); }
+  .check input:checked + .box::after { opacity: 1; }
+  .check input:disabled + .box { opacity: .35; }
+  .check input:disabled ~ * { cursor: default; }
+  .check input:focus-visible + .box { outline: 2px solid var(--info); outline-offset: 2px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
   .tile { position: relative; aspect-ratio: 1 / 1; padding: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); overflow: hidden; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
   .tile:hover { border-color: var(--border-strong); box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 10%, transparent); }
@@ -152,8 +169,8 @@
     background-size: 200% 100%; animation: shimmer 1.2s linear infinite;
   }
   @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
-  /* Not sent (manual mode): faded, with a dashed edge. No longer in context: faded further. */
-  .tile.off { border-style: dashed; border-color: var(--border-strong); }
+  /* As in v0.7 (user 2026-10-19): an image that does not go out every turn (automatic selection) or at all (manual) is
+     gray; checked, it takes its colors back. No longer in context: faded further. */
   .tile.off img { opacity: .4; filter: grayscale(1); }
   .tile.gone img { opacity: .3; filter: grayscale(1); }
   .mark { position: absolute; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--bg) 90%, transparent); color: var(--text-2); font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap; box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); pointer-events: none; }
@@ -184,11 +201,11 @@
   .viewer-meta { flex: 1; min-width: 0; color: rgb(255 255 255 / 55%); font-size: 12.5px; font-variant-numeric: tabular-nums; }
   .icon-btn { flex: none; width: 32px; height: 32px; border: 0; border-radius: 999px; background: transparent; color: rgb(255 255 255 / 80%); cursor: pointer; display: grid; place-items: center; transition: background .15s; }
   .icon-btn:hover { background: rgb(255 255 255 / 12%); }
-  .viewer .switch { color: rgb(245 245 245); font-size: 13px; }
-  .viewer .switch .sw { background: rgb(255 255 255 / 28%); }
-  .viewer .switch .sw::after { background: rgb(245 245 245); }
-  .viewer .switch input:checked + .sw { background: rgb(245 245 245); }
-  .viewer .switch input:checked + .sw::after { background: rgb(19 19 19); }
+  .viewer .check { flex: none; color: rgb(245 245 245); font-size: 13px; font-weight: 500; }
+  .viewer .box { border-color: rgb(255 255 255 / 45%); }
+  .viewer .check:hover .box { border-color: rgb(255 255 255 / 75%); }
+  .viewer .check input:checked + .box { background: rgb(245 245 245); border-color: rgb(245 245 245); }
+  .viewer .box::after { border-color: rgb(19 19 19); }
 
   /* A switch: the footer's (自动选图) and the preview's (每轮都发 / 发送). */
   .switch { flex: none; position: relative; display: inline-flex; align-items: center; gap: 7px; color: var(--text-2); font-size: 12.5px; font-weight: 500; cursor: pointer; user-select: none; white-space: nowrap; }
@@ -257,7 +274,7 @@
   <div class="viewer-stage" id="viewerStage"></div>
   <div class="viewer-bottom">
     <span class="viewer-meta" id="viewerMeta"></span>
-    <label class="switch" id="viewerSwitch"><span class="label"></span><input type="checkbox" role="switch"><span class="sw"></span></label>
+    <label class="check" id="viewerCheck"><input type="checkbox"><span class="box"></span><span class="label"></span></label>
   </div>
 </div>
 <!-- The panel's words (v0.1-14): Simplified Chinese and English, the same keys in both (a unit test checks it);
@@ -330,8 +347,14 @@
       "corner.browser": "网页",
       "turn.n": "第 {n} 轮",
       "turn.earlier": "更早",
-      "turn.allOff": "整轮不发",
-      "turn.allOn": "整轮发送",
+      "turn.all": "发送第 {n} 轮的全部图片",
+      "turn.allEarlier": "发送更早的全部图片",
+      "turn.shown": "发送第 {n} 轮列出的图片",
+      "turn.shownEarlier": "发送更早列出的图片",
+      "turn.pinAll": "第 {n} 轮的全部图片每轮都发",
+      "turn.pinAllEarlier": "更早的全部图片每轮都发",
+      "turn.pinShown": "第 {n} 轮列出的图片每轮都发",
+      "turn.pinShownEarlier": "更早列出的图片每轮都发",
       "tile.open": "预览 {id}",
       "preview.label": "图片预览",
       "preview.close": "关闭预览",
@@ -447,8 +470,14 @@
       "corner.browser": "Web",
       "turn.n": "Turn {n}",
       "turn.earlier": "Earlier",
-      "turn.allOff": "Don't send this turn",
-      "turn.allOn": "Send this turn",
+      "turn.all": "Send all images from turn {n}",
+      "turn.allEarlier": "Send all earlier images",
+      "turn.shown": "Send the listed images from turn {n}",
+      "turn.shownEarlier": "Send the listed earlier images",
+      "turn.pinAll": "Send every image of turn {n} every turn",
+      "turn.pinAllEarlier": "Send every earlier image every turn",
+      "turn.pinShown": "Send the listed images of turn {n} every turn",
+      "turn.pinShownEarlier": "Send the listed earlier images every turn",
       "tile.open": "Preview {id}",
       "preview.label": "Image preview",
       "preview.close": "Close preview",
@@ -1094,7 +1123,7 @@
     }
   }
   function paintTile(tile, image) {
-    tile.classList.toggle("off", !autoOn() && image.inNextRequest && image.replaceable && !isOn(image));
+    tile.classList.toggle("off", image.inNextRequest && image.replaceable && !isOn(image));
     tile.classList.toggle("gone", !image.inNextRequest);
     tile.setAttribute("aria-label", [t("tile.open", { id: image.id }), nameOf(image)].filter(Boolean).join(" · "));
     tile.title = [image.id, nameOf(image)].filter(Boolean).join(" · ");
@@ -1107,21 +1136,36 @@
     }
     paintThumb(tile, image.id);
   }
-  // A turn's line, and in manual mode its one action for the images shown: 整轮不发 when all of them go, else 整轮发送.
+  // v0.1-18, as in v0.7 (user 2026-10-19): a turn's line ends with one checkbox for the images of it that are shown and
+  // can change. A click on a checked box turns them all off; on a mixed or empty one, all on. It shows a dash while only
+  // some are on, and stays hidden below two images (an image's own box does the same).
   function turnPart(turn) {
     if (turnParts.has(turn)) return turnParts.get(turn);
     const head = Object.assign(document.createElement("div"), { className: "turn" });
     head.append(Object.assign(document.createElement("span"), { textContent: turn === null ? t("turn.earlier") : t("turn.n", { n: turn }) }));
-    const act = Object.assign(document.createElement("button"), { type: "button", className: "act" });
-    act.addEventListener("click", () => {
+    const box = Object.assign(document.createElement("label"), { className: "check" });
+    box.innerHTML = '<input type="checkbox"><span class="box"></span>';
+    const input = box.querySelector("input");
+    input.addEventListener("change", () => {
       const targets = images().filter((image) => image.turn === turn && changeable(image) && matches(image));
-      change(targets.map((image) => image.id), !targets.every(isOn));
+      change(targets.map((image) => image.id), input.checked);
     });
-    head.append(act);
+    head.append(box);
     const grid = Object.assign(document.createElement("div"), { className: "grid" });
-    const part = { head, act, grid };
+    const part = { head, box, input, grid };
     turnParts.set(turn, part);
     return part;
+  }
+  function paintTurn(part, turn, targets) {
+    const on = targets.filter(isOn).length;
+    part.box.hidden = targets.length < 2;
+    const keys = autoOn() ? ["turn.pinShownEarlier", "turn.pinAllEarlier", "turn.pinShown", "turn.pinAll"] : ["turn.shownEarlier", "turn.allEarlier", "turn.shown", "turn.all"];
+    const label = turn === null ? t(searching() ? keys[0] : keys[1]) : t(searching() ? keys[2] : keys[3], { n: turn });
+    part.box.title = label;
+    part.input.setAttribute("aria-label", label);
+    part.input.checked = on > 0 && on === targets.length;
+    part.input.indeterminate = on > 0 && on < targets.length;
+    part.input.disabled = S.autoPending !== null;
   }
 
   // Notices are reused while their text stays the same, so re-rendering does not move the list around.
@@ -1209,8 +1253,7 @@
         const group = shownImages.filter((image) => image.turn === turn);
         const part = turnPart(turn);
         const targets = group.filter(changeable);
-        part.act.hidden = autoOn() || targets.length < 2;
-        part.act.textContent = t(targets.every(isOn) ? "turn.allOff" : "turn.allOn");
+        paintTurn(part, turn, targets);
         const cells = group.map((image) => {
           let tile = tiles.get(image.id);
           if (!tile) { tile = makeTile(image.id); tiles.set(image.id, tile); }
@@ -1250,7 +1293,7 @@
       img.alt = nameOf(image) ?? image.id;
       if (img.src !== url) img.src = url;
     } else stage.replaceChildren(Object.assign(document.createElement("span"), { className: "none", textContent: t(S.preview.loading ? "preview.loading" : "preview.none") }));
-    const control = $("viewerSwitch");
+    const control = $("viewerCheck");
     const label = t(autoOn() ? "preview.pin" : "preview.send");
     control.querySelector(".label").textContent = label;
     const input = control.querySelector("input");
@@ -1277,10 +1320,10 @@
     const tile = returnTo && tiles.get(returnTo);
     if (tile?.isConnected) tile.focus({ preventScroll: true });
   }
-  // A click anywhere but on the image, a button or the switch closes the preview.
-  $("viewer").addEventListener("click", (event) => { if (!event.target.closest("img, button, .switch")) closePreview(); });
+  // A click anywhere but on the image, a button or the checkbox closes the preview.
+  $("viewer").addEventListener("click", (event) => { if (!event.target.closest("img, button, .check")) closePreview(); });
   $("viewerClose").addEventListener("click", closePreview);
-  $("viewerSwitch").querySelector("input").addEventListener("change", (event) => { if (S.preview) change([S.preview.id], event.target.checked); });
+  $("viewerCheck").querySelector("input").addEventListener("change", (event) => { if (S.preview) change([S.preview.id], event.target.checked); });
 
   // ---- an id button: the preview closes, a search or filter that hides the image is cleared, then its thumbnail
   // scrolls to the middle of the list, flashes twice and takes the keyboard focus ----
