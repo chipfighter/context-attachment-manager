@@ -14,5 +14,7 @@ tls.connect = ((_options: unknown, callback: () => void) => net.connect(upstream
 })) as typeof tls.connect;
 const scriptUrl = new URL("../../plugin/src/proxy.ts", import.meta.url);
 const script = fileURLToPath(scriptUrl);
-process.argv = [process.execPath, script, "--stay", "--port", process.env.CAM_TEST_PROXY_PORT!];
+// CAM_TEST_ENGINE_ARGS: more of the engine's own flags, e.g. --force-http.
+const more = (process.env.CAM_TEST_ENGINE_ARGS ?? "").split(" ").filter(Boolean);
+process.argv = [process.execPath, script, "--stay", "--port", process.env.CAM_TEST_PROXY_PORT!, ...more];
 await import(scriptUrl.href);

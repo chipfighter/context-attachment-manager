@@ -838,6 +838,9 @@ async function main(): Promise<void> {
     const started = Date.now();
     const path = (req.url ?? "/").split("?")[0];
     const identity = requestIdentity(req.headers);
+    // Node takes its own 'error' listener off an upgraded socket. Without one, a client resetting the connection (Codex
+    // can, right after a 426) throws and stops the engine (2026-10-19: four probe engines at once).
+    client.on("error", () => {});
     // A retired engine takes no new WebSocket; Codex opens it again, on the new engine.
     if (retiredAt !== null) {
       client.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
@@ -852,6 +855,8 @@ async function main(): Promise<void> {
     let down = 0;
     let upstreamStatus: string | null = null;
     connectUpstream(via).then((socket) => {
+      // The client went away while the upstream connected: its close has passed, nothing would close this one.
+      if (client.destroyed) { socket.destroy(); return; }
       const connection: Live = { client, socket, last: Date.now(), closedForSelection: false, activeWhileUnchecked: false, path, identity };
       sockets.add(connection);
       if (identity.threadId) {

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import http from "node:http";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -16,7 +17,7 @@ async function bounded<T>(promise: Promise<T>, message: string, ms = 2000): Prom
   } finally { clearTimeout(timer!); }
 }
 
-async function fixture(t: TestContext, handler: http.RequestListener, connectDelay = 0) {
+async function fixture(t: TestContext, handler: http.RequestListener, connectDelay = 0, engineArgs: string[] = []) {
   const root = mkdtempSync(join(tmpdir(), "cam-http-lifecycle-"));
   const upstream = http.createServer(handler);
   await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
@@ -26,7 +27,7 @@ async function fixture(t: TestContext, handler: http.RequestListener, connectDel
   const port = (reservation.address() as { port: number }).port;
   await new Promise<void>((resolve) => reservation.close(() => resolve()));
   const child = spawn(process.execPath, [fileURLToPath(new URL("./proxy-http-fixture.ts", import.meta.url))], {
-    env: { ...process.env, CAM_DATA_DIR: root, CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), CAM_TEST_CONNECT_DELAY: String(connectDelay), NO_PROXY: "*", no_proxy: "*" },
+    env: { ...process.env, CAM_DATA_DIR: root, CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), CAM_TEST_CONNECT_DELAY: String(connectDelay), CAM_TEST_ENGINE_ARGS: engineArgs.join(" "), NO_PROXY: "*", no_proxy: "*" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
@@ -125,4 +126,24 @@ test("a complete HTTP response keeps its status, headers, and bytes", async (t) 
     });
   }), "complete response did not finish");
   assert.deepEqual(result, { status: 201, header: "unchanged", body: expected });
+});
+
+// 2026-10-19: Node leaves an upgraded socket without an 'error' listener of its own. Codex resetting the connection
+// the engine had just declined with 426 threw there and stopped the engine (four probe engines at once).
+test("a declined WebSocket upgrade that the client resets leaves the engine running", async (t) => {
+  const { port } = await fixture(t, () => assert.fail("a declined upgrade must not reach the upstream"), 0, ["--force-http"]);
+  for (let i = 0; i < 5; i++) {
+    const socket = net.connect(port, "127.0.0.1");
+    socket.on("error", () => {});
+    const answer = await bounded(new Promise<string>((resolve) => {
+      socket.once("data", (chunk) => { resolve(String(chunk)); socket.resetAndDestroy(); });
+      socket.write(["GET /backend-api/codex/responses HTTP/1.1", `Host: 127.0.0.1:${port}`, "Connection: Upgrade", "Upgrade: websocket", "Sec-WebSocket-Version: 13", "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==", "", ""].join("\r\n"));
+    }), `upgrade ${i + 1} got no answer`);
+    assert.match(answer, /^HTTP\/1\.1 426 /);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const status = await bounded(new Promise<number>((resolve, reject) => {
+    http.get({ hostname: "127.0.0.1", port, path: "/__cam/health" }, (response) => { response.resume(); resolve(response.statusCode ?? 0); }).on("error", reject);
+  }), "the engine did not answer after the resets");
+  assert.equal(status, 200);
 });
