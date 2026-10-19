@@ -96,7 +96,9 @@
 
   /* The request card: folded to the estimate, its bar and the next message; unfolded, three more lines. */
   .card { margin-top: 10px; padding: 10px 12px 6px; border-radius: 12px; background: var(--bg-soft); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  .card-head { display: flex; align-items: baseline; gap: 8px; color: var(--text-2); }
+  /* A narrow panel moves the "all images" part to a line of its own rather than breaking the estimate (English). */
+  .card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; color: var(--text-2); }
+  .card-head > span:first-child, .card-head b { white-space: nowrap; }
   .card-head b { color: var(--text); font-size: 15px; font-weight: 600; }
   .card-full { margin-left: auto; color: var(--text-3); white-space: nowrap; }
   .card-full.saved { color: var(--ok); }
