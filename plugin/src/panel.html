@@ -25,7 +25,8 @@
   default: the estimate, the bar and the next message; unfolded: the last request, what the model fetched in the latest
   turn, the subagents' and side chats' savings); a search over the scene, the words the model noted and what was said in
   that turn; one filter at a time (全部, 上传, 生成, then the scenes); thumbnails by turn, newest first, with small marks
-  only; a preview inside the panel with the image's switch (每轮都发 / 发送); in manual mode, a bar of the images the
+  only; a preview that fills the panel as in v0.7, closed by a click beside the image, with the image's switch
+  (每轮都发 / 发送); in manual mode, a bar of the images the
   model asked for, and 整轮不发 / 整轮发送 on each turn. An id button finds its thumbnail: scrolls it to the middle,
   flashes it twice and focuses it. The v0.2 source filter and the v0.7 switch for subagents and side chats are gone.
 -->
@@ -170,20 +171,24 @@
   }
   @media (prefers-reduced-motion: reduce) { .tile.flash { animation: none; box-shadow: 0 0 0 3px var(--warn); } }
 
-  /* The preview, inside the panel in place of the list. */
-  .preview { display: flex; flex-direction: column; min-height: 100%; padding-top: 10px; }
-  .preview-top { flex: none; display: flex; align-items: center; gap: 10px; }
-  .back { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px 0 4px; border: 0; border-radius: 8px; background: none; color: var(--text-2); font-size: 12.5px; cursor: pointer; transition: background .15s; }
-  .back:hover { background: var(--bg-hover); }
-  .back svg { width: 15px; height: 15px; }
-  .preview-meta { flex: 1; min-width: 0; text-align: right; color: var(--text-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .preview-meta b { color: var(--text); font-weight: 600; }
-  .stage { flex: 1; min-height: 160px; margin-top: 10px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--bg-soft); overflow: hidden; }
-  .stage img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-  .stage .none { color: var(--text-3); font-size: 12.5px; }
-  .stage.loading img { filter: blur(6px); opacity: .7; }
-  .preview-bottom { flex: none; display: flex; align-items: center; gap: 10px; padding-top: 10px; }
-  .preview-note { flex: 1; min-width: 0; color: var(--text-3); font-size: 12px; }
+  /* The preview fills the panel, as in v0.7 (user 2026-10-19); a click anywhere but on the image or a control closes it. */
+  .viewer { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; background: rgb(19 19 19); color: rgb(245 245 245); }
+  .viewer-top, .viewer-bottom { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 18px; }
+  .viewer-title { flex: 1; min-width: 0; display: flex; gap: 8px; align-items: baseline; font-size: 14px; }
+  .viewer-title .vid { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .viewer-title .vname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgb(255 255 255 / 62%); }
+  .viewer-stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 14px; }
+  .viewer-stage img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+  .viewer-stage .none { color: rgb(255 255 255 / 55%); font-size: 12.5px; }
+  .viewer-stage.loading img { filter: blur(6px); opacity: .7; }
+  .viewer-meta { flex: 1; min-width: 0; color: rgb(255 255 255 / 55%); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .icon-btn { flex: none; width: 32px; height: 32px; border: 0; border-radius: 999px; background: transparent; color: rgb(255 255 255 / 80%); cursor: pointer; display: grid; place-items: center; transition: background .15s; }
+  .icon-btn:hover { background: rgb(255 255 255 / 12%); }
+  .viewer .switch { color: rgb(245 245 245); font-size: 13px; }
+  .viewer .switch .sw { background: rgb(255 255 255 / 28%); }
+  .viewer .switch .sw::after { background: rgb(245 245 245); }
+  .viewer .switch input:checked + .sw { background: rgb(245 245 245); }
+  .viewer .switch input:checked + .sw::after { background: rgb(19 19 19); }
 
   /* A switch: the footer's (自动选图) and the preview's (每轮都发 / 发送). */
   .switch { flex: none; position: relative; display: inline-flex; align-items: center; gap: 7px; color: var(--text-2); font-size: 12.5px; font-weight: 500; cursor: pointer; user-select: none; white-space: nowrap; }
@@ -242,6 +247,19 @@
   <div class="status" id="status"></div>
   <label class="switch" id="auto" hidden><span class="auto-label"></span><input type="checkbox" role="switch"><span class="sw"></span></label>
 </footer>
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="图片预览">
+  <div class="viewer-top">
+    <div class="viewer-title"><span class="vid" id="viewerId"></span><span class="vname" id="viewerName"></span></div>
+    <button class="icon-btn" id="viewerClose" type="button" aria-label="关闭预览" title="关闭（Esc）">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2 2l10 10M12 2 2 12"/></svg>
+    </button>
+  </div>
+  <div class="viewer-stage" id="viewerStage"></div>
+  <div class="viewer-bottom">
+    <span class="viewer-meta" id="viewerMeta"></span>
+    <label class="switch" id="viewerSwitch"><span class="label"></span><input type="checkbox" role="switch"><span class="sw"></span></label>
+  </div>
+</div>
 <!-- The panel's words (v0.1-14): Simplified Chinese and English, the same keys in both (a unit test checks it);
   "key_one" is the English text for a count of one. -->
 <script type="application/json" id="messages">
@@ -315,7 +333,9 @@
       "turn.allOff": "整轮不发",
       "turn.allOn": "整轮发送",
       "tile.open": "预览 {id}",
-      "preview.back": "返回",
+      "preview.label": "图片预览",
+      "preview.close": "关闭预览",
+      "preview.closeTitle": "关闭（Esc）",
       "preview.pin": "每轮都发",
       "preview.send": "发送",
       "preview.loading": "正在加载…",
@@ -430,7 +450,9 @@
       "turn.allOff": "Don't send this turn",
       "turn.allOn": "Send this turn",
       "tile.open": "Preview {id}",
-      "preview.back": "Back",
+      "preview.label": "Image preview",
+      "preview.close": "Close preview",
+      "preview.closeTitle": "Close (Esc)",
       "preview.pin": "Send every turn",
       "preview.send": "Send",
       "preview.loading": "Loading…",
@@ -519,6 +541,9 @@
     $("search").placeholder = t("search.placeholder");
     $("search").setAttribute("aria-label", t("search.label"));
     $("chips").setAttribute("aria-label", t("chips.label"));
+    $("viewer").setAttribute("aria-label", t("preview.label"));
+    $("viewerClose").setAttribute("aria-label", t("preview.close"));
+    $("viewerClose").title = t("preview.closeTitle");
     emptyState.querySelector("strong").textContent = t("empty.title");
     emptyState.querySelector("span").textContent = t("empty.text");
     nothingFound.textContent = t("empty.search");
@@ -799,7 +824,7 @@
       loadImage(id, THUMB_SIDE)
         .then((url) => { if (thread === S.threadId) S.thumbs.set(id, url); })
         .catch(() => { if (thread === S.threadId) S.thumbs.set(id, null); })
-        .finally(() => { thumbsInFlight.delete(id); const tile = tiles.get(id); if (tile) paintThumb(tile, id); if (S.preview?.id === id && !S.preview.url) renderList(); pumpThumbs(); });
+        .finally(() => { thumbsInFlight.delete(id); const tile = tiles.get(id); if (tile) paintThumb(tile, id); if (S.preview?.id === id && !S.preview.url) renderViewer(); pumpThumbs(); });
     }
   }
   const observer = new IntersectionObserver((entries) => {
@@ -1175,8 +1200,7 @@
   function renderList() {
     const nodes = noticeNodes();
     const list = images();
-    if (S.preview && byId(S.preview.id)) nodes.push(previewPart());
-    else if (S.data && !list.length) nodes.push(emptyState);
+    if (S.data && !list.length) nodes.push(emptyState);
     else {
       const shownImages = list.filter(matches);
       if (S.data && !shownImages.length) nodes.push(nothingFound);
@@ -1206,23 +1230,18 @@
     if (nodes.length !== current.length || nodes.some((node, index) => node !== current[index])) main.replaceChildren(...nodes);
   }
 
-  // ---- the preview, inside the panel: the image, what it is, and its switch ----
-  let previewParts = null;
-  function previewPart() {
-    if (!previewParts) {
-      const root = Object.assign(document.createElement("div"), { className: "preview" });
-      root.innerHTML = '<div class="preview-top"><button class="back" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg><span></span></button><span class="preview-meta"></span></div><div class="stage"></div><div class="preview-bottom"><span class="preview-note"></span><label class="switch"><span class="label"></span><input type="checkbox" role="switch"><span class="sw"></span></label></div>';
-      root.querySelector(".back").addEventListener("click", closePreview);
-      root.querySelector("input").addEventListener("change", (event) => { if (S.preview) change([S.preview.id], event.target.checked); });
-      previewParts = { root, back: root.querySelector(".back span"), meta: root.querySelector(".preview-meta"), stage: root.querySelector(".stage"), note: root.querySelector(".preview-note"), label: root.querySelector(".switch .label"), input: root.querySelector("input") };
-    }
-    const image = byId(S.preview.id);
-    const { root, back, meta, stage, note, label, input } = previewParts;
-    back.textContent = t("preview.back");
+  // ---- the preview: it fills the panel, as in v0.7 (user 2026-10-19); the image, what it is, and its switch ----
+  function renderViewer() {
+    const viewer = $("viewer");
+    const image = S.preview && byId(S.preview.id);
+    if (!image) { viewer.hidden = true; return; }
+    viewer.hidden = false;
+    $("viewerId").textContent = image.id;
+    $("viewerName").textContent = nameOf(image) ?? "";
     const where = sourceOf(image) === "pdf" && image.pdfPage ? t("corner.pdf", { page: image.pdfPage }) : sourceLabel(image);
-    const parts = [image.id, image.turn === null ? null : t("turn.n", { n: image.turn }), where, nameOf(image)].filter(Boolean);
-    meta.replaceChildren(Object.assign(document.createElement("b"), { textContent: parts[0] }), ...parts.slice(1).map((part) => ` · ${part}`));
-    meta.title = [...parts, image.width && image.height ? `${image.width}×${image.height}` : null, formatBytes(image.bytes)].filter(Boolean).join(" · ");
+    const note = !image.inNextRequest ? t("preview.gone") : !image.replaceable ? t("preview.locked") : image.compacted ? t("preview.compacted") : image.sameAs.length ? t("preview.sameAs", { id: image.sameAs[0] }) : null;
+    $("viewerMeta").textContent = [image.turn === null ? null : t("turn.n", { n: image.turn }), where, image.width && image.height ? `${image.width}×${image.height}` : null, formatBytes(image.bytes), note].filter(Boolean).join(" · ");
+    const stage = $("viewerStage");
     const url = S.preview.url ?? S.thumbs.get(image.id) ?? null;
     stage.classList.toggle("loading", S.preview.loading && !!url);
     if (url) {
@@ -1231,32 +1250,37 @@
       img.alt = nameOf(image) ?? image.id;
       if (img.src !== url) img.src = url;
     } else stage.replaceChildren(Object.assign(document.createElement("span"), { className: "none", textContent: t(S.preview.loading ? "preview.loading" : "preview.none") }));
-    note.textContent = !image.inNextRequest ? t("preview.gone") : !image.replaceable ? t("preview.locked") : image.compacted ? t("preview.compacted") : image.sameAs.length ? t("preview.sameAs", { id: image.sameAs[0] }) : "";
-    label.textContent = t(autoOn() ? "preview.pin" : "preview.send");
+    const control = $("viewerSwitch");
+    const label = t(autoOn() ? "preview.pin" : "preview.send");
+    control.querySelector(".label").textContent = label;
+    const input = control.querySelector("input");
     input.checked = image.inNextRequest && (!image.replaceable || isOn(image));
     input.disabled = !changeable(image) || S.autoPending !== null;
-    input.setAttribute("aria-label", `${label.textContent} ${image.id}`);
-    return root;
+    input.setAttribute("aria-label", `${label} ${image.id}`);
   }
   let returnTo = null;
   function openPreview(id) {
     returnTo = id;
     S.preview = { id, url: null, loading: true };
-    render();
-    previewParts?.root.querySelector(".back").focus({ focusVisible: false });
+    renderViewer();
+    $("viewerClose").focus({ focusVisible: false });
     const side = Math.min(2048, Math.max(800, Math.round(Math.max(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1))));
     loadImage(id, side)
       .then((url) => { if (S.preview?.id === id) S.preview = { id, url, loading: false }; })
       .catch(() => { if (S.preview?.id === id) S.preview = { id, url: null, loading: false }; })
-      .finally(() => { if (S.preview?.id === id) renderList(); });
+      .finally(() => { if (S.preview?.id === id) renderViewer(); });
   }
   function closePreview() {
     if (!S.preview) return;
     S.preview = null;
-    render();
+    renderViewer();
     const tile = returnTo && tiles.get(returnTo);
-    if (tile?.isConnected) tile.focus({ preventScroll: false });
+    if (tile?.isConnected) tile.focus({ preventScroll: true });
   }
+  // A click anywhere but on the image, a button or the switch closes the preview.
+  $("viewer").addEventListener("click", (event) => { if (!event.target.closest("img, button, .switch")) closePreview(); });
+  $("viewerClose").addEventListener("click", closePreview);
+  $("viewerSwitch").querySelector("input").addEventListener("change", (event) => { if (S.preview) change([S.preview.id], event.target.checked); });
 
   // ---- an id button: the preview closes, a search or filter that hides the image is cleared, then its thumbnail
   // scrolls to the middle of the list, flashes twice and takes the keyboard focus ----
@@ -1290,9 +1314,9 @@
     flashTimers.set(tile, setTimeout(() => { tile.classList.remove("flash"); flashTimers.delete(tile); }, 1300));
   }
 
-  // The search and the filters stand aside while the preview is open, and before there is anything to find.
+  // The search and the filters stand aside before there is anything to find.
   function renderSearch() {
-    const hide = !!S.preview || !images().length;
+    const hide = !images().length;
     $("searchBox").hidden = hide;
     $("chips").hidden = hide;
   }
@@ -1312,7 +1336,7 @@
     input.setAttribute("aria-label", t("auto.label"));
   }
 
-  function render() { renderCard(); renderNeeds(); renderPlugin(); renderRefresh(); renderChips(); renderSearch(); renderList(); renderFooter(); }
+  function render() { renderCard(); renderNeeds(); renderPlugin(); renderRefresh(); renderChips(); renderSearch(); renderList(); renderFooter(); renderViewer(); }
 
   $("more").addEventListener("click", () => { S.cardOpen = !S.cardOpen; renderCard(); });
   $("search").addEventListener("input", (event) => { S.query = event.target.value; renderList(); });
