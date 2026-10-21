@@ -4,7 +4,7 @@
 
 <h1 align="center">Context Attachment Manager</h1>
 
-<p align="center"><b>Keep long image chats in Codex and Claude light and fast.</b><br>Iterate on images in one conversation as long as you like. Old images stop riding along with every message, and the model still finds the right one when it needs it.</p>
+<p align="center"><b>Long image chats in Codex and Claude, without the lag.</b><br>The model manages its own images, pulling back only what it needs. And any image you made before is one search away: just describe what you remember.</p>
 
 <p align="center">
   <a href="https://github.com/chipfighter/context-attachment-manager/actions/workflows/ci.yml"><img src="https://github.com/chipfighter/context-attachment-manager/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -29,10 +29,10 @@ So I made a panel that keeps the conversation and drops the weight.
 
 ## What it does
 
-- **Your chat stays light.** Earlier images stop going out with every message. In a 15-image task, a request that carried 24.9 MB went out at 212 KB.
-- **The model fetches what it needs.** When it needs an earlier image, it pulls that one back by itself. Pin the ones that matter, like a character reference, and they go with every message.
-- **It remembers every image.** The model quietly notes what each image shows and what you said about it ("too dark", "best face"). Even far into a long chat, or after the chat is compacted, it picks the right one.
+- **The model manages its own images.** Earlier images stay out of your messages, and when the model needs one, it pulls that one back by itself. Nothing to set up. Pin the ones that matter, like a character reference, and they go with every message.
 - **Find any image by what you remember.** Search "best face" or "rainy night", filter by scene, or browse by turn. Click one to see it full size.
+- **It remembers every image.** The model quietly notes what each image shows and what you said about it ("too dark", "best face"). Even far into a long chat, or after the chat is compacted, it picks the right one.
+- **Your chat stays light.** No more slowdowns or endless reconnecting. In a 15-image task, a request that carried 24.9 MB went out at 212 KB.
 
 ## How to use
 
