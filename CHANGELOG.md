@@ -2,6 +2,20 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.8.2] - 2026-10-21
+
+The model notes where each image is set, not its "scene".
+
+### Changes
+
+- A feature line now starts with the place the picture is set in, such as "study" or "outside the café", instead of the scene. In a film project the model had read "scene" as a scene number and named each image after it and what the image was for, such as "scene 04 café exterior sketch" or "scene 04 café exterior detail check": one task got 28 scene filters for 52 images. Scene numbers, versions and purposes now stay out of the place, and time of day and weather go in the features. An image of several places, such as a storyboard, is noted as "several places"; one set nowhere as what it is: character, object, document or web page.
+- Feature lines already written stay as they are, so a task from before keeps its old scene filters next to the new places.
+
+### Notes
+
+- Tested on Windows with GPT-6 Sol at low effort, in Chinese and English. A new case in the notes self-test uploads images named like `03场_书房_首帧_v2.png` and describes them with the scene number, version and purpose: the places came out as "书房" / "study" and "咖啡店外" / "outside the café", with none of those, and the same place for both images of the study. GPT-6 Luna and Astra gave the same places.
+- With Sol, the placeholder and `need IMG-xxx` self-tests passed in both languages, and so did the notes self-test in Chinese. In English, Sol answered a bare rating with "keep your feedback about the first in mind", which the test counts as mentioning the notes; it said such things now and then in 0.8.0 too. GPT-6 Luna was run but no longer holds a release back: as in 0.8.0, it twice answered a bare rating with the notes only and missed a rating once, and once asked again for an image the user had just checked back.
+
 ## [0.8.1] - 2026-10-21
 
 A fix for the panel's filters.
