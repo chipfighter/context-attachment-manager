@@ -4,7 +4,7 @@
 
 <h1 align="center">Context Attachment Manager</h1>
 
-<p align="center">Choose which past images go to the model with your next message, in Codex and in Claude Desktop, without leaving the conversation.</p>
+<p align="center"><b>Long image chats in Codex and Claude, without the lag.</b><br>The model manages its own images, pulling back only what it needs. And any image you made before is one search away: just describe what you remember.</p>
 
 <p align="center">
   <a href="https://github.com/chipfighter/context-attachment-manager/actions/workflows/ci.yml"><img src="https://github.com/chipfighter/context-attachment-manager/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -17,180 +17,42 @@
 
 <p align="center"><b>English</b> · <a href="README_CN.md">简体中文</a></p>
 
-> **New in 0.8: the model keeps notes on your images, and the panel finds them by what you remember.** In lines you don't see, the model notes what each new image shows and what you said about it ("too dark", "best face"). The placeholders carry these notes, so after a compaction the model still picks the right image. The panel is redone: search by what an image shows or by what you said back then, filter by scene, browse thumbnails by turn, and preview an image across the whole panel. **Earlier:** since 0.7 subagents and side chats in Codex follow Auto-select, since 0.6 Auto-select is on by default and the panel opens by itself in Claude Desktop, since 0.5 your selection survives compaction in Claude Code, and since 0.4 it works in Claude Desktop. Formerly *Codex Attachment Manager*; the project was renamed because it no longer works with Codex alone.
-
 <p align="center">
-  <img src="docs/images/panel.png" alt="Three views of the panel on a task of rainy-night keyframes. Left: the request card, the search box, filters for uploads, generated images and scenes, and the thumbnails by turn, the hand sketch marked Every turn and two images Just fetched. Middle: a search for best face finds the close-up the user called the best face and the turn in which they said it. Right: that close-up previewed across the panel, with its Send every turn checkbox." width="100%">
+  <img src="docs/images/panel.png" alt="Three views of the panel on a task of rainy-night keyframes. Left: the request card, the search box, filters for uploads, generated images and scenes, and the thumbnails by turn. Middle: a search for best face finds the close-up the user called the best face. Right: that close-up previewed across the panel, with its Send every turn checkbox." width="100%">
 </p>
-<p align="center"><sub>The panel on a synthetic task from the development page: the images by turn, a search for what you said, and a preview.</sub></p>
 
-## Why I built this
+## Why I made this
 
-I was iterating on image generation with GPT in Codex. After a dozen or so images, the task started failing: the connection kept dropping, and the retries every few minutes never went through. Digging into it, I found that Codex sends every image in the task's history again with every request, and each request had grown to about 44 MB. The only way out was a new task, which meant losing the conversation.
+I was iterating on images with GPT in Codex. After a dozen or so, the chat started failing: it kept reconnecting and never got through. Every message was sending every image in the conversation again, about 44 MB each time. The only way out was a new chat, and with it, losing everything we had built up.
 
-So I wanted to keep the long conversation going and decide, turn by turn, which images the model still gets. Uncheck the ones you no longer need: from the next message on they become short placeholders, and the task and the conversation stay the same. Claude Code also sends the whole history with every request, so 0.4 brings the same panel to Claude Desktop.
+So I made a panel that keeps the conversation and drops the weight.
 
-Later I ran into the next problem. In a long task, a face close-up from the middle of the conversation came out best, but after a compaction the model took the half-length shot from the start as its face reference: the placeholders said nothing about what each image showed. So in 0.8 the model keeps notes on each image, and the panel lets you find one by what you remember.
+## What it does
 
-## Features
+- **The model manages its own images.** Earlier images stay out of your messages, and when the model needs one, it pulls that one back by itself. Nothing to set up. Pin the ones that matter, like a character reference, and they go with every message.
+- **Find any image by what you remember.** Search "best face" or "rainy night", filter by scene, or browse by turn. Click one to see it full size.
+- **It remembers every image.** The model quietly notes what each image shows and what you said about it ("too dark", "best face"). Even far into a long chat, or after the chat is compacted, it picks the right one.
+- **Your chat stays light.** No more slowdowns or endless reconnecting. In a 15-image task, a request that carried 24.9 MB went out at 212 KB.
 
-- **Every image at a glance**: the panel shows every image in the task (in Codex) or session (in Claude Code) as thumbnails grouped by turn, newest first: the ones you uploaded and the ones the model viewed or generated. Small marks show which go every turn, which the model just fetched and which can't be turned off, and images that won't be sent are gray. Click one to preview it across the panel, with its ID, turn, source and size. In Codex it's a *Context Assets* tab in the side panel; in Claude Desktop it opens in the built-in browser.
-- **Find an image by what you remember** (new in 0.8): type what an image shows or what you said back then ("best face"), or pick a filter: *Uploaded*, *Generated*, or a scene such as *rainy blue night*. PDF pages you commented on in Codex and web page screenshots count as uploads and carry a small corner mark. Searching and filtering change what you see, never what is sent.
-- **The model keeps notes** (new in 0.8): for each new image, the model writes a short line on what it shows, scene first; when you rate an image ("the first one is too dark", even turns later), it notes your words under that image. It writes these lines at the start of its reply as Markdown link definitions, which Codex and Claude Desktop don't display, and doesn't mention them. The placeholders carry the notes, so after a compaction, or many turns later, the model can still tell the images apart and pick the right one. The panel uses them for its search and scenes, and never shows them.
-- **One click to leave an image out**: with Auto-select off, every image is sent until you uncheck *Send* in its preview, or a whole turn with the box at the end of the turn's line. From the next message on, it becomes a short placeholder.
-- **Duplicates handled**: when an identical image is still being sent, the placeholder points to it.
-- **The model knows why**: a note tells the model the images were left out by you to save context, so its earlier answers still stand and it doesn't make up details it can't see.
-- **The model asks, you decide**: when it needs an image, it replies `need IMG-xxx`. A bar at the top of the panel lists what it asked for; click an ID to jump to the image. A checked image goes back to its place in the conversation, marked with its ID.
-- **Or let the model pick** (new in 0.3, on by default since 0.6): *Auto-select* at the bottom of the panel, per task or session. Images from earlier turns are then left out by default, and the model fetches the ones it needs by ID, for that turn only, several at once if it needs several. Images you set to *Send every turn*, such as a reference image, go with every message. New tasks and sessions start with it on; switch it off to choose yourself. The panel marks what the model fetched in the latest turn.
-- **Subagents and side chats too** (new in 0.7, Codex): a side chat you open in a task carries the task's whole history, images included; it goes out with those images as placeholders, except the ones you send every turn, and the model fetches one from the task when the answer needs it. Subagents the model starts without the task's history leave out the images of their own earlier turns and fetch them back the same way. Since 0.8 this is always on; the panel's details show what they saved.
-- **Keeps your choice through compaction** (new in 0.5, Claude Code): when Claude Code compacts a conversation, it stops sending the images from before it. The plugin keeps sending the ones you checked, right after the summary and marked with their IDs, and tells the model about the others, so it can still ask for them or fetch them. The panel marks these images *Before compaction*.
-- **See the savings**: the card at the top estimates the size of the next request and how much you save compared with sending every image; *Show details* adds the last request, the images the model fetched, and subagents and side chats. The panel warns you when a request could not be rewritten.
-- **English and Simplified Chinese**: the panel, the tab name and the note for the model follow Codex's language, or your system's language when Codex isn't installed.
-- **Stays on your machine**: the plugin sends nothing anywhere besides the requests Codex and Claude Code already make to OpenAI and Anthropic.
+## How to use
 
-## How it works
+- **Codex**: open **Context Assets** in a task's side panel.
+- **Claude Desktop**: in the Code tab, the panel opens by itself next to your conversation once there are images. Type `/cam` to bring it back.
 
-- The plugin runs a small local proxy, the engine, between Codex and OpenAI, and between Claude Code and Anthropic. Before a request goes out, the engine swaps unchecked images for placeholders and adds the note; everything else is forwarded as is, including your sign-in.
-- In Codex, installing points Codex at the engine. In Claude Desktop, the plugin points each Claude Code session at the engine when the session starts, and puts it back when the session ends.
-- With Auto-select on, the engine does the same for the images of earlier turns you haven't set to send every turn, and the plugin gives the model one tool, `cam_view_image`, to fetch an image back into the current turn. The placeholders before it stay as they were, so the cached part of the request isn't broken.
-- Since 0.8 the engine also labels each image with its ID in the turn it appears, adds a short note asking the model to keep its notes on images, and puts those notes in the placeholders. The plugin reads the notes from the conversation records on your machine; nothing is stored separately.
-- Selections and the Auto-select switch are saved per task or session. Only you can change them; the model can only fetch an image for one turn, and only with Auto-select on.
-- Codex sends the task a side chat or subagent came from with each of its requests, so the engine leaves out their images as Auto-select does; a side chat's images are looked up in the task it came from.
-- The panel doesn't go through the model and costs no tokens. In Codex it's an MCP app in the side panel; in Claude Desktop the engine serves the same page to the built-in browser, on your machine only.
-
-## Requirements
-
-- **Codex**: the Codex desktop app. Tested on Windows with Codex 26.1013.
-- **Claude Desktop**: the Code tab, local sessions, signed in with your Claude subscription. Tested on Windows with the Claude Code 2.1.299 that Claude Desktop runs.
-- **Other agent apps**: not planned for now. Leaving images out needs the engine between the app and the model API, which only apps that let you change the API address allow, and each app builds its requests and stores its conversation records in its own way, so each would need its own support.
-- macOS and Linux: CI installs the plugin with Codex's own CLI, starts it, and runs the install and uninstall scripts, but nobody has tried it in the desktop apps on these platforms yet. [Issues](https://github.com/chipfighter/context-attachment-manager/issues) welcome.
-- Node: the plugin uses the Node 24 that ships with Codex, and falls back to `node` 24 or later on your PATH. Claude Desktop doesn't ship Node, so without Codex, install [Node 24 or later](https://nodejs.org).
+Then just keep chatting. From the start, the model picks earlier images on its own; to pin one, click it and check **Send every turn**. To choose yourself, turn off **Auto-select** at the bottom of the panel.
 
 ## Install
 
-### In Codex, no terminal
+Paste this to Codex, or to Claude in Claude Desktop's Code tab:
 
-1. On Codex's **Plugins** page, click **Add a marketplace**, enter `chipfighter/context-attachment-manager` as the **Source**, leave the rest empty, and click **Add marketplace**.
-2. Install **Context Attachment Manager** from the list.
-3. Open a task, click **Toggle side panel** at the top right, open a new tab with **+**, and choose **Context Assets** under **Plugins and MCPs**. If it isn't there, restart Codex once.
-4. The panel says the plugin is not enabled yet. Click **Enable plugin**, then restart Codex.
-
-### In Codex, one command
-
-Windows (PowerShell):
-
-```powershell
-irm https://github.com/chipfighter/context-attachment-manager/releases/latest/download/install.ps1 | iex
+```text
+Install the Context Attachment Manager plugin for me, following https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
 ```
 
-macOS and Linux:
-
-```bash
-curl -fsSL https://github.com/chipfighter/context-attachment-manager/releases/latest/download/install.sh | sh
-```
-
-The command installs the plugin with Codex's own CLI and sets up the proxy. Restart Codex afterwards. Run it again later to upgrade.
-
-What installing changes in Codex:
-
-- Adds a marked proxy block to `~/.codex/config.toml`, after backing the file up.
-- If a proxy is set in your environment variables, adds a marked `NO_PROXY` block with local addresses only to `~/.codex/.env`.
-- Nothing else. If you have set `openai_base_url` yourself, installing stops without writing anything.
-
-### In Claude Desktop
-
-Claude Desktop installs plugins only from marketplaces you have added, and adding one from GitHub takes the `claude` command, Claude Code's command line ([setup guide](https://code.claude.com/docs/en/setup)). Once:
-
-```bash
-claude plugin marketplace add chipfighter/context-attachment-manager
-```
-
-```bash
-claude plugin install codex-attachment-manager@codex-attachment-manager
-```
-
-Instead of the second command, you can also install it in the Code tab: click **+** next to the prompt box, choose **Plugins**, then **Add plugin**, pick **Context Attachment Manager**, and install it for your user account. The install ID keeps the project's old name.
-
-Then start a new session in the Code tab. There is nothing to set up: the plugin doesn't edit any settings, and only points that session's own Claude Code process at the engine while it runs.
-
-## Usage
-
-### In Codex
-
-1. Open **Context Assets** in the side panel of a task. On a new chat you can open it before the first message; it switches to the task once you send.
-2. New tasks start with **Auto-select** on (at the bottom of the panel): images from earlier turns are left out, and the model fetches the ones it needs. For an image that should go every turn, such as a reference image, click it and check **Send every turn** in the preview; the box at the end of a turn's line does this for the whole turn. Each change is saved at once and applies from the next message.
-3. To choose yourself, switch Auto-select off: every image then goes unless you uncheck **Send** in its preview, or a turn's box. Images that won't be sent are gray. When the model replies `need IMG-xxx` for one of them, a bar at the top of the panel lists it; click the ID to jump to the image, open it and check **Send**. Switching Auto-select on again brings back your send-every-turn choices, and off again your own checks.
-4. To find an image, type in the search box what it shows or what you said in that turn, or pick a filter: **Uploaded**, **Generated** or a scene. A turn's box then covers only the images shown.
-5. The card at the top estimates the next request. **Show details** adds the last request, the images the model fetched in the latest turn and, once there are any, how much the task's subagents and side chats saved.
-6. Tasks you had before installing 0.6 keep their own Auto-select setting.
-
-### In Claude Desktop
-
-1. Once a session in the Code tab has images, the panel opens by itself in Claude Desktop's built-in browser, next to the conversation. When you have been away from a session for about 30 minutes, Claude Desktop closes its built-in browser; the panel opens again with your next message. If you close it yourself, it stays closed in that session until you type `/cam` and send it, which opens it any time. If `/cam` is your first message in a new session, the prompt box may say the command doesn't exist: send it anyway. Claude Desktop starts the session when you send your first message, and the plugin adds `/cam` then.
-2. From there it works as in Codex: new sessions start with **Auto-select** on; send images every turn, search and filter, or switch it off to leave images out yourself and answer `need IMG-xxx`. Changes apply from the next message.
-3. With Auto-select on, the model's `cam_view_image` calls don't ask for your permission, unless your own Claude Code settings or hooks say otherwise.
-
-If the built-in browser can't be used (in the terminal, for example), `/cam` shows a small pane with a link to the panel instead.
-
-## Uninstall
-
-### Codex
-
-Disable first, then remove: click **Disable plugin** in the panel, remove the plugin on the **Plugins** page, and restart Codex.
-
-Or run the uninstall command. It restores the direct connection and removes the plugin, and it works even when the plugin files are gone:
-
-Windows (PowerShell):
-
-```powershell
-irm https://github.com/chipfighter/context-attachment-manager/releases/latest/download/uninstall.ps1 | iex
-```
-
-macOS and Linux:
-
-```bash
-curl -fsSL https://github.com/chipfighter/context-attachment-manager/releases/latest/download/uninstall.sh | sh
-```
-
-**If Codex can't connect** and its errors mention `localhost:17891` (for example, the plugin was removed without disabling it first), run the uninstall command above and restart Codex. On macOS and Linux the engine also restores the direct connection by itself once the plugin is removed or turned off, from the next start of Codex.
-
-### Claude Desktop
-
-Uninstall it with **Manage plugins** under **+** → **Plugins** in the Code tab, or with `claude plugin uninstall codex-attachment-manager@codex-attachment-manager`. New sessions then connect directly; there is nothing to restore.
-
-Your selections and logs stay in the data folder (see [Privacy](#privacy)); delete it if you don't need them.
-
-## Good to know
-
-- Only images are managed, because they are the only files that reach the model as they are. Codex doesn't send PDFs or videos themselves, only text the model extracts from them or images it makes of them, and those images are listed like any other. Audio waits for a model that accepts it: until then, Codex replaces audio with a short note before sending.
-- Results of Codex's built-in image generation can't be unchecked.
-- With Auto-select on, each image the model fetches adds a request to that turn. Smaller models may misread small details in an image they fetched: in our tests GPT-6 Luna at low effort sometimes did, as it does with images opened with Codex's own image viewer, while GPT-6 Sol and Astra read them right. Set an image whose details matter to send every turn, or use a larger model.
-- **The model's notes** are lines like `[//]: # (cam IMG-015 rainy blue night | close-up, facing the camera)` at the start of its reply. Codex and Claude Desktop don't display them; a place that shows the raw reply may (Claude Code in a terminal is not checked yet). In Codex with Auto-select off, notes start once you uncheck an image: until then the plugin leaves the task's requests alone, so they stay on WebSocket. Images from before 0.8 get no notes, and neither do subagents and side chats. Smaller models sometimes miss a rating: in our tests GPT-6 Luna at low effort did, more often in English.
-- **Claude accounts created on or after August 31, 2026** check the model's earlier thinking against the conversation before it. To leave an image out on such an account, the engine also leaves out the earlier thinking that no longer matches the conversation as sent, so the model may think again and use more tokens; the panel tells you each time. Thinking from after the change is kept, and checking the image again brings back the thinking from before. Since 0.8 this also happens once in the turn where a session's first image comes in, because the engine adds its note for the model there. Older accounts aren't affected.
-- **After a compaction in Claude Code**, the images you keep checked from before it go out with every request and take up context like any other, but Claude Code's own context meter doesn't count them. If requests get large or Claude Code compacts again soon, uncheck some or switch on Auto-select: the plugin doesn't decide this for you. Anthropic limits each request to 100 images for models with a 200k-token context window (600 for others), each up to 8000 px (with more than 20 images a stricter limit applies; under 2000 px is safe), and 32 MB in all.
-- In Claude Code, the main conversation is managed; subagents keep their own history as it is. Sessions that use another API address or a cloud provider (Bedrock, Vertex, Foundry) are left alone.
-- In Codex, a subagent started with the task's history follows the task's checks, as a forked task does. Images a subagent reads during one long turn all stay in that turn, as Auto-select keeps the current turn's images; they are left out from its next turn.
-- If you uncheck an image while a Codex turn is still running over WebSocket, the rest of that turn still carries the original. The panel tells you; the change applies from the next message.
-- In Codex, enabling, disabling and upgrading take effect after you restart Codex. In Claude Desktop, a new plugin version takes effect in new sessions: upgrade with `claude plugin marketplace update codex-attachment-manager`, then `claude plugin update codex-attachment-manager@codex-attachment-manager`.
-- After you switch Codex's language, the panel changes right away and the note for the model changes from the next message, but the tab name in the side panel changes only after a restart.
-- Right after Codex starts, the engine may restart a few times and you may see "Reconnecting" once.
-- The engine goes through your system proxy: on Windows it reads the system setting, on macOS it supports HTTP(S) proxies only (no PAC or SOCKS), and on Linux it reads `HTTPS_PROXY` and similar variables.
+Then restart Codex, or start a new session in Claude. To install or uninstall it yourself, see [INSTALL.md](INSTALL.md).
 
 ## Privacy
 
-- All data stays in a local folder: `%USERPROFILE%\.codex-attachment-manager` on Windows, `~/Library/Application Support/codex-attachment-manager` on macOS, `~/.local/share/codex-attachment-manager` on Linux. It holds your selections, request statistics (sizes and counts only, never content), hashes the engine uses to tell which thinking still matches (never content), logs (no conversation content or credentials) and the backup of `config.toml`.
-- Besides the requests Codex and Claude Code already send to OpenAI and Anthropic, the plugin sends nothing anywhere.
-- The conversation records of Codex and Claude Code are only read, never modified.
+Everything stays on your computer. The plugin sends nothing anywhere beyond the requests Codex and Claude already make.
 
-## Development
-
-- `plugin/` is the plugin itself: the MCP server, the engine, the panel and the `cam` command line (runtime code in `plugin/src`). The Claude plugin is `.claude-plugin/` plus the mod in `hooks/`. `spike/` holds the tests and experiments, `scripts/` the one-line install and uninstall scripts, and `docs/` the spec and the technical design (in Chinese; start with [docs/spec.md](docs/spec.md)). The development records of v0.1 are in `docs/history/v0.1/`.
-- Install from source into your Codex: quit Codex, run `cam install` in the repository (`./cam install` on macOS and Linux), then start Codex. `cam status` shows the installation, `cam uninstall` removes it.
-- Run the tests with Node 24 or later: `cd spike && node --test`. CI runs them on Windows, macOS and Linux, then installs the plugin with Codex's CLI and runs the install and uninstall scripts.
-- Work on the panel without Codex: `node spike/scripts/panel-dev.ts`, then open `http://127.0.0.1:17895/?solo=1`, or `?solo=1&thread=v08` for a task with the model's notes (add `&lang=en` for English). The page uses synthetic images and a temporary Codex folder, so your real data is never read or changed.
-- When you change the text the model sees (`plugin/src/rewrite.ts`), run the self-tests in `spike/src/v01-placeholder-selftest.ts` and `spike/src/v01-needs-selftest.ts`, and for Auto-select's wording `spike/src/v03-auto-selftest.ts`, in Chinese and with `--lang en`; `spike/src/v07-children-selftest.ts` covers subagents and side chats, and `spike/src/v08-features-selftest.ts` the model's notes, including after a compaction. They start their own engine and app-server, use your Codex account, and archive the test tasks they create.
-- Release notes: [CHANGELOG.md](CHANGELOG.md).
-
-## License
-
-[MIT](LICENSE)
+<p align="center"><sub><a href="CHANGELOG.md">Changelog</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a></sub></p>
