@@ -18,6 +18,10 @@
 <p align="center"><a href="README.md">English</a> · <b>简体中文</b></p>
 
 <p align="center">
+  <img src="docs/images/loop-zh.gif" alt="面板上是一个古装短剧关键帧的任务。打开自动选图，之前的图一张张变灰，下一条请求从 7.5 MB 降到 1.7 MB，省 77%。" width="100%">
+</p>
+
+<p align="center">
   <img src="docs/images/hero-zh.png" alt="面板的三个画面，任务是古装短剧的关键帧。自动选图：模型自己管理图片，卡片显示下一条请求约 1.7 MB，全部发送要 7.5 MB。凭印象找图：搜索“最好”，找到三轮前用户说脸最好的那张特写。预览：这张特写的大图。" width="100%">
 </p>
 
