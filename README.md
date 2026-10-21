@@ -18,7 +18,7 @@
 <p align="center"><b>English</b> · <a href="README_CN.md">简体中文</a></p>
 
 <p align="center">
-  <img src="docs/images/panel.png" alt="Three views of the panel on a task of rainy-night keyframes. Left: the request card, the search box, filters for uploads, generated images and scenes, and the thumbnails by turn. Middle: a search for best face finds the close-up the user called the best face. Right: that close-up previewed across the panel, with its Send every turn checkbox." width="100%">
+  <img src="docs/images/hero.png" alt="Three views of the panel on a task of period-drama keyframes. Auto-select: the model manages its own images, and the card shows the next request at 1.7 MB instead of 7.5 MB. Search: typing best face finds the close-up the user called the best face three turns ago. Preview: that close-up shown full size." width="100%">
 </p>
 
 ## Why I made this

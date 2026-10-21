@@ -1,7 +1,9 @@
 // Purpose: P4 — develop and screenshot the panel without Codex. Serves a page that plays Codex's side panel (the
 // MCP Apps host side of the bridge) around the real panel.html, and answers its tool calls with the real plugin
 // server code over a synthetic thread of test images (no user material).
-// Input: none; `node spike/scripts/panel-dev.ts [--port 17895]`. Output: http://127.0.0.1:<port>/
+// Input: none; `node spike/scripts/panel-dev.ts [--port 17895] [--images <folder>]`. Output: http://127.0.0.1:<port>/
+// --images swaps the drawn keyframes of ?thread=v08 for real ones from a folder kept out of the repository (local/):
+// reference.png, rain-1.png … rain-7.png, warm-1.png … warm-4.png, sketch.png, whichever are there.
 // (?theme=dark, ?solo=1 for the panel alone, ?demo=preview|disabled for a state to screenshot, ?slow=1 for slow calls,
 // ?stats=none|skipped|websocket for other engine statistics than a normal rewritten request, ?setup=off for a Codex that
 // does not go through the engine yet, ?demo=disabled for right after 停用插件, ?thread=fresh for a task with no rollout;
@@ -17,7 +19,7 @@
 // Everything is written to a temporary folder, including a Codex home of its own: nothing in the user's Codex home is
 // read or changed, whatever is clicked.
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -156,11 +158,14 @@ const keyframe = (sky: number[], glow: number[], size: "wide" | "medium" | "clos
   return (x * 7 + y * 13) % 89 === 0 ? glow : [sky[0] + y / 14, sky[1] + y / 16, sky[2] + y / 12].map(Math.round);
 });
 const NIGHT = [14, 24, 60], NEON = [255, 80, 180], WARM = [96, 52, 30], LAMP = [255, 205, 120];
-const reference = keyframe([200, 200, 205], [200, 200, 205], "medium");
+const images = process.argv.includes("--images") ? process.argv[process.argv.indexOf("--images") + 1] : "";
+const real = (name: string, drawn: Buffer) => (images && existsSync(join(images, name)) ? readFileSync(join(images, name)) : drawn);
+const reference = real("reference.png", keyframe([200, 200, 205], [200, 200, 205], "medium"));
 const rain = [keyframe(NIGHT, NEON, "medium", 0.66, true), keyframe(NIGHT, NEON, "wide"), keyframe(NIGHT, NEON, "close", 0.62), keyframe(NIGHT, NEON, "close"),
-  keyframe(NIGHT, NEON, "medium", 0.7), keyframe(NIGHT, NEON, "wide", 0.4), keyframe(NIGHT, NEON, "close", 0.48)];
-const warm = [keyframe(WARM, LAMP, "medium", 0.4), keyframe(WARM, LAMP, "close", 0.45), keyframe(WARM, LAMP, "wide", 0.3), keyframe(WARM, LAMP, "wide", 0.55)];
-const sketch = png(480, 480, (x, y) => ((Math.abs((x - 300) ** 2 + (y - 200) ** 2 - 60 ** 2) < 400 || Math.abs(x - y * 0.4 - 120) < 2 || (y > 300 && Math.abs(y - 300 - Math.abs(x - 300) * 0.3) < 2)) ? [70, 70, 80] : [248, 246, 240]));
+  keyframe(NIGHT, NEON, "medium", 0.7), keyframe(NIGHT, NEON, "wide", 0.4), keyframe(NIGHT, NEON, "close", 0.48)].map((drawn, i) => real(`rain-${i + 1}.png`, drawn));
+const warm = [keyframe(WARM, LAMP, "medium", 0.4), keyframe(WARM, LAMP, "close", 0.45), keyframe(WARM, LAMP, "wide", 0.3), keyframe(WARM, LAMP, "wide", 0.55)]
+  .map((drawn, i) => real(`warm-${i + 1}.png`, drawn));
+const sketch = real("sketch.png", png(480, 480, (x, y) => ((Math.abs((x - 300) ** 2 + (y - 200) ** 2 - 60 ** 2) < 400 || Math.abs(x - y * 0.4 - 120) < 2 || (y > 300 && Math.abs(y - 300 - Math.abs(x - 300) * 0.3) < 2)) ? [70, 70, 80] : [248, 246, 240])));
 const ask = (id: string, turnId: string, text: string, files: Array<[string, Buffer]> = []) => line("response_item", {
   type: "message", id, role: "user",
   content: [{ type: "input_text", text }, ...files.flatMap(([name, bytes], i) => [
