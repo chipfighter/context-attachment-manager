@@ -10,7 +10,10 @@
 // Thread F: an upload; an upload and an image opened with the image viewer; the user's ratings; a question about all
 // three, answered from their placeholders. Thread K: a character's medium shot; two other assets; the close-up the user
 // calls the best; a compaction; which image to take for the facial features; what the other two look like.
-// Input: [--label name] [--lang zh|en] [--port 17893] [--threads F,K]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
+// Thread P (user 2026-10-21): uploads whose file names and the user's words carry a scene number, a version and what the
+// image is for ("03场_书房_首帧_v2.png"), as in a user's MV task where GPT-6 copied them into the scene; the first part of
+// each feature line must be the place alone, the same place for the two images of the study.
+// Input: [--label name] [--lang zh|en] [--port 17893] [--threads F,K,P]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
 // Output: local/v08/features-<label>.json (synthetic images only).
 
 import { spawn } from "node:child_process";
@@ -22,6 +25,7 @@ import { AppServer, findBundledCodex } from "./appserver.ts";
 import { codexHome } from "../../plugin/src/codexconfig.ts";
 import { engineHealth } from "../../plugin/src/engine.ts";
 import { languageFileOf, rememberLang, type Lang } from "../../plugin/src/language.ts";
+import { sceneOf } from "../../plugin/src/notes.ts";
 import { loadThreadIndex } from "../../plugin/src/thread-index.ts";
 import { archiveThreads, CORNER_IMAGES, png, runTurn, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 
@@ -63,6 +67,11 @@ const SCRIPT = {
     face: "接下来要给这个角色做五官参考，之前哪张图最合适？说出它的编号和理由。",
     others: "压缩之前我给过你两张别的素材，各是什么样的？不要调用任何工具。",
     otherWords: [/红/, /蓝/],
+    // Thread P: the file names and the words that bait a scene number, a version and a purpose into the place.
+    baitFiles: ["03场_书房_首帧_v2.png", "03场_书房_线稿_v3.png", "03场_咖啡店外_尾帧_v1.png"],
+    studyFrame: "这是第三场书房的首帧 v2，简单看一下。",
+    sketchAndStreet: "这是同一场书房的线稿 v3，还有咖啡店外的尾帧 v1，简单看一下。",
+    notPlace: /\d|场|帧|线稿|草图|检查|参考|版/,
     // An acknowledgement such as "记下了" (sol, 2026-10-19) counts as mentioning the noting.
     talksAboutIt: /记录|记下|记住|已记|之后会参考|以后会参考|后续参考|会按这|特征行|cam\b|\[\/\/\]/,
   },
@@ -79,6 +88,10 @@ const SCRIPT = {
     face: "Next I want a reference for the character's facial features. Which earlier image fits best? Give its ID and why.",
     others: "Before the compaction I gave you two other assets. What does each look like? Do not call any tools.",
     otherWords: [/red/i, /blue/i],
+    baitFiles: ["scene03_study_first-frame_v2.png", "scene03_study_sketch_v3.png", "scene03_cafe-exterior_last-frame_v1.png"],
+    studyFrame: "This is the first frame of scene 3, in the study, version 2. Take a quick look.",
+    sketchAndStreet: "Here is the sketch of the same study scene, version 3, and the last frame outside the café, version 1. Take a quick look.",
+    notPlace: /\d|scene|frame|sketch|draft|check|reference|version|\bv\d/i,
     talksAboutIt: /\bnot(?:e|ing)\b.*\b(?:line|feature|record)|feature line|record line|\bnoted\b|\bin mind\b|\bremember|refer to (?:this|it|these|them) later|\bcam\b|\[\/\/\]/i,
   },
 };
@@ -93,7 +106,7 @@ async function main(): Promise<void> {
   const label = option("--label", "run1");
   const lang: Lang = option("--lang", "zh") === "en" ? "en" : "zh";
   const port = Number(option("--port", "17893"));
-  const only = option("--threads", "F,K").split(",");
+  const only = option("--threads", "F,K,P").split(",");
   const words = SCRIPT[lang];
   const root = join(localRoot, "v08");
   const data = join(root, `data-${label}`);
@@ -103,6 +116,8 @@ async function main(): Promise<void> {
   for (const [name, draw] of Object.entries(CORNER_IMAGES)) writeFileSync(join(work, name), draw());
   writeFileSync(join(work, "m.png"), medium());
   writeFileSync(join(work, "f.png"), closeUp());
+  // Thread P: three different images under the bait names (the same bytes twice would be a duplicate).
+  [medium(), closeUp(), CORNER_IMAGES["a.png"]()].forEach((bytes, i) => writeFileSync(join(work, words.baitFiles[i]), bytes));
   // What the panel would have told the plugin: Codex shows this language.
   rememberLang(lang, "codex", languageFileOf(data));
   const sessionsDir = join(codexHome(), "sessions");
@@ -188,6 +203,13 @@ async function main(): Promise<void> {
         turns.others = await turn(id, words.others);
         return { threadId: id, turns, compaction, facePlaceholders: placeholdersSince(turns.face.since), ...notesOf(id) };
       },
+      P: async () => {
+        const id = await start("P");
+        const turns: Json = {};
+        turns.studyFrame = await turn(id, words.studyFrame, [words.baitFiles[0]]);
+        turns.sketchAndStreet = await turn(id, words.sketchAndStreet, words.baitFiles.slice(1));
+        return { threadId: id, turns, ...notesOf(id) };
+      },
     };
     for (const name of only) if (threads[name]) result.threads[name] = await threads[name]();
   } finally {
@@ -198,6 +220,7 @@ async function main(): Promise<void> {
 
   const F = result.threads.F ?? null;
   const K = result.threads.K ?? null;
+  const P = result.threads.P ?? null;
   const idOf = (thread: Json, name: string) => (thread.images ?? []).find((image: Json) => image.name === name)?.id ?? null;
   const lined = (thread: Json, id: string | null) => !!id && !!thread.notes?.[id]?.line;
   const rated = (thread: Json, id: string | null) => !!id && (thread.notes?.[id]?.ratings ?? []).length > 0;
@@ -226,6 +249,12 @@ async function main(): Promise<void> {
       placeholdersCarryFeatures: ["m.png", "a.png", "b.png", "f.png"].every((name) => (K.facePlaceholders ?? []).some((text: string) => text.includes(idOf(K, name) ?? "?") && /特征：|Features: /.test(text))),
       picksCloseUp: !!idOf(K, "f.png") && (K.turns.face.visible ?? "").includes(idOf(K, "f.png")),
       recallsOthers: words.otherWords.every((pattern) => pattern.test(K.turns.others.visible ?? "")),
+    } : {}),
+    ...(P ? {
+      pLinesForAll: words.baitFiles.every((name) => lined(P, idOf(P, name))),
+      // The place alone: no scene number, version or purpose from the file names or the user's words.
+      placesClean: words.baitFiles.every((name) => { const place = sceneOf(P.notes?.[idOf(P, name) ?? ""]?.line ?? null); return !!place && !words.notPlace.test(place); }),
+      samePlace: sceneOf(P.notes?.[idOf(P, words.baitFiles[0]) ?? ""]?.line ?? null) === sceneOf(P.notes?.[idOf(P, words.baitFiles[1]) ?? ""]?.line ?? null),
     } : {}),
   };
   mkdirSync(root, { recursive: true });
