@@ -2,6 +2,18 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.8.1] - 2026-10-21
+
+A fix for the panel's filters.
+
+### Fixes
+
+- The filters take at most two rows. In a long task where the model named many scenes, the filter buttons filled most of the panel and left a small strip for the thumbnails. The ones that don't fit now fold into *N more* at the end of the second row, which shows them all. The filter you picked always stays in view, and picking one from the full list folds them again.
+
+### Notes
+
+- Checked in the panel's development page with a synthetic task of 28 scenes, in Chinese and English, light and dark, and down to a 260-pixel-wide panel. Not yet checked in Codex or Claude Desktop with a real task.
+
 ## [0.8.0] - 2026-10-20
 
 The model keeps notes on your images, and the panel finds them by what you remember.

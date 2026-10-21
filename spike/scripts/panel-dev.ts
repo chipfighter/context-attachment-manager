@@ -13,7 +13,7 @@
 // ?demo=filter for the filter bar open with PDF pages picked, ?demo=filtered for the same folded away, v0.2;
 // ?thread=auto for the same task with automatic selection on, IMG-002 pinned and a last turn in which the model fetched
 // IMG-004 and IMG-007, v0.3; ?thread=v08 for keyframes of one character in two scenes with the model's feature lines,
-// and ?thread=v08m for the same in manual mode, v0.8).
+// and ?thread=v08m for the same in manual mode, v0.8; ?thread=scenes for 28 scenes, more filters than two rows hold).
 // The demo task has a name, as if the user had renamed it in Codex (v0.1-9). Its last two turns (v0.2) hold comments on
 // a PDF and on a web page, as Codex desktop attaches them, and an image a tool returned.
 // Everything is written to a temporary folder, including a Codex home of its own: nothing in the user's Codex home is
@@ -265,11 +265,34 @@ for (const [auto, manual, w] of V08_TASKS) {
   writeFileSync(join(day, `rollout-2026-09-24T13-30-00-${manual}.jsonl`), line("session_meta", { id: manual }) + v08Story(w) + say(w.needs, "v7"));
 }
 
+// ?thread=scenes (user 2026-10-21): 40 generated keyframes over 10 turns, automatic selection on, the model naming
+// nearly every image's scene after the place and what the image is for, as GPT-6 did in a user's MV task: 28 scenes,
+// more filters than two rows hold.
+const SCENES = `${THREAD.slice(0, -4)}a084`;
+const PLACES = [["厨房", WARM, LAMP], ["街角", NIGHT, NEON], ["天台", [70, 110, 160], [255, 255, 255]], ["书店", [90, 70, 50], LAMP]] as const;
+const PURPOSES = ["线稿", "首帧", "尾帧", "局部核对", "运镜检查", "构图草图v2", "构图草图v3"];
+const SIZES = [["medium", "中景"], ["close", "近景"], ["wide", "远景"], ["medium", "中景"]] as const;
+let scenesLog = line("session_meta", { id: SCENES });
+for (let k = 0; k < 10; k++) {
+  const id = `s${k + 1}`;
+  const lines: string[] = [];
+  scenesLog += turn(id) + ask(`msg_${id}`, id, `第三场再出四张${PURPOSES[k % 7]}。`);
+  PLACES.forEach(([place, sky, glow], j) => {
+    const n = k * 4 + j + 1;
+    const [size, word] = SIZES[(k + j) % 4];
+    scenesLog += made(`gs${n}`, `s-${n}.png`, keyframe([...sky], [...glow], size, 0.3 + ((n * 37) % 40) / 100), `${place} ${PURPOSES[k % 7]} ${word}`);
+    lines.push(`[//]: # (cam IMG-${String(n).padStart(3, "0")} 03场${place}${PURPOSES[k % 7]}｜${word}，人物侧身，${place}背景)`);
+  });
+  scenesLog += say(`${lines.join("\n")}\n\n四张都好了。`, id);
+}
+writeFileSync(join(day, `rollout-2026-09-24T14-00-00-${SCENES}.jsonl`), scenesLog);
+
 // Their names, as Codex keeps them next to the sessions folder (the panel's title).
 writeFileSync(join(root, "session_index.jsonl"), `${JSON.stringify({ id: THREAD, thread_name: "海报配色调整", updated_at: "2026-09-24T10:00:00Z" })}
 ${JSON.stringify({ id: MANY, thread_name: "产品图批量修图", updated_at: "2026-09-24T12:00:00Z" })}
 ${JSON.stringify({ id: AUTO, thread_name: "海报配色调整", updated_at: "2026-09-24T10:30:00Z" })}
 ${V08_TASKS.flatMap(([auto, manual, w]) => [auto, manual].map((id) => JSON.stringify({ id, thread_name: w.name, updated_at: "2026-09-24T13:00:00Z" }))).join("\n")}
+${JSON.stringify({ id: SCENES, thread_name: "宣传片第三场", updated_at: "2026-09-24T14:00:00Z" })}
 `);
 
 // New tasks the user starts after opening the panel on a new chat (?newtask=): Codex files them in today's folder.
@@ -315,6 +338,7 @@ for (const [auto, manual] of V08_TASKS) {
   callTool("cam_set_selection", { auto: false }, metaOf(manual), sessionsDir);
   callTool("cam_set_selection", { uncheck: ["IMG-003", "IMG-008", "IMG-009"] }, metaOf(manual), sessionsDir);
 }
+callTool("cam_set_selection", { auto: true }, metaOf(SCENES), sessionsDir);
 
 // What the engine would have recorded: the last full request came in turn 3 (turn 4's images are new since) and had
 // IMG-001, IMG-005 and IMG-006 replaced. ?stats=skipped|websocket|none shows the other cases.
@@ -401,7 +425,7 @@ const HOST = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><tit
   const fresh = params.get("thread") === "fresh" ? Math.random().toString(16).slice(2, 6).padEnd(4, "0") : null;
   // ?thread=v08 and v08m with ?lang=en: the same task in English.
   const english = params.get("thread")?.startsWith("v08") && params.get("lang") === "en" ? "&en=1" : "";
-  const query = fresh ? "?fresh=" + fresh : ["gap", "many", "auto", "v08", "v08m"].includes(params.get("thread")) ? "?" + params.get("thread") + "=1" + english : "";
+  const query = fresh ? "?fresh=" + fresh : ["gap", "many", "auto", "v08", "v08m", "scenes"].includes(params.get("thread")) ? "?" + params.get("thread") + "=1" + english : "";
   const call = (name, args) => fetch("/call" + query, { method: "POST", body: JSON.stringify({ name, arguments: args }) }).then((r) => r.json());
   window.addEventListener("message", async (event) => {
     const m = event.data;
@@ -473,8 +497,9 @@ createServer((request, response) => {
       const auto = new URL(request.url, "http://x").searchParams.has("auto");
       const v08 = new URL(request.url, "http://x").searchParams.has("v08");
       const v08m = new URL(request.url, "http://x").searchParams.has("v08m");
+      const scenes = new URL(request.url, "http://x").searchParams.has("scenes");
       const [v08Task, v08mTask] = V08_TASKS[new URL(request.url, "http://x").searchParams.has("en") ? 1 : 0];
-      const threadMeta = fresh && /^[0-9a-f]{4}$/.test(fresh) ? { threadId: freshId, thread_id: freshId } : gap ? { threadId: GAP, thread_id: GAP } : many ? manyMeta : auto ? autoMeta : v08 ? metaOf(v08Task) : v08m ? metaOf(v08mTask) : meta;
+      const threadMeta = fresh && /^[0-9a-f]{4}$/.test(fresh) ? { threadId: freshId, thread_id: freshId } : gap ? { threadId: GAP, thread_id: GAP } : many ? manyMeta : auto ? autoMeta : v08 ? metaOf(v08Task) : v08m ? metaOf(v08mTask) : scenes ? metaOf(SCENES) : meta;
       try { reply(200, "application/json", JSON.stringify(callTool(name, args ?? {}, threadMeta, sessionsDir))); }
       catch (error) { reply(200, "application/json", JSON.stringify({ isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }] })); }
     });
