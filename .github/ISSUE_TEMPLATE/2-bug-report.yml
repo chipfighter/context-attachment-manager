@@ -1,12 +1,12 @@
-name: 问题反馈 / Bug report
-description: 插件装不上、面板打不开、Codex 或 Claude 连不上，或者结果不对 / Something does not work
+name: 技术问题报告 / Bug report (technical)
+description: 给熟悉命令行的人：附上版本、安装状态和日志 / For developers, with versions, install status and logs
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        谢谢反馈。macOS 和 Linux 还没有人实测过，这两个平台上的任何问题都很有用。
-        Thanks! macOS and Linux have not been tested by hand yet, so reports from them help a lot.
+        谢谢反馈。这个模板要填版本、安装状态和日志；不熟悉命令行的话，用「用着有问题」那个模板就行。
+        Thanks! This one asks for versions, install status and logs. Not into the command line? Use "Something's not right" instead.
 
         **Codex 连不上时 / If Codex cannot connect:** 先运行卸载命令恢复直连（见 INSTALL.md 的 Uninstall），再来提问题。
         Run the uninstall command from INSTALL.md first to restore the direct connection.
