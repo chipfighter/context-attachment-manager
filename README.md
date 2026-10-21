@@ -30,7 +30,7 @@ So I made a panel that keeps the conversation and drops the weight.
 ## What it does
 
 - **The model manages its own images.** Earlier images stay out of your messages, and when the model needs one, it pulls that one back by itself. Nothing to set up. Pin the ones that matter, like a character reference, and they go with every message.
-- **Find any image by what you remember.** Search "best face" or "rainy night", filter by scene, or browse by turn. Click one to see it full size.
+- **Find any image by what you remember.** Search "best face" or "rainy night", filter by place, or browse by turn. Click one to see it full size.
 - **It remembers every image.** The model quietly notes what each image shows and what you said about it ("too dark", "best face"). Even far into a long chat, or after the chat is compacted, it picks the right one.
 - **Your chat stays light.** No more slowdowns or endless reconnecting. In a 15-image task, a request that carried 24.9 MB went out at 212 KB.
 
