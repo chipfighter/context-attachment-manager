@@ -1,0 +1,30 @@
+name: 用着有问题 / Something's not right
+description: 不用懂技术，用自己的话说说看到了什么 / No tech knowledge needed, just tell us what you saw
+body:
+  - type: markdown
+    attributes:
+      value: |
+        不用懂技术，用自己的话说就行。截图可以直接粘贴到下面的框里。
+        No tech knowledge needed. Tell us in your own words, and paste screenshots straight into the boxes below.
+
+        **Codex 连不上了？/ Codex can't connect?** 按 [INSTALL.md](https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md#uninstall) 里的卸载步骤做一遍，Codex 就恢复正常了，再回来告诉我们。
+        Follow the uninstall steps in [INSTALL.md](https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md#uninstall) and Codex works again. Then come back and tell us.
+  - type: dropdown
+    id: app
+    attributes:
+      label: 在哪里用 / Where are you using it
+      options: [Codex, Claude 桌面版 / Claude Desktop]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么 / What happened
+      description: 你在做什么，哪里不对。有截图最好。/ What you were doing and what went wrong. Screenshots help a lot.
+    validations:
+      required: true
+  - type: dropdown
+    id: computer
+    attributes:
+      label: 电脑 / Computer
+      options: [Windows, Mac, Linux, 不清楚 / Not sure]
