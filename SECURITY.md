@@ -16,4 +16,4 @@ The plugin runs a local proxy (the engine) between Codex and OpenAI, and on inst
 
 - The engine accepts connections from other machines, or forwards requests anywhere other than OpenAI.
 - Credentials or conversation content end up in logs or in the data directory.
-- The install or uninstall scripts change more than the README says.
+- The install or uninstall scripts change more than INSTALL.md says.

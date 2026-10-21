@@ -8,8 +8,8 @@ body:
         谢谢反馈。macOS 和 Linux 还没有人实测过，这两个平台上的任何问题都很有用。
         Thanks! macOS and Linux have not been tested by hand yet, so reports from them help a lot.
 
-        **Codex 连不上时 / If Codex cannot connect:** 先运行卸载命令恢复直连（见 README 的“卸载”），再来提问题。
-        Run the uninstall command from the README first to restore the direct connection.
+        **Codex 连不上时 / If Codex cannot connect:** 先运行卸载命令恢复直连（见 INSTALL.md 的 Uninstall），再来提问题。
+        Run the uninstall command from INSTALL.md first to restore the direct connection.
         **Claude 连不上时 / If Claude Code cannot connect:** 卸载 Claude 插件后，新会话会直接连接。
         Uninstall the Claude plugin; new sessions then connect directly.
   - type: dropdown
