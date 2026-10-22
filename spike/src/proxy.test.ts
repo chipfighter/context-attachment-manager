@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import zlib from "node:zlib";
-import { claudeIdentity, describeBody, forwardHeaders, hasUnchecked, hasUnsafeInteger, imageSizesOf, macProxy, needsRewrite, outboundProxy, redactImages, rewriteBody, requestIdentity, upstreamOf } from "../../plugin/src/proxy.ts";
+import { claudeIdentity, describeBody, forwardHeaders, hasUnchecked, hasUnsafeInteger, imageSizesOf, macProxy, needsRewrite, outboundProxy, redactImages, rewriteBody, requestIdentity, routeOf, upstreamOf } from "../../plugin/src/proxy.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
 import { png } from "./testkit.ts";
 
@@ -174,6 +174,22 @@ test("Claude Code's /v1/ requests go to api.anthropic.com, everything else to ch
   assert.equal(forwardHeaders({ host: "127.0.0.1:17891", "anthropic-beta": "oauth-2025-04-20", connection: "keep-alive" }, "api.anthropic.com").host, "api.anthropic.com");
   assert.equal(forwardHeaders({ authorization: "Bearer x" }, "api.anthropic.com").authorization, "Bearer x");
   assert.equal(forwardHeaders({ connection: "keep-alive" }, "api.anthropic.com").connection, undefined);
+});
+
+// 2026-10-22: Codex logged in with an API key keeps the plugin's base URL and sends its key; chatgpt.com does not take
+// API keys, so those requests go where Codex would send them without the plugin.
+test("Codex's API-key requests go to api.openai.com/v1, its ChatGPT-login and Claude's ones as before", () => {
+  const key = { authorization: "Bearer sk-test-not-a-real-key" };
+  assert.deepEqual(routeOf("/backend-api/codex/responses", key), { host: "api.openai.com", url: "/v1/responses" });
+  assert.deepEqual(routeOf("/backend-api/codex/responses/compact?x=1", key), { host: "api.openai.com", url: "/v1/responses/compact?x=1" });
+  assert.deepEqual(routeOf("/backend-api/codex/models?client_version=1", key), { host: "api.openai.com", url: "/v1/models?client_version=1" });
+  // ChatGPT login: an access token and the account id.
+  const chatgpt = { authorization: "Bearer eyJ.synthetic.token", "chatgpt-account-id": "acct" };
+  assert.deepEqual(routeOf("/backend-api/codex/responses", chatgpt), { host: "chatgpt.com", url: "/backend-api/codex/responses" });
+  assert.deepEqual(routeOf("/backend-api/codex/responses", { ...key, "chatgpt-account-id": "acct" }), { host: "chatgpt.com", url: "/backend-api/codex/responses" });
+  assert.deepEqual(routeOf("/backend-api/codex/responses", {}), { host: "chatgpt.com", url: "/backend-api/codex/responses" });
+  // Claude's subscription token also starts with sk- (sk-ant-oat…): its /v1/ requests stay with Anthropic.
+  assert.deepEqual(routeOf("/v1/messages?beta=true", { authorization: "Bearer sk-ant-oat01-synthetic" }), { host: "api.anthropic.com", url: "/v1/messages?beta=true" });
 });
 
 test("NO_PROXY is checked against each upstream host on its own", () => {
