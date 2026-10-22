@@ -36,6 +36,7 @@
 
 - **地址**：`config.toml` 顶层的 `openai_base_url = "http://localhost:17891/backend-api/codex"`。
   - 必须以 `/backend-api/codex` 结尾，否则 Codex 会关掉后端专用的接口；引擎把同样的路径转发到 `https://chatgpt.com`。
+  - API key 登录的 Codex 也用这个地址（2026-10-22 用假 key 对着本机假服务实测）：请求一样发到 `…/backend-api/codex/responses`，带 `Authorization: Bearer sk-…`，没有 ChatGPT 登录才有的 `chatgpt-account-id`。chatgpt.com 不认 API key，所以引擎认出这种请求（`proxy.ts` 的 `routeOf`）后，转给 `https://api.openai.com`，路径里的 `/backend-api/codex/` 换成 `/v1/`，正是没装工具时 Codex 的默认地址。请求体同样是 Responses 请求，改写照旧。WebSocket 升级也按同样的规则转发。Claude 订阅的令牌也以 `sk-` 开头（`sk-ant-oat…`），但它的路径是 `/v1/…`，不受影响。
   - 写 `localhost` 不写 `127.0.0.1`：Windows 代理设置里的 `<local>` 只让不带点的主机名直连。
 - **`features.respect_system_proxy = true`**：让 Codex 先看 Windows 的代理设置。否则用户环境里有 `HTTP(S)_PROXY`、没有 `NO_PROXY` 时，连本机的请求也会被交给系统代理，然后失败。
 - **`~/.codex/.env` 里的 `NO_PROXY`**：生图、改图的客户端只认环境变量。Codex 启动时会读 `.env`，所以在需要时写一段 `NO_PROXY=localhost,127.0.0.1,::1`，合并用户自己的条目。`.env` 可能含密钥，工具不复制、不输出它。

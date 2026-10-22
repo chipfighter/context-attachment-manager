@@ -147,3 +147,37 @@ test("a declined WebSocket upgrade that the client resets leaves the engine runn
   }), "the engine did not answer after the resets");
   assert.equal(status, 200);
 });
+
+// 2026-10-22: Codex logged in with an API key sends its key through the plugin's base URL; the engine passes it on
+// to api.openai.com/v1, where Codex would send it without the plugin. A ChatGPT login still goes to chatgpt.com.
+test("Codex's API-key requests reach api.openai.com/v1, over HTTP and WebSocket", async (t) => {
+  const seen: { host?: string; url?: string; auth?: string }[] = [];
+  const { port, upstream } = await fixture(t, (req, res) => {
+    req.resume();
+    seen.push({ host: req.headers.host, url: req.url, auth: req.headers.authorization });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end("{}");
+  });
+  const post = (headers: Record<string, string>) => bounded(new Promise<number>((resolve, reject) => {
+    const body = JSON.stringify({ input: [] });
+    const client = http.request({ hostname: "127.0.0.1", port, path: "/backend-api/codex/responses", method: "POST", agent: false, headers: { "content-type": "application/json", "content-length": String(Buffer.byteLength(body)), ...headers } }, (response) => { response.resume(); response.on("end", () => resolve(response.statusCode ?? 0)); });
+    client.on("error", reject);
+    client.end(body);
+  }), "request did not finish");
+  assert.equal(await post({ authorization: "Bearer sk-test-not-a-real-key" }), 200);
+  assert.equal(await post({ authorization: "Bearer eyJ.synthetic.token", "chatgpt-account-id": "acct" }), 200);
+  assert.deepEqual(seen, [
+    { host: "api.openai.com", url: "/v1/responses", auth: "Bearer sk-test-not-a-real-key" },
+    { host: "chatgpt.com", url: "/backend-api/codex/responses", auth: "Bearer eyJ.synthetic.token" },
+  ]);
+  const upgraded = new Promise<{ host?: string; url?: string }>((resolve) => upstream.once("upgrade", (req, socket) => {
+    socket.on("error", () => {});
+    resolve({ host: req.headers.host, url: req.url });
+    socket.end("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
+  }));
+  const socket = net.connect(port, "127.0.0.1");
+  socket.on("error", () => {});
+  t.after(() => socket.destroy());
+  socket.write(["GET /backend-api/codex/responses HTTP/1.1", `Host: 127.0.0.1:${port}`, "Authorization: Bearer sk-test-not-a-real-key", "Connection: Upgrade", "Upgrade: websocket", "Sec-WebSocket-Version: 13", "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==", "", ""].join("\r\n"));
+  assert.deepEqual(await bounded(upgraded, "upgrade did not reach the upstream"), { host: "api.openai.com", url: "/v1/responses" });
+});

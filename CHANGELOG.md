@@ -2,6 +2,17 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [Unreleased]
+
+### Fixes
+
+- Codex logged in with an API key now connects with the plugin installed. Its requests went to ChatGPT's backend, which takes ChatGPT logins, not API keys. They now go to the OpenAI API, where Codex sends them without the plugin, and images are managed there as well.
+
+### Notes
+
+- Checked with the Codex command line and a fake API key: through a test engine, the request reached the OpenAI API, which answered "Incorrect API key provided". Managing images with a real API key has not been tried yet.
+- Codex set up with its own model provider, such as cc-switch or a third-party relay, still does not go through the plugin.
+
 ## [0.8.2] - 2026-10-21
 
 The model notes where each image is set, not its "scene".
