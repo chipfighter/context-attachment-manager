@@ -2,7 +2,9 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [Unreleased]
+## [0.8.3] - 2026-10-22
+
+A fix for Codex logged in with an API key.
 
 ### Fixes
 
