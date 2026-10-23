@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { codexHome, persistedEnv, proxyStatus } from "./codexconfig.ts";
 import { MARKETPLACE, PLUGIN, planInstall, planUninstall, pluginStatus, type Plan, type UserProxyEnv } from "./install.ts";
 import { dataDir } from "./paths.ts";
+import { registerRoute, routeBaseUrl, validateBaseUrl } from "./routes.ts";
 
 export const codexFiles = () => ({ configFile: join(codexHome(), "config.toml"), envFile: join(codexHome(), ".env") });
 export const readConfig = (): string => (existsSync(codexFiles().configFile) ? readFileSync(codexFiles().configFile, "utf8") : "");
@@ -49,9 +50,22 @@ export function applyPlan(plan: Plan): void {
   }
 }
 
+// The install command validates before installing the plugin. A preview registers nothing and writes nothing.
+export function planEngine(port: number, persistRoutes = false): Plan {
+  return planInstall({
+    configText: readConfig(), envText: readEnv(), env: userProxyEnv(), port,
+    // Persist the upstream before any config references its local URL. Auth settings stay with the provider.
+    routeBaseUrl: (baseUrl) => {
+      validateBaseUrl(baseUrl, port);
+      const id = persistRoutes ? registerRoute({ platform: "codex", baseUrl }).id : "0".repeat(32);
+      return routeBaseUrl(port, id);
+    },
+  });
+}
+
 // Codex goes through the engine from its next start. Throws, changing nothing, when the user's own settings conflict.
 export function useEngine(port: number): Plan {
-  const plan = planInstall({ configText: readConfig(), envText: readEnv(), env: userProxyEnv(), port });
+  const plan = planEngine(port, true);
   applyPlan(plan);
   return plan;
 }

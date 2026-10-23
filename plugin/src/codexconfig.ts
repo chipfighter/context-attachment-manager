@@ -17,6 +17,8 @@ const conflict = (message: string, key: string, vars: Record<string, string> = {
 
 export const BEGIN = "# >>> codex-attachment-manager: managed proxy setting, remove it with the tool >>>";
 export const END = "# <<< codex-attachment-manager <<<";
+// Original endpoint lines stay in config.toml, beside their temporary local route. No credentials are copied.
+export const UPSTREAM_BEGIN = "# >>> codex-attachment-manager: managed upstream setting >>>";
 
 function parts(text: string): { bom: string; body: string; eol: string } {
   const bom = text.startsWith("﻿") ? "﻿" : "";
@@ -28,16 +30,28 @@ const isTable = (line: string) => /^\s*\[/.test(line);
 
 // TOML top-level keys end at the first table header; a second top-level key would be a duplicate.
 function topLevelValue(lines: string[], key: string): string | null {
+  let multiline: string | null = null;
   for (const line of lines) {
-    if (isTable(line)) return null;
-    const match = line.match(new RegExp(`^\\s*${key.replaceAll(".", "\\.")}\\s*=\\s*(.+?)\\s*(#.*)?$`));
+    const inside = multiline !== null;
+    const scanned = scanLine(line, multiline);
+    multiline = scanned.multiline;
+    if (inside) continue;
+    if (isTable(scanned.code)) return null;
+    const match = scanned.code.match(new RegExp(`^\\s*${key.replaceAll(".", "\\.")}\\s*=\\s*(.+?)\\s*$`));
     if (match) return match[1];
   }
   return null;
 }
 
 function featuresHeader(lines: string[]): number {
-  return lines.findIndex((line) => /^\s*\[features\]\s*(#.*)?$/.test(line));
+  let multiline: string | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const inside = multiline !== null;
+    const scanned = scanLine(lines[i], multiline);
+    multiline = scanned.multiline;
+    if (!inside && /^\s*\[features\]\s*$/.test(scanned.code)) return i;
+  }
+  return -1;
 }
 
 // The user's own respect_system_proxy, as a top-level dotted key or inside [features]; null when absent.
@@ -60,7 +74,145 @@ export const MCP_BEGIN = "# >>> codex-attachment-manager: managed MCP server, re
 
 // Removes every managed block; the blank line enable adds after the top block goes with it.
 export function disableProxy(text: string): { text: string; changed: boolean } {
-  return removeBlocks(text, BEGIN);
+  const restored = restoreUpstreams(text);
+  const removed = removeBlocks(restored, BEGIN);
+  return { text: removed.text, changed: removed.text !== text };
+}
+
+type EndpointLine = { prefix: string; key: string[]; value: string; suffix: string };
+type AssignmentLine = Omit<EndpointLine, "value"> & { rawValue: string };
+
+function stringValue(text: string): string | null {
+  if (/^'[^']*'$/.test(text)) return text.slice(1, -1);
+  if (!/^"(?:[^"\\]|\\.)*"$/.test(text)) return null;
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function keyPath(text: string): string[] | null {
+  const path: string[] = [];
+  let rest = text.trim();
+  while (rest) {
+    const key = /^(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*')/.exec(rest)?.[0];
+    if (!key) return null;
+    path.push(key[0] === '"' || key[0] === "'" ? stringValue(key)! : key);
+    rest = rest.slice(key.length).trim();
+    if (!rest) return path;
+    if (rest[0] !== ".") return null;
+    rest = rest.slice(1).trim();
+    if (!rest) return null;
+  }
+  return null;
+}
+
+// Only scalar endpoint settings are edited, but surrounding multiline strings and comments must be recognized.
+function scanLine(line: string, multiline: string | null): { code: string; multiline: string | null } {
+  for (let i = 0; i < line.length; i++) {
+    if (multiline) {
+      const at = line.indexOf(multiline, i);
+      if (at < 0) return { code: line, multiline };
+      i = at + 2;
+      multiline = null;
+    } else if (line[i] === "#") return { code: line.slice(0, i), multiline };
+    else if (line.startsWith('"""', i) || line.startsWith("'''", i)) { multiline = line.slice(i, i + 3); i += 2; }
+    else if (line[i] === '"' || line[i] === "'") {
+      const quote = line[i];
+      while (++i < line.length) {
+        if (quote === '"' && line[i] === "\\") i++;
+        else if (line[i] === quote) break;
+      }
+    }
+  }
+  return { code: line, multiline };
+}
+
+function assignmentLine(line: string): AssignmentLine | null {
+  const code = scanLine(line, null).code;
+  // Find '=' outside quoted keys (a quoted provider name may itself contain '=').
+  let equals = -1;
+  let quote: string | null = null;
+  for (let i = 0; i < code.length; i++) {
+    if (quote) {
+      if (quote === '"' && code[i] === "\\") i++;
+      else if (code[i] === quote) quote = null;
+    } else if (code[i] === '"' || code[i] === "'") quote = code[i];
+    else if (code[i] === "=") { equals = i; break; }
+  }
+  if (equals < 0) return null;
+  const key = keyPath(code.slice(0, equals));
+  if (!key) return null;
+  return { prefix: code.slice(0, equals + 1), key, rawValue: code.slice(equals + 1).trim(), suffix: line.slice(code.trimEnd().length) };
+}
+
+function endpointLine(line: string): EndpointLine | null {
+  const assignment = assignmentLine(line);
+  if (!assignment) return null;
+  const value = stringValue(assignment.rawValue);
+  if (value === null) return null;
+  return { prefix: assignment.prefix, key: assignment.key, value, suffix: assignment.suffix };
+}
+
+function restoreUpstreams(text: string): string {
+  const { bom, body, eol } = parts(text);
+  const lines = body.split(eol);
+  const kept: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() !== UPSTREAM_BEGIN) { kept.push(lines[i]); continue; }
+    const end = lines.findIndex((line, at) => at > i && line.trim() === END);
+    if (end < 0) throw conflict("a managed upstream setting has no end marker", "conflict.noEnd");
+    let original: string;
+    let managed: string;
+    try {
+      original = JSON.parse(lines[i + 1].replace(/^# original: /, ""));
+      managed = JSON.parse(lines[i + 2].replace(/^# managed: /, ""));
+      if (typeof original !== "string" || typeof managed !== "string") throw new Error("invalid metadata");
+    } catch { throw conflict("a managed upstream setting has invalid metadata", "conflict.noEnd"); }
+    const current = lines.slice(i + 3, end);
+    const expected = endpointLine(managed);
+    for (const line of current) {
+      const actual = endpointLine(line);
+      if (actual && expected && actual.value === expected.value && JSON.stringify(actual.key) === JSON.stringify(expected.key)) kept.push(original);
+      else kept.push(line); // The user's changed endpoint or additional lines win.
+    }
+    i = end;
+  }
+  return bom + kept.join(eol);
+}
+
+function upstreamSettings(lines: string[], strict = false): { index: number; line: EndpointLine; topLevel: boolean }[] {
+  const found: { index: number; line: EndpointLine; topLevel: boolean }[] = [];
+  let table: string[] = [];
+  let multiline: string | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const wasMultiline = multiline !== null;
+    const scanned = scanLine(lines[i], multiline);
+    multiline = scanned.multiline;
+    if (wasMultiline) continue;
+    // An array table also ends the preceding provider table; its entries are not provider settings.
+    if (/^\s*\[\[/.test(scanned.code)) { table = ["<array-table>"]; continue; }
+    const header = /^\s*\[([^\[].*)\]\s*$/.exec(scanned.code.trim());
+    if (header) { table = keyPath(header[1]) ?? []; continue; }
+    const assignment = assignmentLine(lines[i]);
+    if (!assignment) continue;
+    const path = [...table, ...assignment.key];
+    const endpoint = (path.length === 1 && path[0] === "openai_base_url") || (path.length === 3 && path[0] === "model_providers" && path[2] === "base_url");
+    const inlineProvider = path[0] === "model_providers" && path.length < 3;
+    const line = endpoint ? endpointLine(lines[i]) : null;
+    if (strict && (inlineProvider || (endpoint && !line))) throw conflict("unsupported provider endpoint syntax; use a single-line endpoint setting", "conflict.endpointSyntax");
+    if (!line) continue;
+    found.push({ index: i, line, topLevel: path.length === 1 });
+  }
+  return found;
+}
+
+function routeUpstreams(lines: string[], route: (upstream: string) => string): void {
+  let added = 0;
+  for (const { index, line } of upstreamSettings(lines)) {
+    const i = index + added;
+    const managed = `${line.prefix} ${JSON.stringify(route(line.value))}${line.suffix}`;
+    const block = [UPSTREAM_BEGIN, `# original: ${JSON.stringify(lines[i])}`, `# managed: ${JSON.stringify(managed)}`, managed, END];
+    lines.splice(i, 1, ...block);
+    added += block.length - 1;
+  }
 }
 
 export function disableMcpServer(text: string): { text: string; changed: boolean } {
@@ -95,17 +247,22 @@ function removeBlocks(text: string, begin: string): { text: string; changed: boo
 
 // Codex needs two settings to reach the proxy on Windows: openai_base_url (top level, so it goes first in the
 // file) and features.respect_system_proxy, without which Codex sends even localhost through HTTP(S)_PROXY.
-export function enableProxy(text: string, url: string): { text: string; changed: boolean } {
+export function enableProxy(text: string, url: string, routeBaseUrl?: (upstream: string) => string): { text: string; changed: boolean } {
   const { bom, body, eol } = parts(disableProxy(text).text);
   const lines = body.split(eol);
-  if (topLevelValue(lines, "openai_base_url") !== null) throw conflict("config.toml already sets openai_base_url; not overwriting it", "conflict.baseUrl");
+  // Validate every relevant assignment before registering any route or emitting a managed config block.
+  if (routeBaseUrl) upstreamSettings(lines, true);
+  const customBaseUrl = topLevelValue(lines, "openai_base_url") !== null || upstreamSettings(lines).some((setting) => setting.topLevel);
+  if (customBaseUrl && !routeBaseUrl) throw conflict("config.toml already sets openai_base_url; not overwriting it", "conflict.baseUrl");
   const own = userRespectSystemProxy(lines);
   if (own !== null && own !== "true") throw conflict("config.toml turns respect_system_proxy off; not overriding it", "conflict.systemProxy");
   const header = featuresHeader(lines);
-  const top = [BEGIN, `openai_base_url = "${url}"`];
+  const top = [BEGIN];
+  if (!customBaseUrl) top.push(`openai_base_url = "${url}"`);
   if (own === null && header < 0) top.push("features.respect_system_proxy = true");
   top.push(END, "");
   if (own === null && header >= 0) lines.splice(header + 1, 0, BEGIN, "respect_system_proxy = true", END);
+  if (routeBaseUrl) routeUpstreams(lines, routeBaseUrl);
   const next = bom + top.join(eol) + eol + lines.join(eol);
   return { text: next, changed: next !== text };
 }
@@ -115,15 +272,15 @@ export function proxyStatus(text: string): { enabled: boolean; url: string | nul
   const lines = body.split(eol);
   const enabled = lines.some((line) => line.trim() === BEGIN);
   const begin = lines.findIndex((line) => line.trim() === BEGIN);
-  const urlLine = begin >= 0 ? lines.slice(begin).find((line) => /^\s*openai_base_url\s*=/.test(line)) : undefined;
+  const endpoint = enabled ? upstreamSettings(lines).find((setting) => setting.topLevel)?.line.value : null;
   const base = parts(disableProxy(text).text);
   const baseLines = base.body.split(base.eol);
   const own = userRespectSystemProxy(baseLines);
   const managedRsp = enabled && lines.some((line, i) => /respect_system_proxy\s*=\s*true/.test(line) && lines.slice(0, i).reverse().find((l) => l.trim() === BEGIN || l.trim() === END)?.trim() === BEGIN);
   return {
     enabled,
-    url: urlLine ? (/"([^"]*)"/.exec(urlLine)?.[1] ?? null) : null,
-    conflict: topLevelValue(baseLines, "openai_base_url") !== null,
+    url: endpoint ?? null,
+    conflict: !enabled && (topLevelValue(baseLines, "openai_base_url") !== null || upstreamSettings(baseLines).some((setting) => setting.topLevel)),
     respectSystemProxy: managedRsp ? "managed" : own === "true" ? "user" : own !== null ? "off" : "absent",
   };
 }

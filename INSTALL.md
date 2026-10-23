@@ -34,7 +34,8 @@ What it changes in Codex:
 
 - Adds a marked proxy block to `~/.codex/config.toml`, after backing the file up.
 - If a proxy is set in your environment variables, adds a marked `NO_PROXY` block with local addresses only to `~/.codex/.env`.
-- Nothing else. If you have set `openai_base_url` yourself, it stops without writing anything.
+- If you use a custom `openai_base_url` or provider `base_url`, keeps the original endpoint beside a marked local route. Disabling restores it without replacing changes you made later.
+- Leaves the provider's model, authentication and other settings in place.
 
 ### Without a terminal
 
@@ -57,6 +58,15 @@ claude plugin install codex-attachment-manager@codex-attachment-manager
 Instead of the second command, you can also install it in the Code tab: click **+** next to the prompt box, choose **Plugins**, then **Add plugin**, pick **Context Attachment Manager**, and install it for your user account. The install ID keeps the project's old name.
 
 Then start a new session in the Code tab. There is nothing to set up: the plugin doesn't edit any settings, and only points that session's own Claude Code process at the engine while it runs.
+
+## Custom endpoints
+
+Configure your gateway in the client first, as you would without this plugin. It must support image inputs, tool calls and the client's native API: Responses for Codex, or Anthropic Messages for Claude Code. The plugin manages images and forwards requests to that same endpoint; it does not convert between API formats. Claude support applies to the desktop app's **Code** tab.
+
+- **Codex:** supports single-line `openai_base_url` and `model_providers.<name>.base_url` settings in your user `config.toml`, including normal provider tables and dotted keys. Unsupported endpoint syntax stops setup without changing the configuration. External profile files and environment overrides are not automatically rewritten. After a switching tool changes provider addresses, enable the plugin again (or run the install command again), then restart Codex.
+- **Claude Code:** uses the process's original `ANTHROPIC_BASE_URL`, or Anthropic's official endpoint when absent. Start a new Code session after changing the endpoint. Bedrock, Vertex and Foundry keep their own transport and are not managed.
+
+The engine listens only on loopback: port 17891 serves the panel and existing official connections; port 17892 serves registered provider routes. Both belong to the same engine process. With a custom engine port, provider routes use the next port. Keep both ports available. An older plugin copy cannot serve the registered routes; update both platform plugins for normal operation.
 
 ## Open the panel
 

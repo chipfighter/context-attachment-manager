@@ -10,6 +10,7 @@ import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { callTool, resetSetupBaseline } from "../../plugin/src/plugin-server.ts";
 import { connectDirectly, pluginGone, useEngine, usesEngine } from "../../plugin/src/setup.ts";
+import * as setup from "../../plugin/src/setup.ts";
 import { sampleSessions, THREAD } from "./testfixtures.ts";
 
 // These tests check the Chinese wording: the language is fixed, so neither the system's language nor one a panel
@@ -76,4 +77,74 @@ test("the plugin counts as gone only when its cache folder is missing or config.
   assert.equal(pluginGone(), "disabled");
   writeFileSync(join(home, "config.toml"), 'model = "gpt-6-sol"\n');
   assert.equal(pluginGone(), null, "an entry written some other way is not taken as a removal");
+});
+
+test("custom provider setup persists its target before pointing Codex at the local route", (t) => {
+  const { home, data } = tempHome(t);
+  const original = 'model_provider = "relay"\n[model_providers.relay]\nbase_url = "https://relay.example:8443/prefix/v1"\nenv_key = "RELAY_API_KEY"\nwire_api = "responses"\n';
+  writeFileSync(join(home, "config.toml"), original);
+  useEngine(17891);
+  const installed = readFileSync(join(home, "config.toml"), "utf8");
+  assert.match(installed, /^base_url = "http:\/\/localhost:17892\/__cam\/routes\/[a-zA-Z0-9_-]+"$/m);
+  const routes = join(data, "routes");
+  assert.equal(existsSync(routes), true, "the upstream binding is already persisted when the config is written");
+  const records = readdirSync(routes).filter((file) => file.endsWith(".json")).map((file) => JSON.parse(readFileSync(join(routes, file), "utf8")));
+  assert.ok(records.some((record) => record.platform === "codex" && record.baseUrl === "https://relay.example:8443/prefix/v1"));
+  assert.equal(useEngine(17891).configChanged, false);
+  connectDirectly();
+  assert.equal(readFileSync(join(home, "config.toml"), "utf8"), original);
+});
+
+test("unsupported provider syntax leaves config and env unchanged and creates no backup", (t) => {
+  const { home, data } = tempHome(t);
+  for (const original of [
+    'openai_base_url = """https://relay.example/v1"""\n',
+    'model_provider = "relay"\nmodel_providers = { relay = { base_url = "https://relay.example/v1", name = "Relay" } }\n',
+  ]) {
+    writeFileSync(join(home, "config.toml"), original);
+    writeFileSync(join(home, ".env"), "OTHER=unchanged\n");
+    assert.throws(() => useEngine(17891), (error: any) => error.key === "conflict.endpointSyntax");
+    assert.equal(readFileSync(join(home, "config.toml"), "utf8"), original);
+    assert.equal(readFileSync(join(home, ".env"), "utf8"), "OTHER=unchanged\n");
+    assert.equal(existsSync(join(data, "config-backup")), false);
+    assert.equal(existsSync(join(data, "routes")), false);
+  }
+});
+
+test("setup rejects a provider pointing back at the engine on any path without changing files", (t) => {
+  const { home, data } = tempHome(t);
+  for (const target of ["http://localhost:17891/v1", "http://127.0.0.1:17891/other", "http://[::1]:17891/api", "https://localhost:17891/prefix", "http://localhost:17892/v1"]) {
+    const original = `[model_providers.relay]\nbase_url = "${target}"\n`;
+    writeFileSync(join(home, "config.toml"), original);
+    assert.throws(() => useEngine(17891), (error: any) => error.key === "conflict.proxyLoop");
+    assert.equal(readFileSync(join(home, "config.toml"), "utf8"), original);
+    assert.equal(existsSync(join(data, "config-backup")), false);
+    assert.equal(existsSync(join(data, "routes")), false);
+  }
+});
+
+test("engine preflight plans custom routes without writing config, route records or backups", (t) => {
+  const { home, data } = tempHome(t);
+  const original = 'openai_base_url = "https://relay.example:8443/prefix/v1"\n';
+  writeFileSync(join(home, "config.toml"), original);
+  writeFileSync(join(home, ".env"), "OTHER=unchanged\n");
+  const plan = setup.planEngine(17891);
+  assert.equal(plan.configChanged, true);
+  assert.match(plan.configText, /^openai_base_url = "http:\/\/localhost:17892\/__cam\/routes\/0{32}"$/m);
+  assert.equal(readFileSync(join(home, "config.toml"), "utf8"), original);
+  assert.equal(readFileSync(join(home, ".env"), "utf8"), "OTHER=unchanged\n");
+  assert.deepEqual(readdirSync(data), []);
+});
+
+test("engine preflight rejects unsafe configuration without creating route data", (t) => {
+  const { home, data } = tempHome(t);
+  for (const [original, key] of [
+    ['openai_base_url = """https://relay.example/v1"""\n', "conflict.endpointSyntax"],
+    ['openai_base_url = "http://localhost:17891/v1"\n', "conflict.proxyLoop"],
+  ]) {
+    writeFileSync(join(home, "config.toml"), original);
+    assert.throws(() => setup.planEngine(17891), (error: any) => error.key === key);
+    assert.equal(readFileSync(join(home, "config.toml"), "utf8"), original);
+    assert.deepEqual(readdirSync(data), []);
+  }
 });

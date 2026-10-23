@@ -45,6 +45,8 @@ So I made a panel that keeps the conversation and drops the weight.
 
 Then just keep chatting. From the start, the model picks earlier images on its own; to pin one, click it and check **Send every turn**. To choose yourself, turn off **Auto-select** at the bottom of the panel.
 
+Using a gateway? Compatible Codex and Claude Code endpoints can use image management too. Requests continue to the endpoint you configured, with the client's model and credentials. The gateway must support the client's API format, image inputs and tool calls; see [endpoint support](INSTALL.md#custom-endpoints).
+
 ## Install
 
 Paste this to Codex, or to Claude in Claude Desktop's Code tab:
