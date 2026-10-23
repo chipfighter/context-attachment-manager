@@ -23,10 +23,11 @@ import { isEntryPoint } from "./entry.ts";
 import { codexUiLocale, currentLang, storedLang, systemLang } from "./language.ts";
 import { say, type MessageKey } from "./messages.ts";
 import { migrateDataOnce } from "./migrate-data.ts";
-import { MARKETPLACE, PLUGIN, PLUGIN_ID, planInstall, pluginStatus } from "./install.ts";
+import { MARKETPLACE, PLUGIN, PLUGIN_ID, pluginStatus } from "./install.ts";
 import { applySelection, loadPanelState, type PanelState } from "./panel-state.ts";
 import { dataDir, selectionDirOf } from "./paths.ts";
-import { backupConfig, connectDirectly, readConfig, readEnv, useEngine, userProxyEnv } from "./setup.ts";
+import { preservingPluginCache } from "./plugin-cache.ts";
+import { backupConfig, connectDirectly, planEngine, readConfig, readEnv, useEngine } from "./setup.ts";
 
 type Json = Record<string, any>;
 const lang = systemLang();
@@ -146,15 +147,17 @@ async function main(): Promise<void> {
     const cli = findCodexCli();
     if (!cli) throw new Error(t("cli.noCli"));
     // A conflict with the user's own settings stops everything before anything changes.
-    try { planInstall({ configText: readConfig(), envText: readEnv(), env: userProxyEnv(), port }); } catch (error) { throw localized(error); }
+    try { planEngine(port); } catch (error) { throw localized(error); }
     backupConfig();
     const steps: string[] = [];
-    const registered = pluginStatus(readConfig()).marketplace;
-    if (registered && !samePath(registered, repository)) { codex(cli, ["plugin", "marketplace", "remove", MARKETPLACE]); steps.push(t("cli.step.oldMarketplace")); }
-    if (!registered || !samePath(registered, repository)) { codex(cli, ["plugin", "marketplace", "add", repository]); steps.push(t("cli.step.addMarketplace")); }
-    // Installed afresh every time, so Codex's copy matches this checkout.
-    if (pluginStatus(readConfig()).installed) { codex(cli, ["plugin", "remove", PLUGIN_ID]); steps.push(t("cli.step.oldPlugin")); }
-    codex(cli, ["plugin", "add", PLUGIN_ID]);
+    // Install the target version first. Removing first can partially delete a Windows runtime still in use.
+    const cacheRoot = join(codexHome(), "plugins", "cache", MARKETPLACE, PLUGIN);
+    preservingPluginCache(cacheRoot, pluginVersion(), () => {
+      const registered = pluginStatus(readConfig()).marketplace;
+      if (registered && !samePath(registered, repository)) { codex(cli, ["plugin", "marketplace", "remove", MARKETPLACE]); steps.push(t("cli.step.oldMarketplace")); }
+      if (!registered || !samePath(registered, repository)) { codex(cli, ["plugin", "marketplace", "add", repository]); steps.push(t("cli.step.addMarketplace")); }
+      codex(cli, ["plugin", "add", PLUGIN_ID]);
+    });
     steps.push(t("cli.step.install"));
     const installed = pluginCacheDir(pluginVersion());
     const test = await selfTest(installed);

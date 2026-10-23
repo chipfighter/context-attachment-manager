@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
+import { engineTestPort } from "./proxy-test-ports.ts";
 
 async function bounded<T>(promise: Promise<T>, message: string, ms = 2000): Promise<T> {
   let timer: NodeJS.Timeout;
@@ -22,10 +23,7 @@ async function fixture(t: TestContext, handler: http.RequestListener, connectDel
   const upstream = http.createServer(handler);
   await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
   const upstreamPort = (upstream.address() as { port: number }).port;
-  const reservation = http.createServer();
-  await new Promise<void>((resolve) => reservation.listen(0, "127.0.0.1", resolve));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((resolve) => reservation.close(() => resolve()));
+  const port = await engineTestPort();
   const child = spawn(process.execPath, [fileURLToPath(new URL("./proxy-http-fixture.ts", import.meta.url))], {
     env: { ...process.env, CAM_DATA_DIR: root, CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), CAM_TEST_CONNECT_DELAY: String(connectDelay), CAM_TEST_ENGINE_ARGS: engineArgs.join(" "), NO_PROXY: "*", no_proxy: "*" },
     stdio: ["ignore", "pipe", "pipe"],

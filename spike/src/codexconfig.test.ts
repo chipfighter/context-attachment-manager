@@ -156,3 +156,86 @@ test("MCP server: a user's own table with the same name is never overwritten", (
   assert.throws(() => enableMcpServer(mine, "cam_probe", NODE, [SCRIPT]), /already defines mcp_servers\.cam_probe/);
   assert.equal(enableMcpServer(mine, "other", NODE, [SCRIPT]).changed, true);
 });
+
+// v0.9: keep the user's provider and credentials; only its endpoint gets a local route.
+test("a custom top-level endpoint is routed and restored in place without changing its formatting", () => {
+  const original = "\uFEFFopenai_base_url = 'https://relay.example:444/prefix/v1' # my endpoint\r\nmodel = \"other-model\"\r\n[features]\r\nview_image = true";
+  const seen: string[] = [];
+  let result: ReturnType<typeof enableProxy>;
+  assert.doesNotThrow(() => { result = enableProxy(original, URL, (upstream: string) => { seen.push(upstream); return "http://localhost:17891/__cam/routes/relay"; }); });
+  assert.deepEqual(seen, ["https://relay.example:444/prefix/v1"]);
+  assert.match(result!.text, /^openai_base_url = "http:\/\/localhost:17891\/__cam\/routes\/relay"/m);
+  assert.equal(result!.text.match(/^openai_base_url\s*=/gm)?.length, 1);
+  assert.doesNotMatch(result!.text.replaceAll("\r\n", ""), /\n/);
+  assert.equal(proxyStatus(result!.text).url, "http://localhost:17891/__cam/routes/relay");
+  assert.equal(proxyStatus(result!.text).conflict, false);
+  assert.equal(disableProxy(result!.text).text, original);
+});
+
+test("provider base URLs have independent routes and keep authentication, headers, queries and model selection", () => {
+  const original = 'model_provider = "work.relay"\nmodel = "vision-model"\n\n[model_providers."work.relay"]\nname = "Work"\nbase_url = "https://first.example/prefix/v1"\nwire_api = "responses"\nenv_key = "RELAY_KEY"\nhttp_headers = { "x-provider" = "work" }\nquery_params = { version = "1" }\n\n[model_providers.local]\nbase_url = \'http://127.0.0.1:9123/api/v1\'\n\n[mcp_servers.other]\nbase_url = "https://unrelated.example"\n';
+  const endpoints: string[] = [];
+  const route = (upstream: string) => { endpoints.push(upstream); return `http://localhost:17891/__cam/routes/${upstream.startsWith("https:") ? "first" : "local"}`; };
+  const result = enableProxy(original, URL, route);
+  assert.deepEqual(endpoints, ["https://first.example/prefix/v1", "http://127.0.0.1:9123/api/v1"]);
+  assert.match(result.text, /^base_url = "http:\/\/localhost:17891\/__cam\/routes\/first"$/m);
+  assert.match(result.text, /^base_url = "http:\/\/localhost:17891\/__cam\/routes\/local"$/m);
+  for (const line of ['model_provider = "work.relay"', 'env_key = "RELAY_KEY"', 'http_headers = { "x-provider" = "work" }', 'query_params = { version = "1" }', 'base_url = "https://unrelated.example"']) assert.ok(result.text.includes(line));
+  assert.equal(disableProxy(result.text).text, original);
+  assert.deepEqual(enableProxy(result.text, URL, route), { text: result.text, changed: false });
+});
+
+test("uninstall keeps an endpoint the user changed after installation, and re-enable binds that new endpoint", () => {
+  const original = 'model_provider = "relay"\n[model_providers.relay]\nbase_url = "https://old.example/v1" # existing\n';
+  const route = () => "http://localhost:17891/__cam/routes/relay";
+  const installed = enableProxy(original, URL, route).text;
+  const changed = installed.replace(/^base_url = .*$/m, 'base_url = "https://new.example/v2" # changed by user');
+  assert.equal(disableProxy(changed).text, original.replace('base_url = "https://old.example/v1" # existing', 'base_url = "https://new.example/v2" # changed by user'));
+  const targets: string[] = [];
+  enableProxy(changed, URL, (target: string) => { targets.push(target); return route(); });
+  assert.deepEqual(targets, ["https://new.example/v2"]);
+});
+
+test("dotted provider keys are routed, and provider-looking text inside multiline strings is untouched", () => {
+  const original = 'model_providers.relay.base_url = "https://relay.example/v1"\ninstructions = """\n[model_providers.fake]\nbase_url = "https://not-a-setting.example"\n"""\n';
+  const targets: string[] = [];
+  const result = enableProxy(original, URL, (target: string) => { targets.push(target); return "http://localhost:17891/__cam/routes/dotted"; });
+  assert.deepEqual(targets, ["https://relay.example/v1"]);
+  assert.match(result.text, /^model_providers\.relay\.base_url = "http:\/\/localhost:17891\/__cam\/routes\/dotted"$/m);
+  assert.ok(result.text.includes('base_url = "https://not-a-setting.example"'));
+  assert.equal(disableProxy(result.text).text, original);
+});
+
+test("a multiline instruction does not hide a later top-level endpoint, and array tables end provider scope", () => {
+  const original = 'instructions = """\n[fake.table]\n"""\nopenai_base_url = "https://top.example/v1"\n[model_providers.relay]\nbase_url = "https://relay.example/v1"\n[[unrelated]]\nbase_url = "https://unrelated.example"\n';
+  const targets: string[] = [];
+  const result = enableProxy(original, URL, (target: string) => { targets.push(target); return `http://localhost:17891/__cam/routes/${targets.length}`; });
+  assert.deepEqual(targets, ["https://top.example/v1", "https://relay.example/v1"]);
+  assert.equal(result.text.match(/^openai_base_url\s*=/gm)?.length, 1);
+  assert.equal(disableProxy(result.text).text, original);
+});
+
+test("quoted top-level keys report the routed endpoint, and comments added inside its block survive uninstall", () => {
+  const original = '\"openai_base_url\" = "https://relay.example/v1"\n';
+  const local = "http://localhost:17891/__cam/routes/quoted";
+  const installed = enableProxy(original, URL, () => local).text;
+  assert.equal(proxyStatus(installed).url, local);
+  const edited = installed.replace(/^"openai_base_url" = .*$/m, '# added by user\n"openai_base_url" = "' + local + '"');
+  assert.equal(disableProxy(edited).text, '# added by user\n' + original);
+});
+
+test("unsupported endpoint syntax fails before enabling or registering any provider", () => {
+  for (const original of [
+    'openai_base_url = """https://relay.example/v1"""\n',
+    '[model_providers.relay]\nbase_url = \'\'\'https://relay.example/v1\'\'\'\n',
+    'model_provider = "relay"\nmodel_providers = { relay = { base_url = "https://relay.example/v1", name = "Relay" } }\n',
+    '[model_providers]\nrelay = { base_url = "https://relay.example/v1", name = "Relay" }\n',
+    'model_providers.relay = { base_url = "https://relay.example/v1", name = "Relay" }\n',
+    '[model_providers.good]\nbase_url = "https://good.example/v1"\n[model_providers.bad]\nbase_url = """https://bad.example/v1"""\n',
+  ]) {
+    const targets: string[] = [];
+    assert.throws(() => enableProxy(original, URL, (target) => { targets.push(target); return "http://localhost:17891/__cam/routes/example"; }), (error: any) => error.key === "conflict.endpointSyntax");
+    assert.deepEqual(targets, []);
+    assert.equal(proxyStatus(original).enabled, false);
+  }
+});

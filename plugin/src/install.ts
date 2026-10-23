@@ -23,9 +23,9 @@ export function needsNoProxy(env: UserProxyEnv): boolean {
   return !!env.httpProxy && !coversLoopback(env.noProxy);
 }
 
-export function planInstall(input: { configText: string; envText: string | null; env: UserProxyEnv; port: number }): Plan {
+export function planInstall(input: { configText: string; envText: string | null; env: UserProxyEnv; port: number; routeBaseUrl?: (upstream: string) => string }): Plan {
   const notes: string[] = [];
-  const proxied = enableProxy(input.configText, `http://localhost:${input.port}/backend-api/codex`);
+  const proxied = enableProxy(input.configText, `http://localhost:${input.port}/backend-api/codex`, input.routeBaseUrl);
   const legacy = disableMcpServer(proxied.text);
   if (legacy.changed) notes.push(say(systemLang(), "note.legacyMcp"));
   let envText = input.envText;

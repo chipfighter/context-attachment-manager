@@ -2,6 +2,29 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [Unreleased]
+
+Target: 0.9.0.
+
+### Features
+
+- Image management now works through compatible custom endpoints in Codex and Claude Desktop's Code tab. Codex's configured provider endpoints and Claude Code's original endpoint are preserved behind separate local routes, including their port, base path and query parameters. Model names and authentication remain with the client.
+- Disabling Codex restores the original endpoint lines while preserving addresses the user changed afterwards. Claude Code only restores process variables it still manages.
+
+### Fixes
+
+- Claude requests outside `/v1/` no longer fall through to ChatGPT with their credentials. Unknown or conflicting requests are rejected locally. Fixes #10.
+- Custom Claude endpoints use the Claude image rewrite rules regardless of their domain. HTTP and WebSocket forwarding follow the same provider binding and credential isolation.
+- Registered routes use a separate loopback listener, so an older plugin copy cannot accept their requests after only one platform has been updated. Route bindings survive engine replacement.
+- Upgrades preserve earlier runtime files that Codex's cache cleanup can partially remove while a Windows process is still using them. Installation no longer removes the working plugin before adding its replacement, and uses the install result to select the new version.
+
+### Notes
+
+- Supports Responses-compatible Codex endpoints and Anthropic-compatible Claude Code endpoints. This does not translate API protocols or add Bedrock, Vertex or Foundry transports.
+- Codex reads endpoint settings in its user `config.toml`. Unsupported endpoint syntax stops setup before changing configuration. If another tool changes provider endpoints later, enable the plugin again and restart Codex to bind the new addresses. External profile files and environment overrides are not automatically rewritten.
+- Verified on Windows with synthetic conversations, images, credentials and local upstreams. Live model calls through third-party gateways have not been tested.
+- The real Windows install scripts were tested through installation, an upgrade with the old runtime directory held open, and uninstall. The old runtime remained intact and the user's configuration was restored.
+
 ## [0.8.3] - 2026-10-22
 
 A fix for Codex logged in with an API key.

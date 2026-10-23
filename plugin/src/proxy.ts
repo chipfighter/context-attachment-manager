@@ -8,9 +8,9 @@
 // v0.1-14: the text for the model is in the language the panel last reported (Codex's interface language).
 // v0.3: automatic selection — a thread with it on leaves out the images of earlier turns that are not pinned, and a
 // copy the model fetched is sent in its own turn only (spec v0.3).
-// v0.4: Claude Code too (the plugin's mod points ANTHROPIC_BASE_URL here): its /v1/… requests go to api.anthropic.com,
-// everything else to chatgpt.com as before. A Claude session is told apart by x-claude-code-session-id.
+// v0.4: Claude Code too. Older clients are recognized by their own headers; ambiguous legacy requests are refused.
 // 2026-10-22: Codex logged in with an API key goes to api.openai.com/v1 instead (see routeOf).
+// v0.9: registered providers bind the client protocol and original endpoint, with a separate listener for new routes.
 // Only metadata is logged (never auth headers or conversation content).
 // Input: [--port 17891] [--stay (no auto-exit)] [--force-http] [--dump-requests (synthetic test threads only)];
 // the outbound proxy is taken from HTTPS_PROXY/HTTP_PROXY or the system proxy settings (Windows, macOS).
@@ -36,9 +36,11 @@ import { findImages, type ImageRef } from "./images.ts";
 import { isEntryPoint } from "./entry.ts";
 import { currentLang } from "./language.ts";
 import { migrateDataOnce } from "./migrate-data.ts";
+import { say } from "./messages.ts";
 import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type ClaudePanelOptions } from "./panel-state.ts";
 import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, proxyLogDirOf, selectionDirOf } from "./paths.ts";
 import { recordRequest } from "./request-stats.ts";
+import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./routes.ts";
 import { rewriteItems, type Described } from "./rewrite.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./setup.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, selectionDir, sideChatSelection } from "./selection.ts";
@@ -54,19 +56,37 @@ const OPENAI_API_HOST = "api.openai.com";
 const CODEX_BASE = "/backend-api/codex/";
 const HOP_BY_HOP = new Set(["connection", "keep-alive", "proxy-connection", "transfer-encoding", "te", "trailer", "upgrade", "host"]);
 
-// Codex's requests all start with /backend-api/ (its base URL ends in /backend-api/codex); Claude Code's with /v1/.
-export function upstreamOf(path: string): string {
-  return path.startsWith("/v1/") ? CLAUDE_HOST : UPSTREAM_HOST;
-}
-
 // Codex logged in with an API key keeps the base URL the plugin set and sends its key (Bearer sk-…, no
 // chatgpt-account-id), which chatgpt.com does not take: those requests go to api.openai.com, /backend-api/codex/
 // becoming /v1/ (2026-10-22, seen with a fake key against a local server). The request bodies are the same Responses
 // requests, so they are rewritten as before.
-export function routeOf(url: string, headers: IncomingHttpHeaders): { host: string; url: string } {
+export type ForwardRoute = { host: string; url: string; platform?: Platform; protocol?: string; port?: number; clientPath?: string };
+export function routeOf(url: string, headers: IncomingHttpHeaders, root = dataDir()): ForwardRoute | null {
+  const claude = !!(headers["x-claude-code-session-id"] || headers["anthropic-version"] || headers["anthropic-beta"] || /^Bearer sk-ant-/i.test(String(headers.authorization ?? "")));
+  const codex = !!(headers["chatgpt-account-id"] || headers["x-codex-turn-metadata"] || headers["x-codex-window-id"]);
+  if (!url.startsWith("/") || /[\r\n\\]/.test(url)) return null;
+  if (url.startsWith("/__cam/routes/")) {
+    const match = /^\/__cam\/routes\/([a-f0-9]{32})(\/[^]*|\?[^]*|$)/.exec(url);
+    const registered = match ? readRoute(match[1], root) : null;
+    if (!registered || (registered.platform === "codex" && !!headers["x-claude-code-session-id"]) || (registered.platform === "claude" && codex)) return null;
+    const target = validateBaseUrl(registered.baseUrl);
+    const suffix = match![2] || "/";
+    const at = suffix.indexOf("?");
+    const clientPath = at < 0 ? suffix : suffix.slice(0, at) || "/";
+    const query = [target.search.slice(1), at < 0 ? "" : suffix.slice(at + 1)].filter(Boolean).join("&");
+    const path = `${target.pathname.replace(/\/$/, "")}/${clientPath.replace(/^\//, "")}`;
+    return { host: target.hostname.replace(/^\[|\]$/g, ""), url: path + (query ? `?${query}` : ""), platform: registered.platform, protocol: target.protocol, port: Number(target.port || (target.protocol === "https:" ? 443 : 80)), clientPath };
+  }
+  if ((claude || headers["x-api-key"]) && codex) return null;
+  if (claude || headers["x-api-key"]) {
+    if (url.startsWith("/backend-api/")) return null;
+    return { host: CLAUDE_HOST, url };
+  }
+  if (url.startsWith("/v1/")) return null;
+  if (!url.startsWith("/backend-api/")) return null;
   const apiKey = /^Bearer sk-/i.test(String(headers.authorization ?? "")) && !headers["chatgpt-account-id"];
   if (apiKey && url.startsWith(CODEX_BASE)) return { host: OPENAI_API_HOST, url: `/v1/${url.slice(CODEX_BASE.length)}` };
-  return { host: upstreamOf(url.split("?")[0]), url };
+  return { host: UPSTREAM_HOST, url };
 }
 
 // Outbound proxy: environment first, then the system setting (Windows per-user, macOS); NO_PROXY is honoured for the
@@ -108,18 +128,25 @@ export function macProxy(scutil: string): string | null {
   return null;
 }
 
-function connectUpstream(via: { host: string; port: number } | null, upstream = UPSTREAM_HOST, signal?: AbortSignal): Promise<tls.TLSSocket> {
-  const startTls = (socket?: net.Socket) => new Promise<tls.TLSSocket>((ok, fail) => {
+function connectUpstream(via: { host: string; port: number } | null, upstream = UPSTREAM_HOST, signal?: AbortSignal, port = 443, secure = true): Promise<net.Socket> {
+  const startTls = (socket?: net.Socket) => new Promise<net.Socket>((ok, fail) => {
+    if (!secure) {
+      if (socket) { ok(socket); return; }
+      const plain = net.connect({ host: upstream, port, signal }, () => ok(plain));
+      plain.once("error", fail);
+      return;
+    }
     const cleanup = () => signal?.removeEventListener("abort", abort);
-    const secure = tls.connect({ socket, host: socket ? undefined : upstream, port: 443, servername: upstream, ALPNProtocols: ["http/1.1"] }, () => { cleanup(); ok(secure); });
-    const abort = () => { cleanup(); secure.destroy(); socket?.destroy(); fail(new Error("upstream connection cancelled")); };
-    secure.once("error", (error) => { cleanup(); fail(error); });
+    const connection = tls.connect({ socket, host: socket ? undefined : upstream, port, servername: net.isIP(upstream) ? undefined : upstream, ALPNProtocols: ["http/1.1"] }, () => { cleanup(); ok(connection); });
+    const abort = () => { cleanup(); connection.destroy(); socket?.destroy(); fail(new Error("upstream connection cancelled")); };
+    connection.once("error", (error) => { cleanup(); fail(error); });
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) abort();
   });
   if (!via) return startTls();
   return new Promise((ok, fail) => {
-    const socket = net.connect({ port: via.port, host: via.host, signal }, () => socket.write(`CONNECT ${upstream}:443 HTTP/1.1\r\nHost: ${upstream}:443\r\n\r\n`));
+    const authority = `${upstream.includes(":") ? `[${upstream}]` : upstream}:${port}`;
+    const socket = net.connect({ port: via.port, host: via.host, signal }, () => socket.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n\r\n`));
     let buffered = Buffer.alloc(0);
     const onData = (chunk: Buffer) => {
       buffered = Buffer.concat([buffered, chunk]);
@@ -135,9 +162,11 @@ function connectUpstream(via: { host: string; port: number } | null, upstream = 
   });
 }
 
-export function forwardHeaders(headers: IncomingHttpHeaders, upstream = UPSTREAM_HOST): Record<string, string | string[]> {
+export function forwardHeaders(headers: IncomingHttpHeaders, upstream = UPSTREAM_HOST, platform?: Platform): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
-  for (const [name, value] of Object.entries(headers)) if (value !== undefined && !HOP_BY_HOP.has(name)) out[name] = value;
+  const client = platform ?? (upstream === CLAUDE_HOST ? "claude" : "codex");
+  const removed = new Set(client === "claude" ? ["chatgpt-account-id"] : ["anthropic-beta", "anthropic-version", "x-claude-code-session-id", "x-claude-code-agent-id", ...(!platform ? ["x-api-key"] : [])]);
+  for (const [name, value] of Object.entries(headers)) if (value !== undefined && !HOP_BY_HOP.has(name) && !removed.has(name) && !name.startsWith("x-cam-")) out[name] = value;
   out.host = upstream;
   return out;
 }
@@ -536,6 +565,7 @@ async function main(): Promise<void> {
   ensureAutoDefault(claudeSelectionDirOf());
   const portIndex = process.argv.indexOf("--port");
   const port = Number(portIndex >= 0 ? process.argv[portIndex + 1] : DEFAULT_PORT);
+  const providerPort = routingPort(port);
   // One engine per machine: a second start leaves the running one alone.
   const running = await engineHealth(port);
   if (running) {
@@ -550,7 +580,10 @@ async function main(): Promise<void> {
   const via = outboundProxy();
   // v0.4: NO_PROXY may name one upstream host and not the other.
   const vias = new Map([CLAUDE_HOST, OPENAI_API_HOST].map((host) => [host, outboundProxy(process.env, readSystemProxy, host)]));
-  const viaOf = (upstream: string) => (vias.has(upstream) ? vias.get(upstream)! : via);
+  const viaOf = (upstream: string) => {
+    if (!vias.has(upstream)) vias.set(upstream, outboundProxy(process.env, readSystemProxy, upstream));
+    return vias.get(upstream)!;
+  };
   const startedAt = new Date().toISOString();
   // v0.1-3: which code this engine runs, so the plugin can tell when an update needs a new engine.
   const build = buildOf();
@@ -600,7 +633,7 @@ async function main(): Promise<void> {
   }
   // Open WebSocket connections per thread. Over WebSocket Codex only sends new items and the server keeps the rest,
   // so a thread with unchecked images must move to HTTP: its idle connections are closed, and its next upgrade gets 426.
-  type Live = { client: Duplex; socket: tls.TLSSocket; last: number; closedForSelection: boolean; activeWhileUnchecked: boolean; path: string; identity: Json };
+  type Live = { client: Duplex; socket: net.Socket; last: number; closedForSelection: boolean; activeWhileUnchecked: boolean; path: string; identity: Json };
   const live = new Map<string, Set<Live>>();
   // v0.1-3: a newer plugin's engine takes over. This one stops listening at once, lets idle connections go (Codex
   // reconnects to the new engine), keeps serving requests and WebSocket turns already under way, then exits.
@@ -649,7 +682,26 @@ async function main(): Promise<void> {
   const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
     if (req.url === "/__cam/health") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, service: ENGINE_SERVICE, pid: process.pid, startedAt, port, build, version, upstream: UPSTREAM_HOST, upstreams: [UPSTREAM_HOST, CLAUDE_HOST, OPENAI_API_HOST], via: via ? `${via.host}:${via.port}` : "direct" }));
+      res.end(JSON.stringify({ ok: true, service: ENGINE_SERVICE, pid: process.pid, startedAt, port, build, version, routingVersion: 1, routingPort: providerPort, upstream: UPSTREAM_HOST, upstreams: [UPSTREAM_HOST, CLAUDE_HOST, OPENAI_API_HOST], via: via ? `${via.host}:${via.port}` : "direct" }));
+      return;
+    }
+    if (req.url === "/__cam/routes") {
+      if (req.method !== "POST" || !ownRequest(req.headers) || req.headers.origin !== undefined || req.headers["x-cam-panel"] !== "1") {
+        req.resume(); res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "forbidden" })); return;
+      }
+      const chunks: Buffer[] = [];
+      let size = 0;
+      req.on("data", (chunk: Buffer) => { size += chunk.length; if (size <= 8192) chunks.push(chunk); });
+      req.on("end", () => {
+        try {
+          if (size > 8192) { res.writeHead(413); res.end(); return; }
+          const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          validateBaseUrl(input.baseUrl, port);
+          const route = registerRoute(input);
+          res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+          res.end(JSON.stringify({ id: route.id, baseUrl: routeBaseUrl(port, route.id).replace("localhost", "127.0.0.1") }));
+        } catch { res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ error: say(currentLang(), "proxy.invalidRoute") })); }
+      });
       return;
     }
     if (req.url === "/__cam/retire" && req.method === "POST") {
@@ -690,14 +742,20 @@ async function main(): Promise<void> {
     if (retiredAt !== null) res.shouldKeepAlive = false;
     const id = ++sequence;
     const started = Date.now();
-    const path = (req.url ?? "/").split("?")[0];
     const route = routeOf(req.url ?? "/", req.headers);
+    if (!route) {
+      req.resume(); res.writeHead(421, { "content-type": "text/plain; charset=utf-8" }); res.end(say(currentLang(), "proxy.unknownRoute"));
+      log({ at: new Date(started).toISOString(), id, transport: "http", status: 421, reason: "unrecognized or conflicting provider route" });
+      return;
+    }
+    const path = route.clientPath ?? (req.url ?? "/").split("?")[0];
     const upstream = route.host;
+    const platform = route.platform ?? (upstream === CLAUDE_HOST ? "claude" : "codex");
     const identity = requestIdentity(req.headers);
-    const rewrite = req.method === "POST" && /\/responses(\/compact)?$/.test(path) && needsRewrite(identity.threadId, selectionDir, sessionsDir, identity.forkedFrom);
+    const rewrite = platform === "codex" && req.method === "POST" && /\/responses(\/compact)?$/.test(path) && needsRewrite(identity.threadId, selectionDir, sessionsDir, identity.forkedFrom);
     // v0.4: a Claude Code request of a session's main conversation (a subagent's loop has its own); rewritten like a
     // Codex thread's once something is unchecked there.
-    const claude = upstream === CLAUDE_HOST ? claudeIdentity(req.headers) : null;
+    const claude = platform === "claude" ? claudeIdentity(req.headers) : null;
     const claudeSession = claude?.sessionId && !claude.agentId && req.method === "POST" && path === "/v1/messages" ? claude.sessionId : null;
     // Once the engine has sent the session a changed history, every request of it is looked at, even with nothing left
     // out now: thinking made after a changed history no longer fits the history as it was.
@@ -755,11 +813,13 @@ async function main(): Promise<void> {
     });
     const send = (attempts: Attempt[], at = 0): void => {
       if (res.destroyed) return;
-      connectUpstream(viaOf(upstream), upstream, connecting.signal).then((socket) => {
+      connectUpstream(viaOf(upstream), upstream, connecting.signal, route.port, route.protocol !== "http:").then((socket) => {
       // The client can cancel while CONNECT/TLS is still in progress.
       if (res.destroyed) { socket.destroy(); return; }
       const attempt = attempts[at];
-      const outgoing = forwardHeaders(req.headers, upstream);
+      const outgoing = forwardHeaders(req.headers, upstream, route.platform);
+      const hostname = upstream.includes(":") ? `[${upstream}]` : upstream;
+      outgoing.host = route.port && route.port !== (route.protocol === "http:" ? 80 : 443) ? `${hostname}:${route.port}` : hostname;
       if (attempt.body) outgoing["content-length"] = String(attempt.body.length);
       const beta = attempt.report?.experiment?.beta;
       if (beta) outgoing["anthropic-beta"] = [String(outgoing["anthropic-beta"] ?? ""), beta].filter(Boolean).join(",");
@@ -849,11 +909,17 @@ async function main(): Promise<void> {
   const onUpgrade = (req: http.IncomingMessage, client: Duplex, head: Buffer) => {
     const id = ++sequence;
     const started = Date.now();
-    const path = (req.url ?? "/").split("?")[0];
+    const route = routeOf(req.url ?? "/", req.headers);
+    const path = route?.clientPath ?? (req.url ?? "/").split("?")[0];
     const identity = requestIdentity(req.headers);
     // Node takes its own 'error' listener off an upgraded socket. Without one, a client resetting the connection (Codex
     // can, right after a 426) throws and stops the engine (2026-10-19: four probe engines at once).
     client.on("error", () => {});
+    if (!route) {
+      client.end("HTTP/1.1 421 Misdirected Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+      log({ at: new Date(started).toISOString(), id, transport: "websocket", declined: 421, reason: "unrecognized or conflicting provider route" });
+      return;
+    }
     // A retired engine takes no new WebSocket; Codex opens it again, on the new engine.
     if (retiredAt !== null) {
       client.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
@@ -867,8 +933,7 @@ async function main(): Promise<void> {
     let up = head.length;
     let down = 0;
     let upstreamStatus: string | null = null;
-    const route = routeOf(req.url ?? "/", req.headers);
-    connectUpstream(viaOf(route.host), route.host).then((socket) => {
+    connectUpstream(viaOf(route.host), route.host, undefined, route.port, route.protocol !== "http:").then((socket) => {
       // The client went away while the upstream connected: its close has passed, nothing would close this one.
       if (client.destroyed) { socket.destroy(); return; }
       const connection: Live = { client, socket, last: Date.now(), closedForSelection: false, activeWhileUnchecked: false, path, identity };
@@ -883,10 +948,12 @@ async function main(): Promise<void> {
       recordRequest(identity.threadId, opened);
       noteChild(identity, opened.at);
       const lines = [`${req.method} ${route.url} HTTP/1.1`];
-      for (let i = 0; i < req.rawHeaders.length; i += 2) {
-        const name = req.rawHeaders[i];
-        lines.push(`${name}: ${name.toLowerCase() === "host" ? route.host : req.rawHeaders[i + 1]}`);
-      }
+      const outgoing = forwardHeaders(req.headers, route.host, route.platform);
+      const hostname = route.host.includes(":") ? `[${route.host}]` : route.host;
+      outgoing.host = route.port && route.port !== (route.protocol === "http:" ? 80 : 443) ? `${hostname}:${route.port}` : hostname;
+      outgoing.connection = "Upgrade";
+      outgoing.upgrade = String(req.headers.upgrade ?? "websocket");
+      for (const [name, value] of Object.entries(outgoing)) for (const entry of Array.isArray(value) ? value : [value]) lines.push(`${name}: ${entry}`);
       socket.write(`${lines.join("\r\n")}\r\n\r\n`);
       if (head.length) socket.write(head);
       socket.once("data", (chunk: Buffer) => { upstreamStatus = chunk.toString("latin1", 0, Math.min(chunk.length, 40)).split("\r\n")[0]; });
@@ -912,33 +979,43 @@ async function main(): Promise<void> {
       client.on("error", close);
     }, (error) => {
       client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
-      log({ at: new Date(started).toISOString(), id, transport: "websocket", path: req.url, error: String(error), ...requestIdentity(req.headers) });
+      log({ at: new Date(started).toISOString(), id, transport: "websocket", path, error: String(error), ...requestIdentity(req.headers) });
     });
   };
 
   // Codex may resolve "localhost" to either loopback address, so listen on both (and only on loopback), one after the
   // other: an engine that loses a start race never holds half of the port. A busy port is tried again for a few
   // seconds, since an engine retiring for this one may still be letting go of it.
-  const listen = (host: string, attempt = 0): Promise<boolean> => new Promise((resolve) => {
-    const server = http.createServer(onRequest);
-    server.on("upgrade", onUpgrade);
+  const listen = (host: string, listenPort: number, attempt = 0): Promise<boolean> => new Promise((resolve) => {
+    const allowed = (url: string) => url === "/__cam/health" || url.startsWith("/__cam/routes/") === (listenPort === providerPort);
+    const server = http.createServer((req, res) => {
+      if (allowed(req.url ?? "/")) { onRequest(req, res); return; }
+      req.resume(); res.writeHead(421, { "content-type": "text/plain; charset=utf-8" }); res.end(say(currentLang(), "proxy.isolatedRoute"));
+    });
+    server.on("upgrade", (req, client, head) => {
+      if (allowed(req.url ?? "/") && req.url !== "/__cam/health") { onUpgrade(req, client, head); return; }
+      client.on("error", () => {});
+      client.end("HTTP/1.1 421 Misdirected Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+    });
     server.requestTimeout = 0;
     server.once("error", (error: NodeJS.ErrnoException) => {
-      if (error.code === "EADDRINUSE" && attempt < 20) { setTimeout(() => resolve(listen(host, attempt + 1)), 150); return; }
+      if (error.code === "EADDRINUSE" && attempt < 20) { setTimeout(() => resolve(listen(host, listenPort, attempt + 1)), 150); return; }
       console.error(JSON.stringify({ host, error: String(error) }));
       // Loopback IPv6 may be missing; that is fine. A port another program holds is not.
-      resolve(error.code !== "EADDRINUSE");
+      resolve(host === "::1" && ["EAFNOSUPPORT", "EADDRNOTAVAIL"].includes(error.code ?? ""));
     });
-    server.listen(port, host, () => {
+    server.listen(listenPort, host, () => {
       servers.push(server);
       server.on("error", (error) => console.error(JSON.stringify({ host, error: String(error) })));
-      console.log(JSON.stringify({ listening: `http://${host.includes(":") ? `[${host}]` : host}:${port}/backend-api/codex`, upstream: UPSTREAM_HOST, via: via ? `${via.host}:${via.port}` : "direct" }));
+      console.log(JSON.stringify({ listening: `http://${host.includes(":") ? `[${host}]` : host}:${listenPort}/${listenPort === providerPort ? "__cam/routes" : "backend-api/codex"}`, upstream: UPSTREAM_HOST, via: via ? `${via.host}:${via.port}` : "direct" }));
       resolve(true);
     });
   });
-  for (const host of ["127.0.0.1", "::1"]) {
-    if (await listen(host)) continue;
-    log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: `port ${port} in use on ${host}` });
+  // Bind the provider listener before advertising readiness on the legacy port. Older plugin copies never start
+  // this listener, so they cannot misroute the persisted provider URLs after a mixed-version restart.
+  for (const listenPort of [providerPort, port]) for (const host of ["127.0.0.1", "::1"]) {
+    if (await listen(host, listenPort)) continue;
+    log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: `port ${listenPort} unavailable on ${host}` });
     process.exit(1);
   }
 }

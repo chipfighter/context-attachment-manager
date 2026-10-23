@@ -28,10 +28,12 @@
   }
 
   # Codex prints warnings on stderr; they are not failures.
-  function Invoke-Codex([string[]]$CodexArgs, [switch]$AllowFailure) {
+  function Invoke-Codex([string[]]$CodexArgs, [switch]$AllowFailure, [switch]$PassThru) {
     $ErrorActionPreference = 'Continue'
-    $output = (& $codex @CodexArgs 2>&1 | ForEach-Object { "$_" }) -join "`n"
-    if ($LASTEXITCODE -ne 0 -and -not $AllowFailure) { throw "codex $($CodexArgs -join ' ') failed: $output" }
+    $stderrFile = [IO.Path]::GetTempFileName()
+    $output = (& $codex @CodexArgs 2>$stderrFile | ForEach-Object { "$_" }) -join "`n"
+    if ($LASTEXITCODE -ne 0 -and -not $AllowFailure) { throw "codex $($CodexArgs -join ' ') failed: $output $(Get-Content -LiteralPath $stderrFile -Raw)" }
+    if ($PassThru) { return $output }
   }
 
   $codex = Find-Codex
@@ -41,17 +43,31 @@
   $source = if ($env:CAM_SOURCE) { $env:CAM_SOURCE } else { $repo }
 
   Write-Host "Installing the plugin with $codex ..."
-  # Added afresh, so the marketplace follows the release this script came with.
-  Invoke-Codex @('plugin', 'remove', $plugin) -AllowFailure
-  Invoke-Codex @('plugin', 'marketplace', 'remove', $name) -AllowFailure
-  $add = @('plugin', 'marketplace', 'add', $source)
-  if ($ref -and -not $env:CAM_SOURCE) { $add += @('--ref', $ref) }
-  Invoke-Codex $add
-  Invoke-Codex @('plugin', 'add', $plugin)
-
   $root = Join-Path $codexHome "plugins\cache\$name\$name"
-  $installed = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  if (-not $installed) { throw "The plugin did not arrive in $root." }
+  # Codex may clean old cache files even when Windows keeps a running plugin's directory locked.
+  $cached = @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+\.\d+\.\d+([-+][\w.-]+)?$' })
+  $cacheBackup = Join-Path ([IO.Path]::GetTempPath()) ("cam-runtime-backup-" + [guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Path $cacheBackup | Out-Null
+  foreach ($entry in $cached) { Copy-Item -LiteralPath $entry.FullName -Destination $cacheBackup -Recurse -Force }
+  $installed = $null
+  try {
+    # Refresh marketplace metadata without deleting the working plugin first.
+    Invoke-Codex @('plugin', 'marketplace', 'remove', $name) -AllowFailure
+    $add = @('plugin', 'marketplace', 'add', $source)
+    if ($ref -and -not $env:CAM_SOURCE) { $add += @('--ref', $ref) }
+    Invoke-Codex $add
+    $result = Invoke-Codex @('plugin', 'add', '--json', $plugin) -PassThru | ConvertFrom-Json
+    if ($result.version -notmatch '^\d+\.\d+\.\d+([-+][\w.-]+)?$') { throw 'Invalid installed plugin version.' }
+    $installed = Get-Item -LiteralPath (Join-Path $root $result.version)
+    if (-not (Test-Path -LiteralPath (Join-Path $installed.FullName 'src\cam.ts'))) { $installed = $null; throw 'The new plugin runtime is incomplete.' }
+  } finally {
+    foreach ($entry in $cached) {
+      if ($installed -and $entry.Name -eq $installed.Name) { continue }
+      $target = Join-Path $root $entry.Name
+      New-Item -ItemType Directory -Path $target -Force | Out-Null
+      Get-ChildItem -LiteralPath (Join-Path $cacheBackup $entry.Name) -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target -Recurse -Force }
+    }
+  }
   # The installed plugin writes the proxy settings itself (checking for conflicts first) and starts its engine.
   Write-Host 'Pointing Codex at the local engine ...'
   & cmd.exe /d /s /c call "$($installed.FullName)\scripts\launch.cmd" "$($installed.FullName)\src\cam.ts" setup

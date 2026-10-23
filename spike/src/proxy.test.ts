@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import zlib from "node:zlib";
-import { claudeIdentity, describeBody, forwardHeaders, hasUnchecked, hasUnsafeInteger, imageSizesOf, macProxy, needsRewrite, outboundProxy, redactImages, rewriteBody, requestIdentity, routeOf, upstreamOf } from "../../plugin/src/proxy.ts";
+import { claudeIdentity, describeBody, forwardHeaders, hasUnchecked, hasUnsafeInteger, imageSizesOf, macProxy, needsRewrite, outboundProxy, redactImages, rewriteBody, requestIdentity, routeOf } from "../../plugin/src/proxy.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
 import { png } from "./testkit.ts";
 
@@ -166,11 +166,12 @@ test("with automatic selection, rewriteBody leaves out earlier turns' images tha
 });
 
 // v0.4: Claude Code through the same engine.
-test("Claude Code's /v1/ requests go to api.anthropic.com, everything else to chatgpt.com as before", () => {
-  assert.equal(upstreamOf("/v1/messages"), "api.anthropic.com");
-  assert.equal(upstreamOf("/v1/messages/count_tokens"), "api.anthropic.com");
-  assert.equal(upstreamOf("/backend-api/codex/responses"), "chatgpt.com");
-  assert.equal(upstreamOf("/backend-api/codex/images/generations"), "chatgpt.com");
+test("legacy Claude requests retain their native destination and Codex paths retain theirs", () => {
+  const claude = { "anthropic-version": "2023-06-01" };
+  assert.equal(routeOf("/v1/messages", claude)?.host, "api.anthropic.com");
+  assert.equal(routeOf("/v1/messages/count_tokens", claude)?.host, "api.anthropic.com");
+  assert.equal(routeOf("/backend-api/codex/responses", {})?.host, "chatgpt.com");
+  assert.equal(routeOf("/backend-api/codex/images/generations", {})?.host, "chatgpt.com");
   assert.equal(forwardHeaders({ host: "127.0.0.1:17891", "anthropic-beta": "oauth-2025-04-20", connection: "keep-alive" }, "api.anthropic.com").host, "api.anthropic.com");
   assert.equal(forwardHeaders({ authorization: "Bearer x" }, "api.anthropic.com").authorization, "Bearer x");
   assert.equal(forwardHeaders({ connection: "keep-alive" }, "api.anthropic.com").connection, undefined);
@@ -190,6 +191,16 @@ test("Codex's API-key requests go to api.openai.com/v1, its ChatGPT-login and Cl
   assert.deepEqual(routeOf("/backend-api/codex/responses", {}), { host: "chatgpt.com", url: "/backend-api/codex/responses" });
   // Claude's subscription token also starts with sk- (sk-ant-oat…): its /v1/ requests stay with Anthropic.
   assert.deepEqual(routeOf("/v1/messages?beta=true", { authorization: "Bearer sk-ant-oat01-synthetic" }), { host: "api.anthropic.com", url: "/v1/messages?beta=true" });
+});
+
+test("Claude credentials never fall through to a Codex destination when its request path changes", () => {
+  const headers = { "x-claude-code-session-id": "synthetic", "anthropic-version": "2023-06-01", authorization: "Bearer sk-ant-oat01-synthetic", "x-api-key": "sk-ant-synthetic" };
+  assert.deepEqual(routeOf("/new-endpoint?beta=true", headers), { host: "api.anthropic.com", url: "/new-endpoint?beta=true" });
+  assert.equal(routeOf("/backend-api/codex/responses", headers), null, "a contradictory legacy endpoint is refused");
+  assert.equal(routeOf("/unknown", {}), null, "unknown requests are refused locally");
+  assert.equal(routeOf("/v1/responses", { authorization: "Bearer sk-proj-synthetic" }), null, "an OpenAI key is not sent to Anthropic based only on /v1/");
+  assert.equal(forwardHeaders({ "chatgpt-account-id": "synthetic" }, "api.anthropic.com")["chatgpt-account-id"], undefined);
+  assert.equal(forwardHeaders({ "x-api-key": "sk-ant-synthetic" }, "chatgpt.com")["x-api-key"], undefined);
 });
 
 test("NO_PROXY is checked against each upstream host on its own", () => {

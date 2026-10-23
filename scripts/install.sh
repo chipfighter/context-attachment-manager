@@ -37,22 +37,39 @@ case "$ref" in __*) ref= ;; esac
 source=${CAM_SOURCE:-$repo}
 
 printf 'Installing the plugin with %s ...\n' "$codex"
-# Added afresh, so the marketplace follows the release this script came with.
-"$codex" plugin remove "$plugin" >/dev/null 2>&1 || true
+# Keep older runtimes usable if Codex's cache cleanup meets files still in use.
+cache_root="$codex_home/plugins/cache/$name/$name"
+cache_backup=$(mktemp -d "${TMPDIR:-/tmp}/cam-runtime-backup-XXXXXXXX")
+if [ -d "$cache_root" ]; then cp -R "$cache_root/." "$cache_backup/"; fi
+installed_version=
+restore_caches() {
+  for saved in "$cache_backup"/*; do
+    [ -d "$saved" ] || continue
+    saved_version=${saved##*/}
+    [ "$saved_version" != "$installed_version" ] || continue
+    mkdir -p "$cache_root/$saved_version"
+    cp -R "$saved/." "$cache_root/$saved_version/"
+  done
+}
+trap restore_caches 0
+# Refresh marketplace metadata without deleting the working plugin first.
 "$codex" plugin marketplace remove "$name" >/dev/null 2>&1 || true
 if [ -n "${CAM_SOURCE:-}" ] || [ -z "$ref" ]; then
   "$codex" plugin marketplace add "$source"
 else
   "$codex" plugin marketplace add "$source" --ref "$ref"
 fi
-"$codex" plugin add "$plugin"
-
-installed=$(ls -dt "$codex_home/plugins/cache/$name/$name"/*/ 2>/dev/null | head -n 1)
-installed=${installed%/}
-if [ -z "$installed" ]; then
-  printf 'The plugin did not arrive in %s.\n' "$codex_home/plugins/cache/$name/$name" >&2
+"$codex" plugin add --json "$plugin" > "$cache_backup/install-result.json"
+version=$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$cache_backup/install-result.json")
+case "$version" in ''|*[!0-9A-Za-z.+-]*) printf '%s\n' 'Invalid installed plugin version.' >&2; exit 1 ;; esac
+installed="$cache_root/$version"
+if [ ! -f "$installed/src/cam.ts" ]; then
+  printf 'The plugin did not arrive in %s.\n' "$installed" >&2
   exit 1
 fi
+installed_version=$version
+restore_caches
+trap - 0
 # The installed plugin writes the proxy settings itself (checking for conflicts first) and starts its engine.
 printf '%s\n' 'Pointing Codex at the local engine ...'
 if ! "$installed/scripts/launch" "$installed/src/cam.ts" setup; then

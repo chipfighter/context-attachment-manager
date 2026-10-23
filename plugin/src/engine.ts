@@ -18,7 +18,7 @@ export const DEFAULT_PORT = 17891;
 const here = dirname(fileURLToPath(import.meta.url));
 
 // build and version are missing on engines from before v0.1-3.
-export type Health = { ok: true; service: string; pid: number; startedAt: string; port: number; build?: string | null; version?: string | null };
+export type Health = { ok: true; service: string; pid: number; startedAt: string; port: number; build?: string | null; version?: string | null; routingVersion?: number; routingPort?: number };
 export type EngineState = "running" | "started" | "replaced" | "failed";
 
 export function isEngineHealth(value: unknown): value is Health {

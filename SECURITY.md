@@ -12,8 +12,8 @@ Please include what you found, how to reproduce it, and the plugin version and p
 
 ## What to look at
 
-The plugin runs a local proxy (the engine) between Codex and OpenAI, and on install it edits `~/.codex/config.toml` (and `~/.codex/.env` when needed). Problems like these are especially worth reporting:
+The plugin runs a local proxy (the engine) between Codex or Claude Code and the official or custom endpoint configured by the user. On install it edits `~/.codex/config.toml` (and `~/.codex/.env` when needed). Problems like these are especially worth reporting:
 
-- The engine accepts connections from other machines, or forwards requests anywhere other than OpenAI.
-- Credentials or conversation content end up in logs or in the data directory.
+- The engine accepts connections from other machines, sends credentials to the other client's service, or forwards requests to a destination the user did not configure.
+- Authentication headers or conversation content end up in logs or saved route records.
 - The install or uninstall scripts change more than INSTALL.md says.

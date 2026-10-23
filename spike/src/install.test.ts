@@ -74,3 +74,13 @@ test("the plugin's marketplace and install state are read from what Codex wrote"
   assert.deepEqual(pluginStatus(written), { marketplace: "\\\\?\\D:\\repos\\cam", installed: true, enabled: true });
   assert.equal(pluginStatus(written.replace("enabled = true", "enabled = false")).enabled, false);
 });
+
+test("installation registers custom endpoints before replacing them and uninstall restores them", () => {
+  const config = 'openai_base_url = "https://relay.example/custom/v1"\n' + CONFIG;
+  const targets: string[] = [];
+  let installed: ReturnType<typeof planInstall>;
+  assert.doesNotThrow(() => { installed = planInstall({ ...base, configText: config, envText: null, env: direct, routeBaseUrl: (target: string) => { targets.push(target); return "http://localhost:17891/__cam/routes/relay"; } }); });
+  assert.deepEqual(targets, ["https://relay.example/custom/v1"]);
+  assert.match(installed!.configText, /^openai_base_url = "http:\/\/localhost:17891\/__cam\/routes\/relay"$/m);
+  assert.equal(planUninstall({ configText: installed!.configText, envText: null }).configText, config);
+});

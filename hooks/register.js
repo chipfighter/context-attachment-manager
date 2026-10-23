@@ -1,10 +1,10 @@
 // Purpose: v0.4 — the Claude plugin's mod (docs/v0.4/plan.md). Two jobs; the rest is the plugin service's
 // (plugin/src/plugin-server.ts, CAM_HOST=claude) and the engine's:
 // 1. Routing. Claude Desktop starts Code sessions with ANTHROPIC_BASE_URL set and ignores settings files for it, so
-//    the mod points this Claude Code process at the engine with $.env.set once the engine answers and forwards Claude's
-//    requests (its health lists api.anthropic.com), before the first request where it can, and puts the original back
-//    when the process ends. It leaves a session alone that already uses another endpoint or a third-party provider.
-//    The subscription login is untouched: the engine forwards the same headers to api.anthropic.com.
+//    the mod registers this process's original upstream with the engine, then points this process at that explicit
+//    route with $.env.set, before the first request where it can. Official and Anthropic-compatible relay endpoints
+//    both work; Bedrock, Vertex and Foundry keep their native transport. Process-local settings are restored only
+//    while they still have the values this mod installed. Authentication stays with the registered upstream.
 // 2. The way to the panel. The panel is the Codex panel itself (plugin/src/panel.html), served by the engine as a page
 //    for this session (proxy.ts, /__cam/panel): a mod draws only its own simple elements (no web page), and Claude
 //    Code opens no MCP app for the user. /cam opens the page in Claude Desktop's own browser, beside the conversation
@@ -27,6 +27,8 @@
 const PLUGIN = 'codex-attachment-manager'
 // The engine's port (engine.ts, DEFAULT_PORT); the plugin's MCP server starts the engine on it.
 const ENGINE_PORT = 17891
+// Registered routes use a separate listener that an older engine cannot mistake for a ChatGPT request.
+const ROUTING_PORT = ENGINE_PORT + 1
 const PANE = 'cam'
 const ROUTING = { plugin: 'codex-attachment-manager', key: 'routing' }
 // The model's image fetch, as Claude Code names the tool of this plugin's MCP server (.claude-plugin/plugin.json).
@@ -50,7 +52,7 @@ const WORDS = {
       waiting: '正在等待本机引擎启动…',
       'other-endpoint': '本会话使用别的服务地址，没有接管：勾选不会生效',
       provider: '本会话使用第三方模型服务，没有接管：勾选不会生效',
-      'engine-old': '运行中的引擎版本较旧，不能转发 Claude 的请求：关掉 Codex 后运行 cam install，再开新会话',
+      'engine-old': '运行中的引擎版本较旧，不支持独立线路：关掉 Codex 后运行 cam install，再开新会话',
       'no-engine': '本机引擎没有启动，本会话直连：勾选不会生效',
       failed: '切换请求地址没有成功，本会话直连：勾选不会生效',
     },
@@ -66,7 +68,7 @@ const WORDS = {
       waiting: 'Waiting for the local engine…',
       'other-endpoint': 'This session uses another endpoint and is left alone: checks have no effect',
       provider: 'This session uses a third-party provider and is left alone: checks have no effect',
-      'engine-old': 'The running engine is too old to forward Claude requests: close Codex, run cam install, then start a new session',
+      'engine-old': 'The running engine is too old to use separate routes: close Codex, run cam install, then start a new session',
       'no-engine': 'The local engine is not running; this session connects directly: checks have no effect',
       failed: 'Switching the endpoint failed; this session connects directly: checks have no effect',
     },
@@ -121,21 +123,22 @@ const idle = (reason) => ({ active: false, port: null, originalBaseUrl: null, or
 async function startRouting($, attempts = 60) {
   const saved = await readRouting($)
   // Already switched in this process (the module was reloaded): keep what it saved.
-  if (saved?.active) { routingState = saved; return true }
+  if (saved?.active && saved.managedBaseUrl) { routingState = saved; return true }
+  // An older mod pointed at the bare engine URL. Recover its upstream before registering an explicit route.
+  if (saved?.active) await restoreRouting($)
   const current = await $.env.get('ANTHROPIC_BASE_URL')
-  if (current && !/^https:\/\/api\.anthropic\.com\/?$/.test(current)) { await writeRouting($, idle('other-endpoint')); return true }
   const providers = [await $.env.get('CLAUDE_CODE_USE_BEDROCK'), await $.env.get('CLAUDE_CODE_USE_VERTEX'), await $.env.get('CLAUDE_CODE_USE_FOUNDRY')]
   if (providers.some((value) => value && value !== '0')) { await writeRouting($, idle('provider')); return true }
   await writeRouting($, idle('waiting'))
   // The plugin's MCP server starts the engine with the session; wait for it to answer. An engine started by an older
-  // copy of the plugin (Codex's, not updated yet) does not forward Claude's requests: leave the session alone then.
+  // copy of the plugin may only guess the upstream from the URL path: leave the session alone then.
   let port = null
   let reason = 'no-engine'
   for (let attempt = 0; attempt < attempts && port === null && reason !== 'engine-old'; attempt++) {
     try {
       const health = await $.http.fetch(`http://127.0.0.1:${ENGINE_PORT}/__cam/health`)
       const body = health.ok ? JSON.parse(health.text) : null
-      if (body?.service === PLUGIN && Array.isArray(body.upstreams) && body.upstreams.includes('api.anthropic.com')) port = ENGINE_PORT
+      if (body?.service === PLUGIN && body.routingVersion >= 1 && body.routingPort === ROUTING_PORT) port = ENGINE_PORT
       else if (body?.service === PLUGIN) reason = 'engine-old'
     } catch { /* the engine is still starting */ }
     if (port === null && reason !== 'engine-old') await $.clock.sleep(500)
@@ -145,15 +148,34 @@ async function startRouting($, attempts = 60) {
     await writeRouting($, idle(reason))
     return true
   }
+  let route
+  try {
+    const response = await $.http.fetch(`http://127.0.0.1:${port}/__cam/routes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cam-panel': '1' },
+      body: JSON.stringify({ platform: 'claude', baseUrl: current || 'https://api.anthropic.com' }),
+    })
+    if (!response.ok) throw new Error('route registration failed')
+    route = JSON.parse(response.text)
+    if (typeof route.id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(route.id) || route.baseUrl !== `http://127.0.0.1:${ROUTING_PORT}/__cam/routes/${route.id}`) throw new Error('invalid route response')
+  } catch {
+    await writeRouting($, idle('failed'))
+    return true
+  }
   const originalNoProxy = await $.env.get('NO_PROXY')
   const originalNoProxyLower = await $.env.get('no_proxy')
-  const saving = { active: true, port, originalBaseUrl: current ?? null, originalNoProxy: originalNoProxy ?? null, originalNoProxyLower: originalNoProxyLower ?? null, reason: null }
+  const saving = {
+    active: true, port: ROUTING_PORT,
+    originalBaseUrl: current ?? null, originalNoProxy: originalNoProxy ?? null, originalNoProxyLower: originalNoProxyLower ?? null,
+    managedBaseUrl: route.baseUrl, managedNoProxy: loopbackAdded(originalNoProxy), managedNoProxyLower: loopbackAdded(originalNoProxyLower),
+    reason: null,
+  }
   await writeRouting($, saving)
   try {
     // Requests to the engine must not go through a system proxy.
-    await $.env.set('NO_PROXY', loopbackAdded(originalNoProxy))
-    await $.env.set('no_proxy', loopbackAdded(originalNoProxyLower))
-    await $.env.set('ANTHROPIC_BASE_URL', `http://127.0.0.1:${port}`)
+    await $.env.set('NO_PROXY', saving.managedNoProxy)
+    await $.env.set('no_proxy', saving.managedNoProxyLower)
+    await $.env.set('ANTHROPIC_BASE_URL', saving.managedBaseUrl)
   } catch {
     await restoreRouting($)
     await writeRouting($, { ...saving, active: false, reason: 'failed' })
@@ -164,9 +186,12 @@ async function startRouting($, attempts = 60) {
 async function restoreRouting($) {
   const saved = await readRouting($)
   if (!saved?.active) return
-  await $.env.set('ANTHROPIC_BASE_URL', saved.originalBaseUrl ?? undefined)
-  await $.env.set('NO_PROXY', saved.originalNoProxy ?? undefined)
-  await $.env.set('no_proxy', saved.originalNoProxyLower ?? undefined)
+  const restore = async (name, managed, original) => {
+    if (await $.env.get(name) === managed) await $.env.set(name, original ?? undefined)
+  }
+  await restore('ANTHROPIC_BASE_URL', saved.managedBaseUrl ?? `http://127.0.0.1:${saved.port}`, saved.originalBaseUrl)
+  await restore('NO_PROXY', saved.managedNoProxy ?? loopbackAdded(saved.originalNoProxy), saved.originalNoProxy)
+  await restore('no_proxy', saved.managedNoProxyLower ?? loopbackAdded(saved.originalNoProxyLower), saved.originalNoProxyLower)
   routingState = { ...saved, active: false, reason: null }
   await $.state.set(ROUTING, routingState)
 }

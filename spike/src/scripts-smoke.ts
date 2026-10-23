@@ -6,7 +6,7 @@
 // engine. Output: a JSON summary on stdout; exit code 1 when a check fails.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -41,12 +41,25 @@ async function main(): Promise<boolean> {
   for (const dir of [home, data]) mkdirSync(dir, { recursive: true });
   const cli = findCodexCli();
   if (!cli) throw new Error("no Codex command line found (set CODEX_CLI_PATH or put codex on PATH)");
+  const version = JSON.parse(readFileSync(join(root, "plugin", ".codex-plugin", "plugin.json"), "utf8")).version;
+  const upgrade = process.argv.includes("--upgrade");
+  let source = root;
+  if (upgrade) {
+    source = join(scratch, "old-marketplace");
+    mkdirSync(join(source, ".agents", "plugins"), { recursive: true });
+    cpSync(join(root, ".agents", "plugins", "marketplace.json"), join(source, ".agents", "plugins", "marketplace.json"));
+    cpSync(join(root, "plugin"), join(source, "plugin"), { recursive: true });
+    const manifest = join(source, "plugin", ".codex-plugin", "plugin.json");
+    const old = JSON.parse(readFileSync(manifest, "utf8")); old.version = "0.8.3";
+    writeFileSync(manifest, JSON.stringify(old));
+    writeFileSync(join(source, "plugin", "src", "upgrade-sentinel.ts"), "// synthetic earlier build\n");
+  }
   // The user's own settings, in this platform's line endings; they must come back byte for byte.
   const config = ['model = "gpt-6-sol"', "", "[features]", "view_image = true", ""].join(eol);
   const dotenv = `OTHER_SETTING=1${eol}`;
   writeFileSync(join(home, "config.toml"), config);
   writeFileSync(join(home, ".env"), dotenv);
-  const env = { ...process.env, CODEX_HOME: home, CAM_DATA_DIR: data, CAM_ENGINE_PORT: String(port), CAM_SOURCE: root, CODEX_CLI_PATH: cli };
+  const env = { ...process.env, CODEX_HOME: home, CAM_DATA_DIR: data, CAM_ENGINE_PORT: String(port), CAM_SOURCE: source, CODEX_CLI_PATH: cli };
   const summary: Json = { platform: process.platform, cli, scratch, checks: {} };
   const checks: Record<string, boolean> = summary.checks;
 
@@ -62,7 +75,21 @@ async function main(): Promise<boolean> {
     health = await engineHealth(port);
     if (!health) await sleep(250);
   }
-  const version = JSON.parse(readFileSync(join(root, "plugin", ".codex-plugin", "plugin.json"), "utf8")).version;
+  if (upgrade) {
+    const oldCache = join(cache, "0.8.3");
+    const holding = spawn(process.execPath, ["-e", "console.log('ready');setInterval(()=>{},1000)"], { cwd: oldCache, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const exited = new Promise<void>(resolve => holding.once("exit", () => resolve()));
+    await new Promise<void>((resolve, reject) => { holding.once("error", reject); holding.stdout.once("data", () => resolve()); });
+    try {
+      env.CAM_SOURCE = root;
+      const updated = await run("install", env);
+      summary.upgrade = updated.output.split(/\r?\n/).slice(-12);
+      checks.upgradeWithOldRuntimeOpen = updated.ok;
+      checks.oldRuntimePreserved = existsSync(join(oldCache, "src", "cam.ts")) && existsSync(join(oldCache, "scripts", "launch.cmd"));
+      checks.newRuntimeInstalled = existsSync(join(cache, version, "src", "cam.ts"));
+      health = await engineHealth(port);
+    } finally { holding.kill(); await exited; }
+  }
   summary.engine = health ? { pid: health.pid, build: health.build, installedBuild: buildOf(join(cache, version, "src")) } : null;
   checks.engineFromInstalledCopy = !!health && health.build === buildOf(join(cache, version, "src"));
 
