@@ -2,9 +2,9 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [Unreleased]
+## [0.9.0] - 2026-10-23
 
-Target: 0.9.0.
+Separate provider routes and image management through compatible gateways.
 
 ### Features
 

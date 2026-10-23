@@ -6,24 +6,24 @@
 
 ## 1. 总体结构
 
-在 Codex 和 OpenAI 之间放一个只在本机监听的代理（引擎）：
+在客户端和它原本使用的模型服务之间放一个只在本机监听的代理（引擎）：
 
 1. Codex 照常把完整请求发给引擎；
-2. 引擎按这个任务的勾选，把取消的图换成占位符，再转发给 `chatgpt.com`；
+2. 引擎按这个任务的勾选，把取消的图换成占位符，再转发给对应的官方或自定义服务；
 3. 回复原路返回，由 Codex 照常记进同一个任务。
 
-任务不换，历史和界面都不动，勾选和取消从下一次请求起生效。v0.4 起，Claude Code 的请求也经过同一个引擎，转发到 `api.anthropic.com`，见第 12 节。
+任务不换，历史和界面都不动，勾选和取消从下一次请求起生效。v0.4 起，Claude Code 的请求也经过同一个引擎，见第 12 节。v0.9 把平台协议和上游地址分开：中转线路绑定平台和原服务地址，按平台选择图片改写器，再发往绑定的服务，不靠域名判断是否执行 Claude 改写。
 
 另一条路线是在新任务里重建历史（阶段 0 验证过，技术上可行）。没有采用，因为用户要在同一个任务里看到连续的对话，见 [history/v0.1/phase0-report.md](history/v0.1/phase0-report.md)。
 
 | 部分 | 代码（`plugin/src`） | 作用 |
 |---|---|---|
-| 引擎 | `proxy.ts`、`engine.ts` | 本机代理：改写请求、记录每个任务最近一次请求的统计；全机只有一个 |
+| 引擎 | `proxy.ts`、`engine.ts`、`routes.ts` | 本机代理：按绑定线路转发、改写请求、记录每个任务最近一次请求的统计；全机只有一个 |
 | 插件服务 | `plugin-server.ts` | Codex 为每个会话启动的 MCP 服务：拉起并看守引擎，给面板提供数据；v0.3 起还给模型提供取图工具 |
 | 面板 | `panel.html`、`panel-state.ts` | 侧边面板里的 MCP 应用，以及它要显示的数据 |
 | 任务索引 | `thread-index.ts`、`images.ts`、`thumbnail.ts`、`png.ts`、`thread-names.ts` | 从 Codex 的任务记录里只读地找出图片和它的来源、编号、生成缩略图、读任务名 |
 | 改写 | `rewrite.ts`、`selection.ts`、`request-stats.ts` | 占位符、说明和标签；勾选状态；请求统计 |
-| 接入和安装 | `codexconfig.ts`、`setup.ts`、`install.ts`、`codexcli.ts`、`cam.ts` | 管理 Codex 配置里带标记的块；用 Codex 的命令行装卸插件；`cam` 命令行 |
+| 接入和安装 | `codexconfig.ts`、`setup.ts`、`install.ts`、`codexcli.ts`、`cam.ts`、`plugin-cache.ts` | 管理 Codex 配置里带标记的块；用 Codex 的命令行装卸插件；保护升级中的旧运行文件；`cam` 命令行 |
 | 其他 | `language.ts`、`messages.ts`、`paths.ts`、`migrate-data.ts`、`binding.ts`、`entry.ts` | 语言、文字表、数据目录、旧数据迁移、新任务绑定 |
 | Claude 接入（v0.4） | `hooks/register.js`（Mod，不在 `plugin/src`） | 把会话的请求地址指向引擎；`/cam` 打开面板（v0.6 起有图时自动打开）；取图工具免确认 |
 | Claude 会话索引和改写（v0.4） | `claude-index.ts`、`claude-rewrite.ts` | 从 Claude Code 的会话记录找图、编号；改写 Anthropic Messages 请求 |
@@ -36,11 +36,16 @@
 
 - **地址**：`config.toml` 顶层的 `openai_base_url = "http://localhost:17891/backend-api/codex"`。
   - 必须以 `/backend-api/codex` 结尾，否则 Codex 会关掉后端专用的接口；引擎把同样的路径转发到 `https://chatgpt.com`。
-  - API key 登录的 Codex 也用这个地址（2026-10-22 用假 key 对着本机假服务实测）：请求一样发到 `…/backend-api/codex/responses`，带 `Authorization: Bearer sk-…`，没有 ChatGPT 登录才有的 `chatgpt-account-id`。chatgpt.com 不认 API key，所以引擎认出这种请求（`proxy.ts` 的 `routeOf`）后，转给 `https://api.openai.com`，路径里的 `/backend-api/codex/` 换成 `/v1/`，正是没装工具时 Codex 的默认地址。请求体同样是 Responses 请求，改写照旧。WebSocket 升级也按同样的规则转发。Claude 订阅的令牌也以 `sk-` 开头（`sk-ant-oat…`），但它的路径是 `/v1/…`，不受影响。
+  - API key 登录的 Codex 也用这个地址（2026-10-22 用假 key 对着本机假服务实测）：请求一样发到 `…/backend-api/codex/responses`，带 `Authorization: Bearer sk-…`，没有 ChatGPT 登录才有的 `chatgpt-account-id`。chatgpt.com 不认 API key，所以引擎认出这种请求（`proxy.ts` 的 `routeOf`）后，转给 `https://api.openai.com`，路径里的 `/backend-api/codex/` 换成 `/v1/`，正是没装工具时 Codex 的默认地址。请求体同样是 Responses 请求，改写照旧。WebSocket 升级也按同样的规则转发。v0.9 对旧入口先排除 Claude 身份和矛盾标识；不能因为 Claude 的订阅令牌也以 `sk-` 开头，就把它发往 OpenAI。
   - 写 `localhost` 不写 `127.0.0.1`：Windows 代理设置里的 `<local>` 只让不带点的主机名直连。
 - **`features.respect_system_proxy = true`**：让 Codex 先看 Windows 的代理设置。否则用户环境里有 `HTTP(S)_PROXY`、没有 `NO_PROXY` 时，连本机的请求也会被交给系统代理，然后失败。
 - **`~/.codex/.env` 里的 `NO_PROXY`**：生图、改图的客户端只认环境变量。Codex 启动时会读 `.env`，所以在需要时写一段 `NO_PROXY=localhost,127.0.0.1,::1`，合并用户自己的条目。`.env` 可能含密钥，工具不复制、不输出它。
-- **带标记的块**：上面三处都是工具自己管理、带标记的块。改之前先备份，整个文件写好再替换；恢复时只删掉这些块，绝不用旧备份整体覆盖（Codex 运行时自己也会写 `config.toml`）。用户自己设过 `openai_base_url`，或者把 `respect_system_proxy` 设成了 false，一律不写，直接报告。
+- **带标记的块**：上面三处都是工具自己管理、带标记的块。改之前先备份，整个文件写好再替换；恢复时只清理自己管理的块，绝不用旧备份整体覆盖（Codex 运行时自己也会写 `config.toml`）。v0.9 用户自设的 `openai_base_url` 和供应商地址按下面的线路方式接管；`respect_system_proxy = false` 仍报告冲突，不覆盖。
+- **自定义服务（v0.9）**：`codexconfig.ts` 只改可安全识别的单行 `openai_base_url` 和 `model_providers.<名称>.base_url`，支持普通表和点分键。每条原地址在原位置包进 `managed upstream` 注释块，保存原行和插件写入的行；停用时，当前地址仍等于插件所写的才还原，用户后来改过的地址或增加的其他行保留。引号键、BOM、换行形式和原行可还原；三引号地址、内联供应商表等未支持写法在登记和写配置之前拒绝。外部 profile 文件和环境变量覆盖不自动改写。
+  - `planEngine` 预检时只验证、生成计划；`useEngine` 先登记目标，再写配置，避免配置引用不存在的线路。供应商名称、模型、`env_key`、其他认证设置、自定义头和查询参数不改。第三方工具改了地址后，重新启用并重启 Codex，重新登记当前配置。
+  - `routes.ts` 把 `{platform, baseUrl}` 存进数据目录的 `routes/`，用本机随机共享密钥的 HMAC 生成不暴露上游地址的稳定线路编号；同一配置重复登记幂等。记录不复制客户端认证头，HTTP 请求本身也不能指定任意上游；未知编号本机拒绝。
+  - 本机地址是 `http://localhost:17892/__cam/routes/<编号>`。转发时去掉本机线路前缀，把原上游的协议、端口、基础路径和查询参数接回去；连接层支持 HTTP 和 HTTPS，按实际目标遵守 `NO_PROXY`。平台和目标分离，已登记线路不看密钥前缀来猜平台。
+  - HTTP 和 WebSocket 都按相同线路选择目标、过滤内部头和另一平台独有的认证标识；中转本身需要的 `Authorization`、`x-api-key` 由客户端提供，不能因为域名不是官方域名就一律删掉。明确的相反平台身份会拒绝；旧入口里既认不出客户端、又不属于已知 Codex 接口的请求不再默认转给 ChatGPT。
 - **经过引擎的接口**：对话走 `…/responses`（默认 WebSocket，失败时回退到 HTTP），历史压缩走 `…/responses/compact`，生图和改图走 `…/images/generations`、`…/images/edits`。
 - **认出任务**：每个请求的 `x-codex-turn-metadata` 请求头里有 `thread_id`、`turn_id`。
 - **往外连**：引擎沿用系统代理：Windows 读注册表；macOS 读 `scutil --proxy`，只认 HTTP(S) 代理；Linux 只看环境变量。遵守 `NO_PROXY`。
@@ -119,7 +124,8 @@
 
 ## 5. 引擎的生命周期
 
-- **全机一个**：监听 17891 端口（`127.0.0.1` 和 `::1`），`/__cam/health` 报告进程、build（运行目录里 .ts 文件的哈希，换行统一成 LF）和版本。
+- **全机一个**：同一个进程在 `127.0.0.1` 和 `::1` 上监听两个端口。默认 17891 提供面板、登记和旧版官方接入，17892 只收已登记线路；自定义引擎端口时，线路端口是下一个。两入口的线路请求不互相代转。`/__cam/health` 报告进程、build（运行目录里 .ts 文件的哈希，换行统一成 LF）、版本，以及 `routingVersion: 1`、`routingPort`。先绑定线路端口，再在旧入口报就绪；两端口都只监听本机。
+  - 独立线路端口是升级隔离：旧副本只会拉起旧入口，不会收到新线路的 HTTP 或 WebSocket 请求。仅换路径前缀不够，旧引擎的 WebSocket 仍可能默认向 OpenAI 转发。绑定文件跨引擎重启保留，客户端不需要拿新编号。
 - **跟着 Codex**：插件服务启动时确保引擎在运行，之后每隔几秒检查一次，崩了就重新拉起。Codex 全部退出后，引擎自己退出；v0.4 起 Claude Code 也用这个引擎，要等 Codex 和 Claude 的进程都没有了才退出。
 - **Windows 的 Job**：插件服务在一个“关闭即结束、不许脱离”的 Job 里，它拉起的引擎随它一起结束，其他会话的插件服务会在几秒内重新拉起。macOS、Linux 上引擎用 `setsid` 脱离进程组。
 - **升级时替换**：插件服务发现运行中的引擎版本比自己低，就请旧引擎退役（`/__cam/retire`）：旧引擎立刻停止监听，把正在进行的请求和 WebSocket 这一轮做完再退出，新引擎马上接手端口。版本相同、代码不同时不替换，只有安装命令（`cam install`）强制替换：v0.4 起 Codex 和 Claude 各有一份插件副本，否则两份副本会来回让对方的引擎退役。
@@ -181,7 +187,7 @@
 
 - Windows 是 `%USERPROFILE%\.codex-attachment-manager`，macOS 是 `~/Library/Application Support/codex-attachment-manager`，Linux 按 XDG 是 `~/.local/share/codex-attachment-manager`；`CAM_DATA_DIR` 可以改（测试、开发用）。
 - Windows 上不放在 AppData 下：Codex 是微软商店应用，它启动的程序在 AppData 里新建的文件会被转存到应用的私有目录，Codex 外面的命令行和引擎就看不到了。
-- 里面有：`selection/`（勾选状态，每个任务一个文件，只记取消的识别键；v0.3 起还记自动选图的开关 `auto`、最近一次切换的时间 `autoAt`、第一次打开的时间 `autoSince` 和每轮都发的图的识别键 `pinned`；v0.6 起还有 `auto-default.json`，新任务默认开着自动选图的起始时间；v0.7 的主任务文件里可能还有子代理和旁聊的开关 `childrenAuto`，v0.8 起不再读）、`bindings/`、`state/requests/`（请求统计）、`state/children/`（v0.7，每个主任务的子代理和旁聊）、`cache/pixels/`、`proxy/`（引擎日志）、`plugin-server.jsonl`、`language.json`、`config-backup/`。
+- 里面有：`selection/`（勾选状态，每个任务一个文件，只记取消的识别键；v0.3 起还记自动选图的开关 `auto`、最近一次切换的时间 `autoAt`、第一次打开的时间 `autoSince` 和每轮都发的图的识别键 `pinned`；v0.6 起还有 `auto-default.json`，新任务默认开着自动选图的起始时间；v0.7 的主任务文件里可能还有子代理和旁聊的开关 `childrenAuto`，v0.8 起不再读）、`bindings/`、`routes/`（v0.9，平台、原服务地址、稳定编号和本机共享密钥）、`state/requests/`（请求统计）、`state/children/`（v0.7，每个主任务的子代理和旁聊）、`cache/pixels/`、`proxy/`（引擎日志）、`plugin-server.jsonl`、`language.json`、`config-backup/`。
 - 分叉任务沿用原任务在分叉那一刻的勾选，之后各管各的。v0.3：每轮都发的勾选一样按时间继承；开关在分叉前打开、之后没再切换过才继承；分叉前用过自动选图的，分叉也记下 `autoSince`，以便省略历史里的副本。
 - `migrate-data.ts` 在第一次使用时，把旧位置（旧的 AppData 目录和各应用私有目录里的副本）的数据复制过来，用锁文件保证只有一个进程在复制。
 
@@ -191,7 +197,7 @@
 - **启动**：`.mcp.json` 的命令是 `./scripts/launch`，Windows 上 Codex 按 PATHEXT 找到 `launch.cmd`，macOS、Linux 上运行同名的 POSIX 脚本。两者按同样的顺序找 Node：Codex 传来的路径、桌面版资源目录里的 `cua_node`、primary runtime、PATH 上 24 以上的 `node`。用户不用另装 Node。
 - **安装**（`cam install`，以及发布附带的 `install.ps1` / `install.sh`）：
   1. 检查和用户自己设置的冲突，备份 `config.toml`；
-  2. 用 Codex 的命令行登记市场、装插件，每次都重装，让 Codex 的副本和仓库一致；
+  2. 先保留已有插件程序文件，再用 Codex 的命令行登记市场、安装目标版本，不先删除可用副本；原生清理可能在 Windows 旧目录仍被进程占用时删掉部分文件，所以安装后补回旧版本，失败时也恢复目标版本的原文件。`cam install` 用 `plugin-cache.ts` 保护；发布脚本做相同保护，并用原生安装返回的版本选择新副本，不再靠目录修改时间猜；
   3. 自检装好的副本：用它自己的启动脚本起服务，问工具列表和面板页面；
   4. 写带标记的块；
   5. 迁移旧的勾选记录，确保引擎在运行。
@@ -203,7 +209,7 @@
 ## 10. 测试
 
 - **单元测试**：`spike/src/*.test.ts`，`cd spike && node --test`。
-- **冒烟测试**：`plugin-smoke.ts` 用 Codex 自己的命令行装插件、用 app-server 开任务，确认插件服务就绪、引擎启动；`scripts-smoke.ts` 真的跑安装、卸载脚本，确认 `config.toml` 和 `.env` 恢复原样。CI 在 Windows、macOS、Linux 上跑这两项和全部单元测试。
+- **冒烟测试**：`plugin-smoke.ts` 用 Codex 自己的命令行装插件、用 app-server 开任务，确认插件服务就绪、引擎启动；`scripts-smoke.ts --upgrade` 真的跑安装、升级和卸载脚本，确认旧运行文件仍在、新副本能启动，`config.toml` 和 `.env` 恢复原样；Windows 还保持旧目录被运行进程占用。CI 在 Windows、macOS、Linux 上跑这两项和全部单元测试。
 - **模型自测**（规矩见 AGENTS.md）：`v01-placeholder-selftest.ts` 和 `v01-needs-selftest.ts` 启动自己的引擎（独立的端口和数据目录）和 app-server，用合成图片跑多轮对话，检查模型不收回之前的回答、按编号要图、勾回后看图作答。`CAM_TEST_MODEL`、`CAM_TEST_EFFORT` 换模型，`--lang en` 测英文。测完把建的任务归档；遗留的用 `spike/scripts/archive-test-threads.ts` 归档。
 - **自动选图自测**（v0.3，`v03-auto-selftest.ts`）：同样起自己的引擎和 app-server，另把本仓库的插件服务挂成一个单独的 MCP 服务，提供 `cam_view_image`；开关写在测试自己的勾选文件里。测试图角落各藏一个数字，描述时不提：
   - A 组明确要求取图，检查取到、副本不另编号、下一轮被省略；
@@ -248,15 +254,15 @@
   - v0.3 查证：GPT-6 Luna（low）读工具结果里的图，比读用户消息里的图差。同一张图放在消息里问，四次都读对；经 `cam_view_image` 或 Codex 自带的 `view_image` 送来，常把角落的小数字读错（5 读成 3，7 读成 2），有时说看不到数字。把取回的图挪进紧跟着的一条用户消息也没改善，问题在“先调用工具再看图”这个过程，不在图放在哪里。Sol、Astra 没有这个问题。发布说明写明了这一点。
 - **桌面版的上下文比自测多**：桌面版每轮还带着电脑操作、浏览器等插件的工具说明（约 1 万 token）。自测为了不让测试模型操作用户的电脑，没开这些插件，所以个别只在桌面版出现的模型行为，自测复现不出来。
 
-## 12. Claude Code 接入（v0.4–v0.8）
+## 12. Claude Code 接入（v0.4–v0.9）
 
 方案、关卡和任务见 [v0.4/plan.md](v0.4/plan.md)。做法是把上面的机制逐块移植，这里写对应的做法和平台逼迫的改动。
 
 - **接入**（`hooks/register.js`，Mod）：
-  - Claude 桌面启动 Code 会话时传入 `ANTHROPIC_BASE_URL`，不认 settings 文件里的同名设置。所以由 Mod 在会话启动（`session.start`）时切换：等引擎回答健康检查、确认它能转发 `api.anthropic.com`，再用 `$.env.set` 把这个 Claude Code 进程的 `ANTHROPIC_BASE_URL` 指向 `http://127.0.0.1:17891`，并把本机地址加进 `NO_PROXY`。
-  - 原值存在会话状态里，进程结束（`session.end`，`/clear`、`/resume` 除外）时还原。尽量在第一个请求之前切好；引擎还在启动时，先等几秒，其余时间在后台等。
-  - 已经设了别的服务地址或第三方服务（`CLAUDE_CODE_USE_BEDROCK` 等）的会话不接管。运行中的引擎太旧、不转发 Claude 时也不接管，小面板上提示。
-  - 订阅登录不受影响：引擎把同样的请求头转给 `api.anthropic.com`，不记认证信息。
+  - Claude 桌面启动 Code 会话时传入 `ANTHROPIC_BASE_URL`，不认 settings 文件里的同名设置。所以由 Mod 在会话启动（`session.start`）时切换：读取原地址（没有时用 `https://api.anthropic.com`），确认引擎健康检查声明 `routingVersion >= 1` 和独立的 17892 线路端口，向 17891 的 `POST /__cam/routes` 登记 `{platform: "claude", baseUrl: 原地址}`。登记接口只接受本机 Host、无浏览器 Origin、带 `x-cam-panel: 1` 的请求；不接受引擎自循环地址、含账号密码、片段标记或非 HTTP(S) 的目标。
+  - Mod 核对返回地址确实是本机 17892 的对应编号，成功后才用 `$.env.set` 切换本进程的 `ANTHROPIC_BASE_URL`，并把本机地址加进 `NO_PROXY`。原值和插件所写的值都存在会话状态里，结束（`session.end`，`/clear`、`/resume` 除外）时只还原仍等于插件所写值的变量。尽量在首个请求前切好；引擎还在启动时先等几秒，其余在后台等。登记或切换失败时保持或恢复原地址，并提示未接管。
+  - 自定义 Anthropic Messages 兼容地址也按同样方式登记；`CLAUDE_CODE_USE_BEDROCK`、Vertex、Foundry 仍不接管。旧引擎不支持独立线路时保持直连，小面板提示；旧 Mod 状态中保存的原地址可用于升级到新线路。
+  - 订阅登录和中转认证仍由 Claude Code 提供，引擎只发往该线路的原目标，不把认证头记入日志或线路文件。Claude 身份来自线路的平台绑定；会话与子代理仍靠下面的请求头区分。去掉本机线路前缀后的 `/v1/messages` 才执行 Claude 改写，不要求上游域名是 `api.anthropic.com`。
 - **认出会话**：靠请求头 `x-claude-code-session-id`。子代理的请求另带 `x-claude-code-agent-id`，它们有自己的历史，不按主会话改写。
 - **找图和编号**（`claude-index.ts`）：
   - 会话记录在 `~/.claude/projects/<项目>/<会话 id>.jsonl`（`CLAUDE_CONFIG_DIR` 可改），只读、增量地读。记录用 `parentUuid` 串成链，从最新一条消息往回走就是当前的对话，撤回、编辑留下的旧分支不算；压缩分界的记录用 `logicalParentUuid` 接上前面的历史。
