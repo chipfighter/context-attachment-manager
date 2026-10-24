@@ -1,0 +1,644 @@
+{
+  "arm": "off",
+  "model": "gpt-6-sol",
+  "effort": "low",
+  "createdAt": "2026-10-24T13:17:11.188Z",
+  "threads": {
+    "X": [
+      {
+        "step": "T1",
+        "status": "completed",
+        "seconds": 24,
+        "reply": "两张关键帧分别是书房里的女主和男主正面镜头：女主红衣、黑色长发，男主蓝衣、棕色短发。背景和构图一致，适合接成同一场的对话镜头。",
+        "tokens": {
+          "total": {
+            "totalTokens": 25033,
+            "inputTokens": 24969,
+            "cachedInputTokens": 11904,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 64,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 25033,
+            "inputTokens": 24969,
+            "cachedInputTokens": 11904,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 64,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T2",
+        "status": "completed",
+        "seconds": 19,
+        "reply": "第一张是女主在雨中的正面特写，神情显得紧张；第二张只有雨夜天空和一处暖光，可以接在特写后，作为短暂的空镜。",
+        "tokens": {
+          "total": {
+            "totalTokens": 53907,
+            "inputTokens": 53794,
+            "cachedInputTokens": 36480,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 113,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 28874,
+            "inputTokens": 28825,
+            "cachedInputTokens": 24576,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 49,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T3",
+        "status": "completed",
+        "seconds": 11,
+        "reply": "这版女主的脸和红衣清楚多了，雨夜氛围也还在；可以替换上一版的女主特写。",
+        "tokens": {
+          "total": {
+            "totalTokens": 84728,
+            "inputTokens": 84577,
+            "cachedInputTokens": 64896,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 151,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 30821,
+            "inputTokens": 30783,
+            "cachedInputTokens": 28416,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 38,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T4",
+        "status": "completed",
+        "seconds": 21,
+        "reply": "第三场是黄昏海边的男女主正面镜头：先给男主中景，再切女主特写。两张的暮色和海面背景衔接得上。",
+        "tokens": {
+          "total": {
+            "totalTokens": 119390,
+            "inputTokens": 119191,
+            "cachedInputTokens": 95232,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 199,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 34662,
+            "inputTokens": 34614,
+            "cachedInputTokens": 30336,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 48,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T5",
+        "status": "completed",
+        "seconds": 4,
+        "reply": "记住了：第三场海边的第二张，女主的脸以这版为参考。",
+        "tokens": {
+          "total": {
+            "totalTokens": 154095,
+            "inputTokens": 153870,
+            "cachedInputTokens": 129408,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 225,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 34705,
+            "inputTokens": 34679,
+            "cachedInputTokens": 34176,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 26,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T6",
+        "status": "completed",
+        "seconds": 21,
+        "reply": "第四场两张都在竹林：先是红衣女主的正面镜头，再切蓝衣男主的面部特写。人物和场景都接得上。",
+        "tokens": {
+          "total": {
+            "totalTokens": 192634,
+            "inputTokens": 192364,
+            "cachedInputTokens": 163968,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 270,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38539,
+            "inputTokens": 38494,
+            "cachedInputTokens": 34560,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 45,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "F1",
+        "status": "completed",
+        "seconds": 5,
+        "question": "F1",
+        "expected": "cnlo.png",
+        "said": "cnlo.png",
+        "verdict": "right",
+        "reply": "cnlo.png",
+        "tokens": {
+          "total": {
+            "totalTokens": 231209,
+            "inputTokens": 230932,
+            "cachedInputTokens": 202112,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 277,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38575,
+            "inputTokens": 38568,
+            "cachedInputTokens": 38144,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 7,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "F2",
+        "status": "completed",
+        "seconds": 5,
+        "question": "F2",
+        "expected": "fxai.png",
+        "said": "fxai.png",
+        "verdict": "right",
+        "reply": "fxai.png",
+        "tokens": {
+          "total": {
+            "totalTokens": 269811,
+            "inputTokens": 269527,
+            "cachedInputTokens": 240256,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 284,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38602,
+            "inputTokens": 38595,
+            "cachedInputTokens": 38144,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 7,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "F3",
+        "status": "completed",
+        "seconds": 5,
+        "question": "F3",
+        "expected": "mtgb.png",
+        "said": "mtgb.png",
+        "verdict": "right",
+        "reply": "mtgb.png",
+        "tokens": {
+          "total": {
+            "totalTokens": 308454,
+            "inputTokens": 308163,
+            "cachedInputTokens": 278784,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 291,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38643,
+            "inputTokens": 38636,
+            "cachedInputTokens": 38528,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 7,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "F4",
+        "status": "completed",
+        "seconds": 4,
+        "question": "F4",
+        "expected": "wdfa.png",
+        "said": "wdfa.png",
+        "verdict": "right",
+        "reply": "wdfa.png",
+        "tokens": {
+          "total": {
+            "totalTokens": 347127,
+            "inputTokens": 346829,
+            "cachedInputTokens": 317312,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 298,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38673,
+            "inputTokens": 38666,
+            "cachedInputTokens": 38528,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 7,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "F5",
+        "status": "completed",
+        "seconds": 5,
+        "question": "F5",
+        "expected": "zrue.png",
+        "said": "zrue.png",
+        "verdict": "right",
+        "reply": "zrue.png",
+        "tokens": {
+          "total": {
+            "totalTokens": 385829,
+            "inputTokens": 385524,
+            "cachedInputTokens": 355840,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 305,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38702,
+            "inputTokens": 38695,
+            "cachedInputTokens": 38528,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 7,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "D1",
+        "status": "completed",
+        "seconds": 4,
+        "question": "D1",
+        "expected": "7",
+        "said": "7",
+        "verdict": "right",
+        "reply": "7",
+        "tokens": {
+          "total": {
+            "totalTokens": 424564,
+            "inputTokens": 424254,
+            "cachedInputTokens": 394368,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 310,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38735,
+            "inputTokens": 38730,
+            "cachedInputTokens": 38528,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 5,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "D2",
+        "status": "completed",
+        "seconds": 5,
+        "question": "D2",
+        "expected": "4",
+        "said": "4",
+        "verdict": "right",
+        "reply": "4",
+        "tokens": {
+          "total": {
+            "totalTokens": 463332,
+            "inputTokens": 463017,
+            "cachedInputTokens": 433024,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 315,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38768,
+            "inputTokens": 38763,
+            "cachedInputTokens": 38656,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 5,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "N1",
+        "status": "completed",
+        "seconds": 5,
+        "question": "N1",
+        "expected": "weather",
+        "said": "The weather is really nice today.",
+        "verdict": "right",
+        "reply": "The weather is really nice today.",
+        "tokens": {
+          "total": {
+            "totalTokens": 502129,
+            "inputTokens": 501803,
+            "cachedInputTokens": 471680,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 326,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38797,
+            "inputTokens": 38786,
+            "cachedInputTokens": 38656,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 11,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "F6",
+        "status": "timeout",
+        "seconds": 182,
+        "question": "F6",
+        "expected": "jbwe.png",
+        "said": null,
+        "verdict": "none",
+        "requestMB": [
+          {
+            "status": 0,
+            "fullMB": 42.42,
+            "sentMB": 42.42,
+            "sentWireMB": 31.8,
+            "error": "Error: socket hang up"
+          },
+          {
+            "status": 0,
+            "fullMB": 42.42,
+            "sentMB": 42.42,
+            "sentWireMB": 31.8,
+            "error": "Error: socket hang up"
+          },
+          {
+            "status": 0,
+            "fullMB": 42.42,
+            "sentMB": 42.42,
+            "sentWireMB": 31.8,
+            "error": "client closed before the response ended"
+          }
+        ],
+        "reconnects": [
+          "Reconnecting... 2/5",
+          "Reconnecting... 3/5",
+          "Reconnecting... 4/5",
+          "Reconnecting... 5/5"
+        ]
+      }
+    ],
+    "Y": [
+      {
+        "step": "T1",
+        "status": "completed",
+        "seconds": 42,
+        "reply": "两张关键帧都在书房：女主穿红衣、留黑色长发，男主穿蓝衣、留棕色短发。两人分别正对镜头，画风和构图一致。",
+        "tokens": {
+          "total": {
+            "totalTokens": 25023,
+            "inputTokens": 24969,
+            "cachedInputTokens": 17920,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 54,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 25023,
+            "inputTokens": 24969,
+            "cachedInputTokens": 17920,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 54,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T2",
+        "status": "completed",
+        "seconds": 22,
+        "reply": "第二场第一张是女主在雨夜中的正面近景；第二张只见斜雨和远处的暖色灯光，像是用来交代街上的环境。",
+        "tokens": {
+          "total": {
+            "totalTokens": 53884,
+            "inputTokens": 53784,
+            "cachedInputTokens": 42496,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 100,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 28861,
+            "inputTokens": 28815,
+            "cachedInputTokens": 24576,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 46,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T3",
+        "status": "completed",
+        "seconds": 12,
+        "reply": "这版女主的脸和红衣明显亮了，黑色长发也能看清，雨夜氛围还在。比上一版更容易辨认人物。",
+        "tokens": {
+          "total": {
+            "totalTokens": 84697,
+            "inputTokens": 84554,
+            "cachedInputTokens": 70912,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 143,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 30813,
+            "inputTokens": 30770,
+            "cachedInputTokens": 28416,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 43,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T4",
+        "status": "completed",
+        "seconds": 19,
+        "reply": "第三场是黄昏海边的正面镜头：第一张拍男主，第二张切到女主近景。橙色天空和蓝色海面让场景一眼就能辨认。",
+        "tokens": {
+          "total": {
+            "totalTokens": 119355,
+            "inputTokens": 119160,
+            "cachedInputTokens": 101248,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 195,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 34658,
+            "inputTokens": 34606,
+            "cachedInputTokens": 30336,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 52,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T5",
+        "status": "completed",
+        "seconds": 5,
+        "reply": "记住了：第三场黄昏海边的第二张，女主的脸作为后续参考。",
+        "tokens": {
+          "total": {
+            "totalTokens": 154058,
+            "inputTokens": 153835,
+            "cachedInputTokens": 135424,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 223,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 34703,
+            "inputTokens": 34675,
+            "cachedInputTokens": 34176,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 28,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "T6",
+        "status": "completed",
+        "seconds": 21,
+        "reply": "第四场两张都以竹林为背景：第一张是红衣女主的正面镜头，第二张是蓝衣男主的面部近景。人物特征与前面几场一致。",
+        "tokens": {
+          "total": {
+            "totalTokens": 192601,
+            "inputTokens": 192327,
+            "cachedInputTokens": 169984,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 274,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 38543,
+            "inputTokens": 38492,
+            "cachedInputTokens": 34560,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 51,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "compact",
+        "status": "completed",
+        "seconds": 10,
+        "tokens": {
+          "total": {
+            "totalTokens": 192601,
+            "inputTokens": 192327,
+            "cachedInputTokens": 169984,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 274,
+            "reasoningOutputTokens": 0
+          },
+          "last": {
+            "totalTokens": 30846,
+            "inputTokens": 0,
+            "cachedInputTokens": 0,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 0,
+            "reasoningOutputTokens": 0
+          }
+        },
+        "requestMB": []
+      },
+      {
+        "step": "F1",
+        "status": "timeout",
+        "seconds": 182,
+        "question": "F1",
+        "expected": "cnlo.png",
+        "said": null,
+        "verdict": "none",
+        "requestMB": [
+          {
+            "status": 0,
+            "fullMB": 42.4,
+            "sentMB": 42.4,
+            "sentWireMB": 31.79,
+            "error": "Error: socket hang up"
+          },
+          {
+            "status": 0,
+            "fullMB": 42.4,
+            "sentMB": 42.4,
+            "sentWireMB": 31.79,
+            "error": "Error: socket hang up"
+          },
+          {
+            "status": 0,
+            "fullMB": 42.4,
+            "sentMB": 42.4,
+            "sentWireMB": 31.79,
+            "error": "client closed before the response ended"
+          }
+        ],
+        "reconnects": [
+          "Reconnecting... 2/5",
+          "Reconnecting... 3/5",
+          "Reconnecting... 4/5",
+          "Reconnecting... 5/5"
+        ]
+      }
+    ]
+  }
+}
