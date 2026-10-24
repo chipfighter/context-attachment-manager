@@ -1,0 +1,136 @@
+{
+  "runs": [
+    "run1"
+  ],
+  "arms": {
+    "off": {
+      "before": {
+        "right": 5,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 1,
+        "fetchedImages": 0,
+        "asked": 6
+      },
+      "after": {
+        "right": 0,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 1,
+        "fetchedImages": 0,
+        "asked": 1
+      },
+      "detail": {
+        "right": 2,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 0,
+        "asked": 2
+      },
+      "none": {
+        "right": 1,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 0,
+        "asked": 1
+      },
+      "unsent": [
+        "run1 X F6",
+        "run1 Y F1"
+      ],
+      "tokens": [
+        {
+          "run": "run1",
+          "input": 501803,
+          "cached": 471680,
+          "output": 326,
+          "lastContext": 38786
+        }
+      ]
+    },
+    "on": {
+      "before": {
+        "right": 6,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 0,
+        "asked": 6
+      },
+      "after": {
+        "right": 6,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 0,
+        "asked": 6
+      },
+      "detail": {
+        "right": 4,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 4,
+        "asked": 4
+      },
+      "none": {
+        "right": 2,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 0,
+        "asked": 2
+      },
+      "unsent": [],
+      "tokens": [
+        {
+          "run": "run1",
+          "input": 421870,
+          "cached": 380928,
+          "output": 766,
+          "lastContext": 24421
+        }
+      ]
+    },
+    "v07": {
+      "before": {
+        "right": 0,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 0,
+        "asked": 0
+      },
+      "after": {
+        "right": 6,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 0,
+        "asked": 6
+      },
+      "detail": {
+        "right": 2,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 2,
+        "asked": 2
+      },
+      "none": {
+        "right": 1,
+        "wrong": 0,
+        "none": 0,
+        "unsent": 0,
+        "fetchedImages": 0,
+        "asked": 1
+      },
+      "unsent": [
+        "run1 X T5"
+      ],
+      "tokens": []
+    }
+  }
+}

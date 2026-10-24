@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 420" width="860" height="420" role="img" aria-label="Largest request of each step (MB, uncompressed)">
+<style>
+  svg { --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781; --grid:#e1e0d9; --base:#c3c2b7; --s1:#2a78d6; --s2:#eb6834; }
+  @media (prefers-color-scheme: dark) { svg { --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781; --grid:#2c2c2a; --base:#383835; --s1:#3987e5; --s2:#d95926; } }
+  .bg { fill: var(--surface); }
+  text { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  .title { font-size: 15px; font-weight: 600; fill: var(--ink); }
+  .legend { font-size: 12px; fill: var(--ink2); }
+  .tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .note { font-size: 12px; fill: var(--ink2); }
+  .stuck { font-size: 11px; fill: var(--ink); }
+  .stuck-mark { fill: var(--ink2); }
+  .leader { stroke: var(--ink2); stroke-width: 1; }
+  .grid { stroke: var(--grid); stroke-width: 1; }
+  .base { stroke: var(--base); stroke-width: 1; }
+  .full { fill: var(--s1); }
+  .sent { fill: var(--s2); }
+</style>
+<rect class="bg" width="860" height="420" rx="8"/>
+<text class="title" x="56" y="24">Largest request of each step (MB, uncompressed)</text>
+<rect class="full" x="56" y="38" width="10" height="10" rx="2"/><text class="legend" x="72" y="47">Whole conversation (what Codex sends without the plugin)</text>
+<rect class="sent" x="432" y="38" width="10" height="10" rx="2"/><text class="legend" x="448" y="47">Sent with the plugin</text>
+<line class="grid" x1="56" x2="844" y1="328" y2="328"/><text class="tick" x="48" y="332" text-anchor="end">0</text>
+<line class="grid" x1="56" x2="844" y1="286.3333333333333" y2="286.3333333333333"/><text class="tick" x="48" y="290.3333333333333" text-anchor="end">10</text>
+<line class="grid" x1="56" x2="844" y1="244.66666666666669" y2="244.66666666666669"/><text class="tick" x="48" y="248.66666666666669" text-anchor="end">20</text>
+<line class="grid" x1="56" x2="844" y1="203" y2="203"/><text class="tick" x="48" y="207" text-anchor="end">30</text>
+<line class="grid" x1="56" x2="844" y1="161.33333333333334" y2="161.33333333333334"/><text class="tick" x="48" y="165.33333333333334" text-anchor="end">40</text>
+<line class="grid" x1="56" x2="844" y1="119.66666666666666" y2="119.66666666666666"/><text class="tick" x="48" y="123.66666666666666" text-anchor="end">50</text>
+<line class="grid" x1="56" x2="844" y1="78" y2="78"/><text class="tick" x="48" y="82" text-anchor="end">60</text>
+<text class="tick" x="48" y="68" text-anchor="end">MB</text>
+<path class="full" d="M65.625,328 V288.6529125 Q65.625,284.6529125 69.625,284.6529125 H75.625 Q79.625,284.6529125 79.625,288.6529125 V328 Z"><title>T1: 10.40 MB</title></path>
+<path class="sent" d="M81.625,328 V288.6403583333333 Q81.625,284.6403583333333 85.625,284.6403583333333 H91.625 Q95.625,284.6403583333333 95.625,288.6403583333333 V328 Z"><title>T1: 10.41 MB</title></path>
+<text class="tick" x="80.625" y="346" text-anchor="middle">T1</text>
+<path class="full" d="M114.875,328 V252.37787500000002 Q114.875,248.37787500000002 118.875,248.37787500000002 H124.875 Q128.875,248.37787500000002 128.875,252.37787500000002 V328 Z"><title>T2: 19.11 MB</title></path>
+<path class="sent" d="M130.875,328 V295.2847791666667 Q130.875,291.2847791666667 134.875,291.2847791666667 H140.875 Q144.875,291.2847791666667 144.875,295.2847791666667 V328 Z"><title>T2: 8.81 MB</title></path>
+<text class="tick" x="129.875" y="346" text-anchor="middle">T2</text>
+<path class="full" d="M164.125,328 V233.03399583333334 Q164.125,229.03399583333334 168.125,229.03399583333334 H174.125 Q178.125,229.03399583333334 178.125,233.03399583333334 V328 Z"><title>T3: 23.75 MB</title></path>
+<path class="sent" d="M180.125,328 V312.20965 Q180.125,308.20965 184.125,308.20965 H190.125 Q194.125,308.20965 194.125,312.20965 V328 Z"><title>T3: 4.75 MB</title></path>
+<text class="tick" x="179.125" y="346" text-anchor="middle">T3</text>
+<path class="full" d="M213.375,328 V195.26289166666666 Q213.375,191.26289166666666 217.375,191.26289166666666 H223.375 Q227.375,191.26289166666666 227.375,195.26289166666666 V328 Z"><title>T4: 32.82 MB</title></path>
+<path class="sent" d="M229.375,328 V293.7773375 Q229.375,289.7773375 233.375,289.7773375 H239.375 Q243.375,289.7773375 243.375,293.7773375 V328 Z"><title>T4: 9.17 MB</title></path>
+<text class="tick" x="228.375" y="346" text-anchor="middle">T4</text>
+<path class="full" d="M262.625,328 V195.25975 Q262.625,191.25975 266.625,191.25975 H272.625 Q276.625,191.25975 276.625,195.25975 V328 Z"><title>T5: 32.82 MB</title></path>
+<path class="sent" d="M278.625,328 V328 Q278.625,327 279.625,327 H291.625 Q292.625,327 292.625,328 V328 Z"><title>T5: 0.11 MB</title></path>
+<text class="tick" x="277.625" y="346" text-anchor="middle">T5</text>
+<path class="full" d="M311.875,328 V155.33929583333335 Q311.875,151.33929583333335 315.875,151.33929583333335 H321.875 Q325.875,151.33929583333335 325.875,155.33929583333335 V328 Z"><title>T6: 42.40 MB</title></path>
+<path class="sent" d="M327.875,328 V291.6168833333333 Q327.875,287.6168833333333 331.875,287.6168833333333 H337.875 Q341.875,287.6168833333333 341.875,291.6168833333333 V328 Z"><title>T6: 9.69 MB</title></path>
+<text class="tick" x="326.875" y="346" text-anchor="middle">T6</text>
+<path class="full" d="M361.125,328 V155.33695833333334 Q361.125,151.33695833333334 365.125,151.33695833333334 H371.125 Q375.125,151.33695833333334 375.125,155.33695833333334 V328 Z"><title>compact: 42.40 MB</title></path>
+<path class="sent" d="M377.125,328 V328 Q377.125,327 378.125,327 H390.125 Q391.125,327 391.125,328 V328 Z"><title>compact: 0.11 MB</title></path>
+<text class="tick" x="376.125" y="346" text-anchor="middle">compact</text>
+<path class="full" d="M410.375,328 V155.31082916666668 Q410.375,151.31082916666668 414.375,151.31082916666668 H420.375 Q424.375,151.31082916666668 424.375,155.31082916666668 V328 Z"><title>F1: 42.41 MB</title></path>
+<path class="sent" d="M426.375,328 V328 Q426.375,327 427.375,327 H439.375 Q440.375,327 440.375,328 V328 Z"><title>F1: 0.12 MB</title></path>
+<text class="tick" x="425.375" y="346" text-anchor="middle">F1</text>
+<line class="leader" x1="425.375" x2="425.375" y1="94.66666666666666" y2="139.31082916666668"/><path class="stuck-mark" d="M420.375,139.31082916666668 l5,8 l5,-8 z"/><text class="stuck" x="431.375" y="94.5">Without the plugin: 42.4 MB, could not be sent. With it: 0.12 MB</text>
+<path class="full" d="M459.625,328 V155.30895833333335 Q459.625,151.30895833333335 463.625,151.30895833333335 H469.625 Q473.625,151.30895833333335 473.625,155.30895833333335 V328 Z"><title>F2: 42.41 MB</title></path>
+<path class="sent" d="M475.625,328 V328 Q475.625,327 476.625,327 H488.625 Q489.625,327 489.625,328 V328 Z"><title>F2: 0.12 MB</title></path>
+<text class="tick" x="474.625" y="346" text-anchor="middle">F2</text>
+<path class="full" d="M508.875,328 V155.30569583333332 Q508.875,151.30569583333332 512.875,151.30569583333332 H518.875 Q522.875,151.30569583333332 522.875,155.30569583333332 V328 Z"><title>F3: 42.41 MB</title></path>
+<path class="sent" d="M524.875,328 V328 Q524.875,327 525.875,327 H537.875 Q538.875,327 538.875,328 V328 Z"><title>F3: 0.12 MB</title></path>
+<text class="tick" x="523.875" y="346" text-anchor="middle">F3</text>
+<path class="full" d="M558.125,328 V155.30260833333332 Q558.125,151.30260833333332 562.125,151.30260833333332 H568.125 Q572.125,151.30260833333332 572.125,155.30260833333332 V328 Z"><title>F4: 42.41 MB</title></path>
+<path class="sent" d="M574.125,328 V328 Q574.125,327 575.125,327 H587.125 Q588.125,327 588.125,328 V328 Z"><title>F4: 0.12 MB</title></path>
+<text class="tick" x="573.125" y="346" text-anchor="middle">F4</text>
+<path class="full" d="M607.375,328 V155.29952916666664 Q607.375,151.29952916666664 611.375,151.29952916666664 H617.375 Q621.375,151.29952916666664 621.375,155.29952916666664 V328 Z"><title>F5: 42.41 MB</title></path>
+<path class="sent" d="M623.375,328 V328 Q623.375,327 624.375,327 H636.375 Q637.375,327 637.375,328 V328 Z"><title>F5: 0.12 MB</title></path>
+<text class="tick" x="622.375" y="346" text-anchor="middle">F5</text>
+<path class="full" d="M656.625,328 V155.2964375 Q656.625,151.2964375 660.625,151.2964375 H666.625 Q670.625,151.2964375 670.625,155.2964375 V328 Z"><title>F6: 42.41 MB</title></path>
+<path class="sent" d="M672.625,328 V328 Q672.625,327 673.625,327 H685.625 Q686.625,327 686.625,328 V328 Z"><title>F6: 0.12 MB</title></path>
+<text class="tick" x="671.625" y="346" text-anchor="middle">F6</text>
+<path class="full" d="M705.875,328 V135.40407916666666 Q705.875,131.40407916666666 709.875,131.40407916666666 H715.875 Q719.875,131.40407916666666 719.875,135.40407916666666 V328 Z"><title>D1: 47.18 MB</title></path>
+<path class="sent" d="M721.875,328 V311.59608333333335 Q721.875,307.59608333333335 725.875,307.59608333333335 H731.875 Q735.875,307.59608333333335 735.875,311.59608333333335 V328 Z"><title>D1: 4.90 MB</title></path>
+<text class="tick" x="720.875" y="346" text-anchor="middle">D1</text>
+<path class="full" d="M755.125,328 V113.74248333333333 Q755.125,109.74248333333333 759.125,109.74248333333333 H765.125 Q769.125,109.74248333333333 769.125,113.74248333333333 V328 Z"><title>D2: 52.38 MB</title></path>
+<path class="sent" d="M771.125,328 V309.8039166666667 Q771.125,305.8039166666667 775.125,305.8039166666667 H781.125 Q785.125,305.8039166666667 785.125,309.8039166666667 V328 Z"><title>D2: 5.33 MB</title></path>
+<text class="tick" x="770.125" y="346" text-anchor="middle">D2</text>
+<path class="full" d="M804.375,328 V113.74067916666667 Q804.375,109.74067916666667 808.375,109.74067916666667 H814.375 Q818.375,109.74067916666667 818.375,113.74067916666667 V328 Z"><title>N1: 52.38 MB</title></path>
+<path class="sent" d="M820.375,328 V328 Q820.375,327 821.375,327 H833.375 Q834.375,327 834.375,328 V328 Z"><title>N1: 0.13 MB</title></path>
+<text class="tick" x="819.375" y="346" text-anchor="middle">N1</text>
+<line class="base" x1="56" x2="844" y1="328" y2="328"/>
+<text class="note" x="56" y="380">Task 2: six turns of uploads, a compaction, nine questions. D1 and D2 need a corner digit: the plugin fetched that one original for the turn.</text>
+</svg>

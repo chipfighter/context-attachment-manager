@@ -61,4 +61,8 @@ Then restart Codex, or start a new session in Claude. To install or uninstall it
 
 Everything stays on your computer. The plugin sends nothing anywhere beyond the requests Codex and Claude already make.
 
+## How we tested
+
+We ran a short-drama keyframe chat in Codex with and without the plugin: nine keyframes, about 32 MB of images. Without the plugin, every time Codex had to send the whole chat again (after a restart, and right after compacting it), the request was 42 MB and never got through. With the plugin, the same request was 0.12 MB, and in this test the model picked the right image both before and after compacting. The method, the numbers and how to run it yourself are in [eval](eval/README.md).
+
 <p align="center"><sub><a href="CHANGELOG.md">Changelog</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a></sub></p>

@@ -10,7 +10,7 @@ import { AppServer, findBundledCodex } from "../src/appserver.ts";
 import { archiveThreads } from "../src/testkit.ts";
 
 // Only the names the test scripts give their tasks; a task that merely starts with "[CAM测试]" is left alone.
-const TEST_NAME = /^\[CAM测试\] (P\d|v0\.1 占位符自测 |截图编号自测 )|^\[CAM test\] (v0\.1 placeholder self-test |screenshot id self-test )/;
+const TEST_NAME = /^\[CAM测试\] (P\d|v0\.1 占位符自测 |截图编号自测 |评测 [XY] (off|on|v07) )|^\[CAM test\] (v0\.1 placeholder self-test |screenshot id self-test )/;
 const dryRun = process.argv.includes("--dry-run");
 const home = codexHome();
 const indexFile = join(home, "session_index.jsonl");

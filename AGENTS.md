@@ -13,6 +13,7 @@ Context Attachment Manager（上下文素材管理器，2026-10-11 前叫 Codex 
 - [docs/v0.8/plan.md](docs/v0.8/plan.md)：v0.8 方案，模型给每张图写特征行、压缩后照样拿对图，面板改成搜索加缩略图（已发布 0.8.0）。
 - [docs/history/v0.1/](docs/history/v0.1/)：v0.1 的开发记录（原方案、任务记录、各阶段报告、最初的构想），只作参考，不作依据。
 - [CHANGELOG.md](CHANGELOG.md)：每个版本的更新记录，发布时就是 Release 说明。
+- [eval/README_CN.md](eval/README_CN.md)：评测（英文版 [eval/README.md](eval/README.md)），装插件和不装插件的对比：方法、结果和复现步骤。
 
 ## 已确认的规矩
 
@@ -21,7 +22,8 @@ Context Attachment Manager（上下文素材管理器，2026-10-11 前叫 Codex 
 - 插件本体在 `plugin/`（`plugin/src` 是运行代码），测试和实验脚本在 `spike/`，一行命令用的安装、卸载脚本在 `scripts/`。改动运行代码后，要重新运行 `cam install`，Codex 缓存里的插件副本才会更新；不要让已安装的配置指向不存在的文件。
 - `scripts/*.ps1` 只用 ASCII 字符：Windows PowerShell 5.1 用 `irm … | iex` 下载时按 Latin-1 解码，中文会乱码。
 - 仓库里的文档和代码不写用户本机的具体路径；通用位置（如 `~/.codex`、`%LOCALAPPDATA%`）可以写。
-- 对外的信息以英文为主：README.md、INSTALL.md、CONTRIBUTING.md、仓库简介、CHANGELOG.md（发布时就是 Release 说明）用英文，README_CN.md 是中文版；`docs/` 下的规格、方案和开发记录，以及本文件，保持中文（用户 2026-09-28 定）。
+- 对外的信息以英文为主：README.md、INSTALL.md、CONTRIBUTING.md、eval/README.md、仓库简介、CHANGELOG.md（发布时就是 Release 说明）用英文，README_CN.md、eval/README_CN.md 是中文版；`docs/` 下的规格、方案和开发记录，以及本文件，保持中文（用户 2026-09-28 定）。
+- 评测的报告和结果放在 `eval/`，脚本在 `spike/src/eval-*.ts`。README 是给所有用户看的，只在底部留一小节，用白话说两句并链接过去；评测是写给工程师看的（用户 2026-10-24 定）。
 - 先在 Windows 上开发和测试。技术栈用 TypeScript/Node。
 - 界面开发：Claude 自己截图检查效果；做到界面的关键节点时，截图给用户看，停下来等反馈再继续（用户 2026-09-24 确认）。
 - 测试时调用模型一律用 `gpt-6-sol`，推理强度 `low`，包括脚本自测和桌面版测试，为了省 token（用户 2026-09-24 要求）。
