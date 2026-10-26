@@ -1344,6 +1344,7 @@
     input.checked = image.inNextRequest && (!image.replaceable || isOn(image));
     input.disabled = !changeable(image) || S.autoPending !== null;
     input.setAttribute("aria-label", `${label} ${image.id}`);
+    if (input.disabled && document.activeElement === input) $("viewerClose").focus({ focusVisible: false });
   }
   let returnTo = null;
   function openPreview(id) {
@@ -1363,6 +1364,9 @@
     renderViewer();
     const tile = returnTo && tiles.get(returnTo);
     if (tile?.isConnected) tile.focus({ preventScroll: true });
+  }
+  function previewControls() {
+    return [...$("viewer").querySelectorAll("button, input")].filter((el) => !el.disabled && !el.closest("[hidden]") && getComputedStyle(el).display !== "none" && getComputedStyle(el).visibility !== "hidden");
   }
   // A click anywhere but on the image, a button or the checkbox closes the preview.
   $("viewer").addEventListener("click", (event) => { if (!event.target.closest("img, button, .check")) closePreview(); });
@@ -1428,7 +1432,20 @@
 
   $("more").addEventListener("click", () => { S.cardOpen = !S.cardOpen; renderCard(); });
   $("search").addEventListener("input", (event) => { S.query = event.target.value; renderList(); });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && S.preview) closePreview(); });
+  document.addEventListener("keydown", (event) => {
+    if (!S.preview || $("viewer").hidden) return;
+    if (event.key === "Escape") { closePreview(); return; }
+    if (event.key === "Tab" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      const controls = previewControls();
+      if (!controls.length) return;
+      const at = controls.indexOf(document.activeElement);
+      const next = event.shiftKey
+        ? controls[(at <= 0 ? controls.length : at) - 1]
+        : controls[at < 0 || at + 1 >= controls.length ? 0 : at + 1];
+      event.preventDefault();
+      next.focus();
+    }
+  });
   $("auto").querySelector("input").addEventListener("change", (event) => setAuto(event.target.checked));
   $("refresh").addEventListener("click", () => refresh(true));
 
