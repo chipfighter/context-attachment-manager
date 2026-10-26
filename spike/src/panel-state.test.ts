@@ -4,7 +4,7 @@
 // Input: synthetic rollouts in temporary folders; output: Node test assertions only.
 
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { decodePng } from "../../plugin/src/png.ts";
@@ -260,4 +260,163 @@ test("the task's panel lists its subagents and side chats with their last reques
     [CHILD, "subagent", "Franklin", "2026-09-24T10:05:00Z", null, null, null],
     [SIDE, "side", null, "2026-09-24T10:06:00Z", 3, 3, 1000],
   ]);
+});
+
+test("the image preview dialog traps Tab and Shift+Tab across visible enabled controls and restores focus on close", () => {
+  const html = readFileSync(join(import.meta.dirname, "..", "..", "plugin", "src", "panel.html"), "utf8");
+  const messagesJson = /<script type="application\/json" id="messages">([\s\S]*?)<\/script>/.exec(html)![1];
+  const scriptCode = /<script>\s*(\(\(\) => \{[\s\S]*?\}\)\(\);)\s*<\/script>/.exec(html)![1];
+
+  let activeElement: any = null;
+  class El {
+    tagName: string; id: string; className: string;
+    type = ""; textContent = ""; title = ""; value = ""; placeholder = ""; src = ""; alt = "";
+    hidden = false; disabled = false; checked = false; indeterminate = false; isConnected = true;
+    clientWidth = 360; offsetWidth = 360; offsetHeight = 26; scrollHeight = 400; clientHeight = 400; scrollTop = 0;
+    dataset: Record<string, string> = {};
+    style: Record<string, any> = { display: "", visibility: "", setProperty(k: string, v: string) { this[k] = v; } };
+    attrs = new Map<string, string>();
+    parent: El | null = null;
+    children: El[] = [];
+    listeners = new Map<string, Array<(e: any) => void>>();
+    constructor(tag: string, id = "", className = "") { this.tagName = tag.toLowerCase(); this.id = id; this.className = className; }
+    get classList() {
+      const split = () => this.className.split(/\s+/).filter(Boolean);
+      return {
+        add: (...names: string[]) => { const s = new Set(split()); names.forEach((n) => s.add(n)); this.className = [...s].join(" "); },
+        remove: (...names: string[]) => { const s = new Set(split()); names.forEach((n) => s.delete(n)); this.className = [...s].join(" "); },
+        toggle: (name: string, force?: boolean) => { const on = force ?? !split().includes(name); if (on) this.classList.add(name); else this.classList.remove(name); return on; },
+        contains: (name: string) => split().includes(name),
+      };
+    }
+    set innerHTML(raw: string) {
+      this.children = [];
+      if (raw.includes("<input")) this.append(new El("input"));
+      if (raw.includes("<strong")) this.append(new El("strong"));
+      if (raw.includes("<span")) this.append(new El("span", "", raw.includes('class="box"') ? "box" : ""));
+    }
+    setAttribute(k: string, v: string) { this.attrs.set(k, v); if (k === "hidden") this.hidden = true; }
+    getAttribute(k: string) { return this.attrs.get(k) ?? null; }
+    append(...nodes: any[]) { for (const n of nodes) if (n instanceof El) { n.parent = this; this.children.push(n); } }
+    prepend(...nodes: any[]) { for (const n of nodes.reverse()) if (n instanceof El) { n.parent = this; this.children.unshift(n); } }
+    replaceChildren(...nodes: any[]) { this.children = []; this.append(...nodes); }
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; }
+    matches(sel: string): boolean {
+      return sel.split(",").map((s) => s.trim()).some((p) => p === "[hidden]" ? (this.hidden || this.attrs.has("hidden")) : p === ".chip[data-chip]" ? (this.classList.contains("chip") && "chip" in this.dataset) : p.startsWith(".") ? this.classList.contains(p.slice(1)) : this.tagName === p.toLowerCase());
+    }
+    closest(sel: string): El | null { for (let cur: El | null = this; cur; cur = cur.parent) if (cur.matches(sel)) return cur; return null; }
+    querySelectorAll(sel: string): El[] {
+      const out: El[] = [];
+      const walk = (n: El) => { for (const c of n.children) { if (c.matches(sel)) out.push(c); walk(c); } };
+      walk(this);
+      return out;
+    }
+    querySelector(sel: string): El | null { return this.querySelectorAll(sel)[0] ?? null; }
+    addEventListener(type: string, fn: (e: any) => void) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]); }
+    dispatchEvent(event: any) { event.target ??= this; for (const fn of this.listeners.get(event.type) ?? []) fn(event); return !event.defaultPrevented; }
+    focus() { if (!this.disabled && !this.closest("[hidden]")) activeElement = this; }
+    click() { this.dispatchEvent({ type: "click", target: this }); }
+    getBoundingClientRect() { return { top: 0, height: 90 }; }
+    scrollTo() {}
+  }
+
+  const byId = new Map<string, El>();
+  const reg = (el: El) => { if (el.id) byId.set(el.id, el); return el; };
+  for (const id of ["title", "refresh", "plugin", "card", "meterLabel", "meterValue", "meterFull", "meterBarBox", "meterBar", "nextLine", "nextLabel", "nextValue", "details", "lastLine", "lastLabel", "lastValue", "fetchedLine", "fetchedLabel", "fetchedIds", "childrenLine", "childrenLabel", "childrenValue", "needs", "searchBox", "search", "chips", "main", "status"]) {
+    reg(new El(id === "search" ? "input" : id === "refresh" ? "button" : "div", id));
+  }
+  reg(new El("button", "more")).append(new El("span"));
+  const auto = reg(new El("label", "auto", "switch")); auto.hidden = true; auto.append(new El("span", "", "auto-label"), new El("input"));
+  const viewer = reg(new El("div", "viewer", "viewer")); viewer.hidden = true;
+  const viewerTop = new El("div", "", "viewer-top");
+  const viewerTitle = new El("div", "", "viewer-title");
+  viewerTitle.append(reg(new El("span", "viewerId", "vid")), reg(new El("span", "viewerName", "vname")));
+  const viewerClose = reg(new El("button", "viewerClose", "icon-btn"));
+  viewerTop.append(viewerTitle, viewerClose);
+  const viewerStage = reg(new El("div", "viewerStage", "viewer-stage"));
+  const viewerBottom = new El("div", "", "viewer-bottom");
+  const viewerCheck = reg(new El("label", "viewerCheck", "check"));
+  const viewerInput = new El("input"); viewerInput.type = "checkbox";
+  viewerCheck.append(viewerInput, new El("span", "", "box"), new El("span", "", "label"));
+  viewerBottom.append(reg(new El("span", "viewerMeta", "viewer-meta")), viewerCheck);
+  viewer.append(viewerTop, viewerStage, viewerBottom);
+  reg(new El("script", "messages")).textContent = messagesJson;
+
+  const docListeners = new Map<string, Array<(e: any) => void>>();
+  const winListeners = new Map<string, Array<(e: any) => void>>();
+  const sentCalls: any[] = [];
+  const documentObj = {
+    documentElement: new El("html"), title: "", hidden: false, visibilityState: "visible",
+    get activeElement() { return activeElement; },
+    getElementById: (id: string) => byId.get(id) ?? null,
+    createElement: (tag: string) => new El(tag),
+    addEventListener: (type: string, fn: (e: any) => void) => { docListeners.set(type, [...(docListeners.get(type) ?? []), fn]); },
+  };
+  const panelState = {
+    threadId: THREAD, title: "Focus test", started: true, auto: false,
+    images: [
+      { id: "IMG-001", name: "replaceable.png", kind: "upload", source: "upload", turn: 1, width: 64, height: 32, bytes: 120, base64Chars: 160, checked: true, replaceable: true, inNextRequest: true, inLastRequest: true, sameAs: [], requested: false, fetched: false, compacted: false },
+      { id: "IMG-002", name: "locked.png", kind: "upload", source: "upload", turn: 1, width: 64, height: 32, bytes: 120, base64Chars: 160, checked: true, replaceable: false, inNextRequest: true, inLastRequest: true, sameAs: [], requested: false, fetched: false, compacted: false },
+    ],
+  };
+  const windowObj: any = {
+    innerWidth: 420, innerHeight: 680, devicePixelRatio: 1, matchMedia: () => ({ matches: false }),
+    addEventListener: (type: string, fn: (e: any) => void) => { winListeners.set(type, [...(winListeners.get(type) ?? []), fn]); },
+    camHost: {
+      post(msg: any) {
+        if (msg.method === "tools/call") {
+          sentCalls.push(msg.params);
+          for (const fn of winListeners.get("message") ?? []) fn({ data: { id: msg.id, result: { _meta: { dataUrl: "data:image/png;base64,AAAA" }, structuredContent: panelState } } });
+        }
+      },
+    },
+  };
+
+  new Function("window", "document", "navigator", "IntersectionObserver", "ResizeObserver", "getComputedStyle", "setTimeout", "clearTimeout", "setInterval", scriptCode)(
+    windowObj, documentObj, { language: "en-US" },
+    class { observe() {} unobserve() {} }, class { observe() {} },
+    (el: El) => ({ rowGap: "6px", display: el.style.display || "block", visibility: el.style.visibility || "visible" }),
+    () => 1, () => {}, () => 1,
+  );
+  for (const fn of winListeners.get("message") ?? []) fn({ data: { method: "ui/notifications/tool-result", params: { structuredContent: panelState } } });
+
+  const keydown = (key: string, shiftKey = false) => {
+    let defaultPrevented = false;
+    const event = { key, shiftKey, altKey: false, ctrlKey: false, metaKey: false, get defaultPrevented() { return defaultPrevented; }, preventDefault() { defaultPrevented = true; } };
+    for (const fn of docListeners.get("keydown") ?? []) fn(event);
+    return event;
+  };
+
+  const [tile1, tile2] = byId.get("main")!.querySelectorAll("button");
+  tile1.focus();
+  assert.equal(keydown("Tab").defaultPrevented, false, "outside the preview Tab is not intercepted");
+  assert.equal(documentObj.activeElement, tile1);
+
+  tile1.click();
+  assert.deepEqual([viewer.hidden, viewerInput.disabled, documentObj.activeElement], [false, false, viewerClose]);
+  assert.equal(keydown("Tab").defaultPrevented, true);
+  assert.equal(documentObj.activeElement, viewerInput, "Tab moves from close button to checkbox");
+  assert.equal(keydown("Tab").defaultPrevented, true);
+  assert.equal(documentObj.activeElement, viewerClose, "Tab wraps from checkbox back to close button");
+  assert.equal(keydown("Tab", true).defaultPrevented, true);
+  assert.equal(documentObj.activeElement, viewerInput, "Shift+Tab wraps from close button to checkbox");
+  assert.equal(keydown("Tab", true).defaultPrevented, true);
+  assert.equal(documentObj.activeElement, viewerClose, "Shift+Tab moves from checkbox back to close button");
+
+  viewerInput.checked = false;
+  viewerInput.dispatchEvent({ type: "change", target: viewerInput });
+  assert.deepEqual(sentCalls.find((c) => c.name === "cam_set_selection")?.arguments.uncheck, ["IMG-001"]);
+
+  keydown("Escape");
+  assert.deepEqual([viewer.hidden, documentObj.activeElement], [true, tile1], "Escape closes and restores focus to opening tile");
+
+  tile2.click();
+  assert.deepEqual([viewer.hidden, viewerInput.disabled, documentObj.activeElement], [false, true, viewerClose]);
+  assert.equal(keydown("Tab").defaultPrevented, true);
+  assert.equal(documentObj.activeElement, viewerClose, "Tab skips disabled checkbox");
+  assert.equal(keydown("Tab", true).defaultPrevented, true);
+  assert.equal(documentObj.activeElement, viewerClose, "Shift+Tab skips disabled checkbox");
+
+  viewer.dispatchEvent({ type: "click", target: viewerStage });
+  assert.deepEqual([viewer.hidden, documentObj.activeElement], [true, tile2], "backdrop click closes and restores focus to opening tile");
 });
