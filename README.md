@@ -38,6 +38,12 @@ So I made a panel that keeps the conversation and drops the weight.
 - **It remembers every image.** The model quietly notes what each image shows and what you said about it ("too dark", "best face"). Even far into a long chat, or after the chat is compacted, it picks the right one.
 - **Your chat stays light.** No more slowdowns or endless reconnecting. In a 15-image task, a request that carried 24.9 MB went out at 212 KB.
 
+## Watch the 30-second tour
+
+https://github.com/user-attachments/assets/aeec27c0-c56a-4775-bcc8-981d5e9a0d45
+
+[简体中文视频](README_CN.md#30-秒了解这个插件)
+
 ## How to use
 
 - **Codex**: open **Context Assets** in a task's side panel.
