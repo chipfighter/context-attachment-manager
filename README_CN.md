@@ -15,7 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="许可证：MIT"></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <b>简体中文</b></p>
+<p align="center"><a href="README.md">English</a> · <b>简体中文</b> · <a href="README_JA.md">日本語</a></p>
 
 <p align="center">
   <img src="docs/images/loop-zh.gif" alt="面板上是一个古装短剧关键帧的任务。打开自动选图，之前的图一张张变灰，下一条请求从 7.5 MB 降到 1.7 MB，省 77%。" width="100%">

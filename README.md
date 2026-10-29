@@ -15,7 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README_CN.md">简体中文</a></p>
+<p align="center"><b>English</b> · <a href="README_CN.md">简体中文</a> · <a href="README_JA.md">日本語</a></p>
 
 <p align="center">
   <img src="docs/images/loop.gif" alt="The panel on a task of period-drama keyframes. Turning on Auto-select grays out the earlier images one by one, and the next request drops from 7.5 MB to 1.7 MB, 77% less." width="100%">
