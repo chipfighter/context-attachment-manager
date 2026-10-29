@@ -37,6 +37,7 @@ import { isEntryPoint } from "./entry.ts";
 import { currentLang } from "./language.ts";
 import { migrateDataOnce } from "./migrate-data.ts";
 import { say } from "./messages.ts";
+import { claudePanelLanguage } from "./panel-language.ts";
 import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type ClaudePanelOptions } from "./panel-state.ts";
 import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, proxyLogDirOf, selectionDirOf } from "./paths.ts";
 import { recordRequest } from "./request-stats.ts";
@@ -533,12 +534,12 @@ export function claudePanelPage(dir = here): string {
 }
 export const PANEL_PAGE_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
-export function claudePanelApi(method: string, url: string, headers: IncomingHttpHeaders, body: string | null, options: ClaudePanelOptions = {}): { status: number; body: Json } {
+export function claudePanelApi(method: string, url: string, headers: IncomingHttpHeaders, body: string | null, options: ClaudePanelOptions & { panelLocaleFiles?: readonly string[] } = {}): { status: number; body: Json } {
   if (!ownRequest(headers) || headers["x-cam-panel"] !== "1") return { status: 403, body: { error: "forbidden" } };
   const parsed = new URL(url, "http://localhost");
   const session = parsed.searchParams.get("session") ?? "";
   if (!SESSION_ID.test(session)) return { status: 400, body: { error: "no session" } };
-  const lang = currentLang();
+  const lang = claudePanelLanguage({ settingsFiles: options.panelLocaleFiles });
   try {
     if (method === "GET" && parsed.pathname === "/__cam/claude/panel") return { status: 200, body: { ...loadClaudePanelState(session, options), lang } };
     if (method === "GET" && parsed.pathname === "/__cam/claude/image") {

@@ -73,6 +73,22 @@ const WORDS = {
       failed: 'Switching the endpoint failed; this session connects directly: checks have no effect',
     },
   },
+  ja: {
+    title: 'コンテキスト素材',
+    open: '素材パネルを開く', copy: 'リンクをコピー', copied: 'リンクをコピーしました',
+    opened: 'Claude 内蔵のブラウザーでパネルを開きました。',
+    hint: 'パネルはローカルエンジンが提供するページで、Codex のパネルと同じです。画像の選択、プレビュー、絞り込み、自動選択ができます。上のリンクを開くか、コピーしてブラウザーに貼り付けてください。',
+    summary: (images, off) => `このセッションの画像 ${images} 枚${off ? `、未送信 ${off} 枚` : ''}`,
+    routing: {
+      on: (port) => `このセッションはローカルエンジン（ポート ${port}）に接続しています`,
+      waiting: 'ローカルエンジンの起動を待っています…',
+      'other-endpoint': 'このセッションは別の接続先を使用しています。画像の選択は反映されません',
+      provider: 'このセッションは外部のモデルサービスを使用しています。画像の選択は反映されません',
+      'engine-old': '実行中のエンジンが古く、個別の接続経路に対応していません。Codex を終了して cam install を実行し、新しいセッションを開始してください',
+      'no-engine': 'ローカルエンジンが起動していないため、直接接続しています。画像の選択は反映されません',
+      failed: '接続先の切り替えに失敗したため、直接接続しています。画像の選択は反映されません',
+    },
+  },
 }
 
 // What the pane shows, kept between redraws: the routing state, whether /cam opened the page in Claude's browser, and
@@ -331,14 +347,14 @@ async function pageTurnEnds($) {
   keepPageLater($, 'end')
 }
 
-async function loadOverview($) {
+async function loadOverview($, redraw = true) {
   try {
     const state = await api($, `/__cam/claude/panel?session=${encodeURIComponent(await $.session.id())}`)
     overview = { lang: state.lang, images: state.totals.images, off: state.totals.unchecked }
   } catch {
     overview = null
   }
-  await $.ui.invalidate('ui.render')
+  if (redraw) await $.ui.invalidate('ui.render')
 }
 
 // New images come with a turn, and /clear or /resume brings another session: the count follows, without holding up
@@ -351,13 +367,13 @@ async function openPane($) {
   routingState = (await readRouting($)) ?? routingState
   copied = false
   paneOpened = true
-  await $.ui.open({ id: PANE, title: WORDS.zh.title, focus: true, closeOnEscape: true })
-  await loadOverview($)
+  await loadOverview($, false)
+  await $.ui.open({ id: PANE, title: (WORDS[overview?.lang] ?? WORDS.en).title, focus: true, closeOnEscape: true })
 }
 
 async function drawPane($, e) {
   const { Box, Text, Button, Link } = $.ui.resolve(e)
-  const w = WORDS[overview?.lang === 'en' ? 'en' : 'zh']
+  const w = WORDS[overview?.lang] ?? WORDS.en
   const url = panelUrl(await $.session.id())
   const routing = routingState
   const status = routing?.active ? w.routing.on(routing.port) : w.routing[routing?.reason ?? 'waiting'] ?? w.routing.waiting

@@ -284,7 +284,7 @@
     <label class="check" id="viewerCheck"><input type="checkbox"><span class="box"></span><span class="label"></span></label>
   </div>
 </div>
-<!-- The panel's words (v0.1-14): Simplified Chinese and English, the same keys in both (a unit test checks it);
+<!-- The panel's words: Simplified Chinese, English and Japanese, with matching keys (a unit test checks it);
   "key_one" is the English text for a count of one. -->
 <script type="application/json" id="messages">
   {
@@ -535,6 +535,128 @@
       "error.disable": "Could not disable: {message}",
       "error.noReply": "Codex did not respond",
       "error.call": "The call failed"
+    },
+    "ja": {
+      "page.title": "コンテキスト素材",
+      "title.loading": "コンテキスト素材",
+      "title.newTask": "新しいタスク",
+      "title.unnamed": "無題のタスク",
+      "refresh": "更新",
+      "refresh.at": "更新（最終更新 {time}）",
+      "refresh.stale": "更新（しばらく更新されていません。最終更新 {time}）",
+      "plugin.disable": "プラグインを無効化",
+      "plugin.enable": "プラグインを有効化",
+      "meter.loading": "読み込み中…",
+      "meter.failed": "読み込めませんでした",
+      "meter.empty": "まだ画像はありません",
+      "meter.request": "推定リクエスト量",
+      "meter.images": "推定画像データ量",
+      "meter.atLeast": "{bytes} 以上",
+      "meter.autoNote": "このターンでモデルが取得する画像は含みません（事前には分からないため）",
+      "meter.full": "全画像 {full} · {percent}% 削減",
+      "meter.none": "省略した画像はありません",
+      "next.label": "次のメッセージ",
+      "next.auto": "毎ターン送信 {sent} 枚",
+      "next.manual": "送信 {sent} 枚",
+      "next.dropped": " · 代替テキスト {dropped} 枚",
+      "next.duplicates": "（うち重複 {duplicates} 枚）",
+      "next.gone": " · コンテキスト外 {gone} 枚",
+      "card.more": "詳細を表示",
+      "card.less": "詳細を閉じる",
+      "last.label": "前回のリクエスト {time}",
+      "last.labelNone": "前回のリクエスト",
+      "last.noBaseline": "プロキシを経由した完全なリクエストがないため、画像サイズから推定しています",
+      "last.skipped": "置換できず、そのまま送信 {bytes}",
+      "last.replaced": "{count} 枚を置換 · {saved} 削減",
+      "last.none": "置換なし、{bytes} を送信",
+      "last.resent": "圧縮前から {resent} 枚を再送 · {count} 枚を置換",
+      "fetched.label": "前のターンでモデルが取得",
+      "fetched.none": "取得なし",
+      "children.label": "サブエージェント・サイドチャット {count} 件",
+      "children.saved": "前回合計 {saved} 削減",
+      "children.none": "前回は置換なし",
+      "needs.title": "モデルが未送信の画像 {count} 枚を必要としています",
+      "id.jump": "一覧で {id} を探す",
+      "search.placeholder": "画像の内容や、そのときの言葉",
+      "search.label": "画像を検索",
+      "chips.label": "画像を絞り込む",
+      "chip.all": "すべて",
+      "chip.upload": "アップロード",
+      "chip.generated": "生成",
+      "chip.other": "その他",
+      "chips.more": "ほか {count} 件",
+      "chips.less": "閉じる",
+      "kind.upload": "アップロード画像",
+      "kind.view": "表示した画像",
+      "kind.generated": "生成した画像",
+      "kind.tool": "ツールの結果",
+      "kind.pdf": "PDF ページ",
+      "kind.browser": "ウェブページの画像",
+      "mark.pinned": "毎ターン送信",
+      "mark.fetched": "取得済み",
+      "mark.notSent": "送信しない",
+      "mark.requested": "モデルが要求",
+      "mark.locked": "解除不可",
+      "mark.gone": "コンテキスト外",
+      "mark.compacted": "圧縮前",
+      "corner.pdf": "PDF {page} ページ",
+      "corner.pdfAny": "PDF",
+      "corner.browser": "ウェブ",
+      "turn.n": "ターン {n}",
+      "turn.earlier": "それ以前",
+      "turn.all": "ターン {n} の全画像を送信",
+      "turn.allEarlier": "それ以前の全画像を送信",
+      "turn.shown": "ターン {n} の表示中の画像を送信",
+      "turn.shownEarlier": "それ以前の表示中の画像を送信",
+      "turn.pinAll": "ターン {n} の全画像を毎ターン送信",
+      "turn.pinAllEarlier": "それ以前の全画像を毎ターン送信",
+      "turn.pinShown": "ターン {n} の表示中の画像を毎ターン送信",
+      "turn.pinShownEarlier": "それ以前の表示中の画像を毎ターン送信",
+      "tile.open": "{id} をプレビュー",
+      "preview.label": "画像プレビュー",
+      "preview.close": "プレビューを閉じる",
+      "preview.closeTitle": "閉じる（Esc）",
+      "preview.pin": "毎ターン送信",
+      "preview.send": "送信",
+      "preview.loading": "読み込み中…",
+      "preview.none": "この画像はプレビューできません",
+      "preview.sameAs": "{id} と同じ画像",
+      "preview.locked": "この画像は解除できず、毎ターン送信されます",
+      "preview.gone": "この画像はコンテキスト外のため、送信されません",
+      "preview.compacted": "圧縮前の画像：選択するとプラグインが再送します",
+      "empty.title": "このタスクにはまだ画像がありません",
+      "empty.text": "アップロードした画像や、モデルが表示・生成した画像が順番に並びます。",
+      "empty.search": "一致する画像がありません",
+      "notice.retry": "再試行",
+      "notice.enabled": "有効にしました。Codex を再起動すると反映されます。",
+      "notice.disabled": "無効にしました。Codex を再起動すると直接接続に戻ります。「プラグインを有効化」で元に戻せます。アンインストールする場合は、プラグイン画面から削除できます。",
+      "notice.notEnabled": "プラグインが無効です。Codex が直接接続しているため、ここでの設定は反映されません。右上の「プラグインを有効化」を押して、Codex を再起動してください。",
+      "notice.waiting": "このタスクはまだ始まっていません。最初のメッセージを送ると、パネルがそのタスクに切り替わります。",
+      "notice.historyMissing": "このタスクの以前の履歴の一部が見つかりません。元のタスクが削除された可能性があるため、その部分の画像は表示されません。",
+      "notice.engineDown": "プロキシが起動していないため、現在ここでの設定は反映されません。通常は Codex を終了して開き直すと復旧します。",
+      "notice.skipped": "前回のリクエスト（{time}）では設定どおりに置換できず、画像をそのまま送信しました。理由：{reason}。",
+      "notice.websocket": "設定変更時にこのターンはまだ実行中だったため、残りのリクエストには元の画像が含まれます。変更は次のメッセージから反映されます。",
+      "notice.thinking": "このアカウントは思考履歴を検証します。前回のリクエスト（{time}）では設定に合わなくなった思考履歴を {count} 件省略したため、モデルが再思考してトークン消費が増える場合があります。",
+      "reason.undecodable": "リクエストを展開できませんでした",
+      "reason.unparsable": "リクエストを解析できませんでした",
+      "reason.format": "リクエストの形式が想定と異なります",
+      "reason.integer": "安全に書き換えられない大きさの整数が含まれています",
+      "reason.index": "このタスクの履歴を読み取れませんでした",
+      "reason.other": "書き換え中にエラーが発生しました",
+      "reason.thinking": "このアカウントでは会話履歴の編集が思考履歴の検証で拒否されたため、元のリクエストを送信しました",
+      "chooser.title": "複数のタスクが始まりました。どのタスクを表示しますか？",
+      "chooser.untitled": "新しいタスク",
+      "footer.hint": "全画像を送信します。除外するにはプレビューで選択を解除してください",
+      "footer.hintAuto": "残りの画像はモデルが必要に応じて取得します",
+      "auto.label": "自動選択",
+      "auto.title": "有効にすると、以前のターンの画像は原則省略され、必要な画像をモデルが番号で取得します。プレビューで「毎ターン送信」にした画像は毎回送信されます",
+      "error.load": "読み込みに失敗しました：{message}",
+      "error.save": "保存に失敗しました：{message}",
+      "error.switch": "切り替えに失敗しました：{message}",
+      "error.enable": "有効化に失敗しました：{message}",
+      "error.disable": "無効化に失敗しました：{message}",
+      "error.noReply": "Codex から応答がありません",
+      "error.call": "呼び出しに失敗しました"
     }
   }
 </script>
@@ -548,7 +670,7 @@
 
   // ---- language (v0.1-14): Codex's interface language when the host context gives one, else the system's ----
   const MESSAGES = JSON.parse($("messages").textContent);
-  const langOf = (tag) => (typeof tag === "string" && tag.trim() ? (tag.trim().toLowerCase().startsWith("zh") ? "zh" : "en") : null);
+  const langOf = (tag) => (typeof tag === "string" && tag.trim() ? (tag.trim().toLowerCase().startsWith("zh") ? "zh" : tag.trim().toLowerCase().startsWith("ja") ? "ja" : "en") : null);
   let lang = langOf(navigator.language) ?? "en";
   let langSource = "system";
   const template = (key, count) => {
@@ -575,7 +697,7 @@
   }
   // The texts outside what render() draws, and the caches that hold words.
   function applyLanguage() {
-    document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : lang === "ja" ? "ja" : "en";
     document.title = t("page.title");
     $("refresh").setAttribute("aria-label", t("refresh"));
     $("search").placeholder = t("search.placeholder");
@@ -937,7 +1059,7 @@
     if (Number.isNaN(date.getTime())) return "";
     const today = date.toDateString() === new Date().toDateString();
     const time = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
-    return new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", today ? time : { month: lang === "zh" ? "long" : "short", day: "numeric", ...time }).format(date);
+    return new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : lang === "ja" ? "ja-JP" : "en-US", today ? time : { month: lang === "zh" ? "long" : "short", day: "numeric", ...time }).format(date);
   }
 
   // ---- the request card ----
@@ -1462,7 +1584,7 @@
   // ---- start: handshake, then Codex sends its own cam_panel result; poll so new images show up ----
   if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
   applyLanguage();
-  request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "codex-attachment-manager", version: "0.9.0" }, appCapabilities: {} })
+  request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "codex-attachment-manager", version: "0.9.1" }, appCapabilities: {} })
     .then((init) => { applyHost(init?.hostContext); post({ method: "ui/notifications/initialized", params: {} }); reportFrame(); })
     .catch(() => {})
     .finally(() => setTimeout(() => { if (!S.data) refresh(); }, 1200));

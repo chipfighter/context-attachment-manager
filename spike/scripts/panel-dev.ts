@@ -430,7 +430,7 @@ const HOST = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><tit
   window.addEventListener("message", async (event) => {
     const m = event.data;
     if (!m || event.source !== frame.contentWindow) return;
-    if (m.method === "ui/initialize") send({ id: m.id, result: { protocolVersion: "2026-01-26", hostInfo: { name: "panel-dev" }, hostCapabilities: { serverTools: {} }, hostContext: { theme, displayMode: "inline", locale: params.get("lang") === "en" ? "en-US" : "zh-CN", ...(sized ? { containerDimensions: dimensions() } : {}) } } });
+    if (m.method === "ui/initialize") send({ id: m.id, result: { protocolVersion: "2026-01-26", hostInfo: { name: "panel-dev" }, hostCapabilities: { serverTools: {} }, hostContext: { theme, displayMode: "inline", locale: params.get("lang") === "en" ? "en-US" : params.get("lang") === "ja" ? "ja-JP" : "zh-CN", ...(sized ? { containerDimensions: dimensions() } : {}) } } });
     else if (m.method === "ui/notifications/size-changed") { if (sized) frame.style.height = Math.min(m.params.height, dimensions().maxHeight, cap) + "px"; }
     else if (m.method === "ui/notifications/initialized") { send({ method: "ui/notifications/tool-result", params: await call("cam_panel", {}) }); demo(); }
     else if (m.method === "tools/call") { const delay = params.get("slow") ? 900 : 60; const result = await call(m.params.name, m.params.arguments); setTimeout(() => send({ id: m.id, result }), delay); }
