@@ -22,13 +22,28 @@ const panelHeaders = { "x-cam-panel": "1", host: "127.0.0.1:17891" };
 function setup() {
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dataRoot = mkdtempSync(join(tmpdir(), "cam-claude-data-"));
+  const desktopSettings = join(home, "desktop-config.json");
+  writeFileSync(desktopSettings, JSON.stringify({ locale: "zh-CN" }));
   const { t, p1 } = usualSession();
   mkdirSync(join(home, "projects", "D--work"), { recursive: true });
   writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
-  return { options: { home, dataRoot }, p1 };
+  return { options: { home, dataRoot, panelLocaleFiles: [desktopSettings] }, p1 };
 }
 const get = (path: string, options: object) => claudePanelApi("GET", path, panelHeaders, "", options);
 const post = (path: string, change: object, options: object) => claudePanelApi("POST", path, panelHeaders, JSON.stringify(change), options);
+
+test("Claude's panel follows its app setting without sharing the model or Codex language", () => {
+  const { options } = setup();
+  const originalTitle = get(`/__cam/claude/panel?session=${session}`, options).body.title;
+  for (const [locale, expected] of [["ja-JP", "ja"], ["en-US", "en"], ["zh-CN", "zh"]]) {
+    writeFileSync(options.panelLocaleFiles[0], JSON.stringify({ locale }));
+    const answer = get(`/__cam/claude/panel?session=${session}`, options);
+    assert.equal(answer.body.lang, expected);
+    assert.equal(answer.body.title, originalTitle);
+    assert.equal(post(`/__cam/claude/select?session=${session}`, { checkAll: true }, options).body.lang, expected);
+  }
+  assert.equal(process.env.CAM_LANG, "zh", "the model's language remains untouched");
+});
 
 test("under Claude Code only the fetch tool is listed for the model", () => {
   assert.deepEqual(claudeToolsFor("zh").map((tool) => tool.name), ["cam_view_image"]);
@@ -131,4 +146,26 @@ test("the panel page is the Codex panel.html with the engine bridge before its o
   const bridge = page.indexOf("window.camHost = {");
   const own = page.indexOf("const post = (message) => (window.camHost");
   assert.ok(bridge > 0 && own > bridge);
+});
+
+test("the Claude browser bridge uses the app language and notifies an already open panel when it changes", async () => {
+  const script = readFileSync(new URL("../../plugin/src/panel-web.js", import.meta.url), "utf8");
+  let language = "ja";
+  const messages: any[] = [];
+  const window = {
+    innerHeight: 700,
+    matchMedia: () => ({ matches: false, addEventListener() {} }),
+    addEventListener() {},
+    dispatchEvent: (event: MessageEvent) => { messages.push(event.data); return true; },
+    camHost: null as any,
+  };
+  new Function("window", "navigator", "location", "fetch", "MessageEvent", script)(window, { language: "en-US" }, { search: `?session=${session}` }, async () => ({ ok: true, json: async () => ({ lang: language }) }), MessageEvent);
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  window.camHost.post({ id: 1, method: "ui/initialize", params: {} });
+  await flush();
+  assert.equal(messages.find(message => message.id === 1).result.hostContext.locale, "ja");
+  language = "en";
+  window.camHost.post({ id: 2, method: "tools/call", params: { name: "cam_panel" } });
+  await flush();
+  assert.ok(messages.some(message => message.method === "ui/notifications/host-context-changed" && message.params.locale === "en"));
 });

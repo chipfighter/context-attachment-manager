@@ -444,4 +444,19 @@ test("the image preview supports Ctrl+wheel zoom and preserves keyboard and back
 
   viewer.dispatchEvent({ type: "click", target: viewerStage });
   assert.deepEqual([viewer.hidden, documentObj.activeElement], [true, tile2], "backdrop click closes and restores focus to opening tile");
+
+  // Host language changes only translate panel chrome; the session title is content.
+  const hostLocale = (locale: string) => {
+    for (const fn of winListeners.get("message") ?? []) fn({ data: { method: "ui/notifications/host-context-changed", params: { locale } } });
+  };
+  hostLocale("ja-JP");
+  assert.equal(byId.get("search")!.placeholder, "画像の内容や、そのときの言葉");
+  assert.equal(documentObj.documentElement.lang, "ja");
+  assert.equal(byId.get("title")!.textContent, "Focus test");
+  hostLocale("zh-CN");
+  assert.equal(byId.get("search")!.placeholder, "画面，或你当时说过的话");
+  assert.equal(byId.get("title")!.textContent, "Focus test");
+  hostLocale("en-US");
+  assert.equal(byId.get("search")!.placeholder, "What it shows, or what you said then");
+  assert.equal(byId.get("title")!.textContent, "Focus test");
 });
