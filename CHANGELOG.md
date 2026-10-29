@@ -2,6 +2,24 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.9.1] - 2026-10-29
+
+Japanese panel support and smoother image previews.
+
+### Features
+
+- The panel now supports English, Simplified Chinese and Japanese. Codex follows its app language; Claude Desktop's Code panel reads Claude's own language setting independently. Changing the language keeps the original session title. Model instructions and command-line messages are unchanged.
+- Added a Japanese README with installation, opening the panel and image-selection guidance. Detailed installation instructions remain in the shared English INSTALL.md. Addresses #16.
+
+### Fixes
+
+- Hold Ctrl and scroll the mouse wheel to zoom images in the preview. Fixes #15.
+- Keyboard focus stays inside the image preview dialog while it is open, including when navigating with Tab and Shift+Tab. Fixes #14.
+
+### Notes
+
+- Verified on Windows with 267 unit tests, synthetic host-language changes and an isolated plugin installation/startup test. Claude's saved language was checked against the installed desktop app; live switching in Claude Desktop has not been tested.
+
 ## [0.9.0] - 2026-10-23
 
 Separate provider routes and image management through compatible gateways.
