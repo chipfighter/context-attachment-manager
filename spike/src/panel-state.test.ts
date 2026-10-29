@@ -262,7 +262,7 @@ test("the task's panel lists its subagents and side chats with their last reques
   ]);
 });
 
-test("the image preview dialog traps Tab and Shift+Tab across visible enabled controls and restores focus on close", () => {
+test("the image preview supports Ctrl+wheel zoom and preserves keyboard and backdrop behavior", async () => {
   const html = readFileSync(join(import.meta.dirname, "..", "..", "plugin", "src", "panel.html"), "utf8");
   const messagesJson = /<script type="application\/json" id="messages">([\s\S]*?)<\/script>/.exec(html)![1];
   const scriptCode = /<script>\s*(\(\(\) => \{[\s\S]*?\}\)\(\);)\s*<\/script>/.exec(html)![1];
@@ -386,6 +386,15 @@ test("the image preview dialog traps Tab and Shift+Tab across visible enabled co
     for (const fn of docListeners.get("keydown") ?? []) fn(event);
     return event;
   };
+  const wheel = (deltaY: number, ctrlKey = true) => {
+    const event = { type: "wheel", deltaY, deltaMode: 0, ctrlKey, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+    viewerStage.dispatchEvent(event);
+    return event;
+  };
+  const scale = () => {
+    const img = viewerStage.querySelector("img");
+    return img ? Number(/^scale\((.+)\)$/.exec(img.style.transform ?? "")?.[1] ?? 1) : NaN;
+  };
 
   const [tile1, tile2] = byId.get("main")!.querySelectorAll("button");
   tile1.focus();
@@ -393,6 +402,18 @@ test("the image preview dialog traps Tab and Shift+Tab across visible enabled co
   assert.equal(documentObj.activeElement, tile1);
 
   tile1.click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(scale(), 1, "a preview starts fitted to its panel");
+  assert.equal(wheel(-100, false).defaultPrevented, false, "ordinary scrolling is not intercepted");
+  assert.equal(scale(), 1);
+  assert.equal(wheel(-100).defaultPrevented, true, "Ctrl+wheel prevents page zoom");
+  assert.ok(scale() > 1, "Ctrl+wheel up enlarges the image");
+  assert.equal(wheel(100).defaultPrevented, true);
+  assert.ok(Math.abs(scale() - 1) < 1e-10, "Ctrl+wheel down shrinks the image");
+  wheel(-1e6);
+  assert.ok(Number.isFinite(scale()) && scale() > 1 && scale() <= 10, "large wheel deltas have a bounded scale");
+  wheel(1e6);
+  assert.ok(scale() > 0 && scale() < 1, "zooming out never collapses or flips the image");
   assert.deepEqual([viewer.hidden, viewerInput.disabled, documentObj.activeElement], [false, false, viewerClose]);
   assert.equal(keydown("Tab").defaultPrevented, true);
   assert.equal(documentObj.activeElement, viewerInput, "Tab moves from close button to checkbox");
@@ -409,8 +430,12 @@ test("the image preview dialog traps Tab and Shift+Tab across visible enabled co
 
   keydown("Escape");
   assert.deepEqual([viewer.hidden, documentObj.activeElement], [true, tile1], "Escape closes and restores focus to opening tile");
+  assert.equal(wheel(-100).defaultPrevented, false, "Ctrl+wheel is ignored when the preview is closed");
 
   tile2.click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(scale(), 1, "opening another image resets the scale");
+  wheel(-100);
   assert.deepEqual([viewer.hidden, viewerInput.disabled, documentObj.activeElement], [false, true, viewerClose]);
   assert.equal(keydown("Tab").defaultPrevented, true);
   assert.equal(documentObj.activeElement, viewerClose, "Tab skips disabled checkbox");
