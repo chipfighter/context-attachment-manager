@@ -2,6 +2,30 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.10.0] - Unreleased
+
+Earlier images come back after compaction and resume, with the same IDs, in Codex and Claude Code.
+
+### Features
+
+- After Codex compacts a task, the images that tools viewed, generated or returned before the compaction go back into the request right after it: pinned images as originals, the others one line each with the model's feature line and ratings. Previously only uploaded images survived a Codex compaction. The panel marks these images as from before the compaction.
+- Images put back after a compaction are now one compact list, one line per image (ID, name, source, turn, feature line, ratings), instead of a placeholder each, on both platforms. In a real session with 127 earlier images this is an estimated 5–7K tokens per request instead of 13–19K.
+- The model can correct a wrong feature line by writing it again with "corrected:".
+- When the user stops a turn before the model writes the feature lines for its new images, those images are sent once more in the next turn, labelled as still missing a feature line.
+
+### Fixes
+
+- Claude Code 2.1.304 and later keep the last messages through a compaction. The plugin now links them the way Claude Code does, so it recognizes the compaction and puts the earlier images back; before, such a compaction could put none back.
+- When Claude Desktop resumes a session into a new transcript, the plugin follows it back to the earlier transcripts, also across several resumes and forks. Images keep their IDs, feature lines and ratings. Before, IDs restarted in the new transcript, so earlier feature lines could attach to the wrong image; lines written that way are now matched back to the right image.
+- Resumed and forked Claude sessions start with the previous session's checked, pinned and Auto-select settings.
+- Long feature lines and ratings are cut by width rather than by character count, whatever the language setting, so English feature lines in a Chinese setup are no longer cut down to the place alone.
+
+### Notes
+
+- After updating, reopen Claude sessions that were open: their image tool still runs the earlier code and numbering until then.
+- Earlier transcripts are read only up to the compaction, and their image data stays on disk until needed: for the longest real session tested (9 transcripts, 210 images), the engine uses about 60 MB more memory and the first index takes under 2 seconds.
+- Verified so far with 281 unit tests and read-only replays of real Codex and Claude sessions. The model self-tests and a live Claude Desktop compaction test are still to run.
+
 ## [0.9.1] - 2026-10-29
 
 Japanese panel support and smoother image previews.
