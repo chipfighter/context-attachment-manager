@@ -21,10 +21,13 @@ import { addNotes, type Notes } from "./notes.ts";
 import { decodePng } from "./png.ts";
 
 type Json = Record<string, any>;
-export type IndexedImage = ImageRef & { id: string; turn: number | null; bytes: number; pixelSha256: string | null };
+// v0.10: compacted, before Codex last compacted the thread and not in the history it kept (its tool outputs): the
+// engine puts it back after the compaction (rewrite.ts, addCodexCompacted); for Claude, before the latest compaction.
+export type IndexedImage = ImageRef & { id: string; turn: number | null; bytes: number; pixelSha256: string | null; compacted?: boolean };
 // v0.3: an image the model fetched with our tool, a copy of `of` sent in its own turn only (spec: automatic selection).
 export type FetchedCopy = { key: string; of: string; turn: number | null };
-export type ThreadIndex = { threadId: string; images: IndexedImage[]; byKey: Map<string, IndexedImage>; turns: number; turnNumbers: Map<string, number>; copies: Map<string, FetchedCopy>; notes: Map<string, Notes> };
+// v0.10 (Codex): items, the items of the history, which image positions point into.
+export type ThreadIndex = { threadId: string; images: IndexedImage[]; byKey: Map<string, IndexedImage>; turns: number; turnNumbers: Map<string, number>; copies: Map<string, FetchedCopy>; notes: Map<string, Notes>; items?: Json[] };
 export type Parsed = { offset: number; type: string; payload: Json; timestamp: string | null };
 type FileCache = { size: number; mtimeMs: number; parsedTo: number; records: Parsed[] };
 
@@ -227,7 +230,12 @@ export function buildIndex(threadId: string, history: Parsed[]): ThreadIndex {
   const activeTurn: Array<string | null> = [];
   const notes = new Map<string, Notes>();
   let current: string | null = null;
+  // v0.10: the latest compaction of Codex: how many items came before it, and the images of the history it kept.
+  let compaction: { before: number; kept: Set<string> } | null = null;
   for (const record of history) {
+    if (record.type === "compacted" && Array.isArray(record.payload.replacement_history)) {
+      compaction = { before: items.length, kept: new Set(findImages(record.payload.replacement_history).map((ref) => ref.key)) };
+    }
     if (record.type === "event_msg" && record.payload.type === "task_started" && record.payload.turn_id) {
       current = record.payload.turn_id;
       if (!turnNumbers.has(current!)) turnNumbers.set(current!, turnNumbers.size + 1);
@@ -267,7 +275,8 @@ export function buildIndex(threadId: string, history: Parsed[]): ThreadIndex {
     const twin = images.find((other) => other.name && (other.contentId === entry.contentId || (entry.pixelSha256 !== null && other.pixelSha256 === entry.pixelSha256)));
     if (twin) entry.name = twin.name;
   }
-  return { threadId, images, byKey, turns: turnNumbers.size, turnNumbers, copies, notes };
+  if (compaction) for (const entry of images) if (entry.item < compaction.before && !compaction.kept.has(entry.key)) entry.compacted = true;
+  return { threadId, images, byKey, turns: turnNumbers.size, turnNumbers, copies, notes, items };
 }
 
 // The first line alone (session_meta can be long), read in chunks without parsing the rest of the file.

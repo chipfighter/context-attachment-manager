@@ -17,7 +17,7 @@
 import type { ClaudeIndex, ClaudeImage } from "./claude-index.ts";
 import { imageDigest, type ImageDigest, type ImageKind } from "./images.ts";
 import type { Lang } from "./language.ts";
-import { autoPlaceholder, claudeNote, compactedNote, copyNote, duplicatePlaceholder, featureNote, hereNote, includedLabel, newImageWord, plainPlaceholder, type Described, type RewriteReport } from "./rewrite.ts";
+import { autoPlaceholder, claudeNote, compactedNote, compactList, copyNote, duplicatePlaceholder, featureNote, hereNote, includedLabel, newImageWord, plainPlaceholder, type Described, type RewriteReport } from "./rewrite.ts";
 
 type Json = Record<string, any>;
 // msg: the message; part: the block in its content; sub: for an image in a tool result, its position in that result.
@@ -249,11 +249,14 @@ export function addCompacted(messages: Json[], summary: string, listed: Describe
   const message = messages[at];
   const content: Json[] = typeof message.content === "string" ? [{ type: "text", text: message.content }] : [...message.content];
   const sent = new Map(resend.map(({ image, block }) => [image.id, block]));
-  const added = listed.flatMap((image): Json[] => {
+  // v0.10: the ones still sent with their labels, then the others one line each (compactList), not a placeholder
+  // apiece.
+  const resent = listed.flatMap((image): Json[] => {
     const block = sent.get(image.id);
-    if (block) return [{ type: "text", text: includedLabel(image, lang) }, block];
-    return [{ type: "text", text: auto ? autoPlaceholder(image, lang) : plainPlaceholder(image, lang) }];
+    return block ? [{ type: "text", text: includedLabel(image, lang) }, block] : [];
   });
+  const missing = listed.filter((image) => !sent.has(image.id));
+  const added: Json[] = [...resent, ...(missing.length ? [{ type: "text", text: compactList(missing, lang) }] : [])];
   content.splice(content.findIndex(holdsSummary(summary)) + 1, 0, ...added);
   const next = [...messages];
   next[at] = { ...message, content };

@@ -382,21 +382,22 @@ test("v0.5: after a compaction, the images from before it go back after the summ
   const sent = (out: any) => JSON.parse(out.body.toString("utf8")).messages;
   const partsOf = (message: any) => message.content.map((block: any) =>
     block.type === "image" ? `image:${block.source.data === pngA ? "A" : block.source.data === pngB ? "B" : "C"}`
+      : /^\[压缩之前的图片/.test(block.text) ? `list:${[...block.text.matchAll(/^(IMG-\d+)｜/gm)].map((match: any) => match[1]).join(",")}`
       : /^\[图片 (IMG-\d+) 已提供/.exec(block.text)?.[1] ?? /^\[图片 (IMG-\d+) 已省略/.exec(block.text)?.[1].replace(/^/, "omitted:") ?? block.text);
   // Nothing unchecked: every image from before the compaction goes out again, and a short note follows.
   const all = rewriteClaudeBody(request, undefined, session, dir, home, {});
   assert.deepEqual(all.report.compacted, { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] });
   assert.deepEqual(partsOf(sent(all)[0]), ["summary", "IMG-001", "image:A", "IMG-002", "image:C"]);
   assert.equal(sent(all)[1].role, "system");
-  assert.match(sent(all)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：上面这条消息里，摘要之前的对话中有这些图片/);
+  assert.match(sent(all)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：上面这条消息里，摘要之前的对话中有 2 张图片（IMG-001 到 IMG-002）/);
   assert.equal(all.report.noteAt, undefined);
-  // An unchecked one stays out: its placeholder after the summary, and the full note naming it.
+  // An unchecked one stays out: a line in the list after the summary (v0.10), and the full note counting it.
   writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" } } }, dir);
   const some = rewriteClaudeBody(request, undefined, session, dir, home, {});
   assert.deepEqual(some.report.compacted.resent, ["IMG-002"]);
-  assert.deepEqual(partsOf(sent(some)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
+  assert.deepEqual(partsOf(sent(some)[0]), ["summary", "IMG-002", "image:C", "list:IMG-001"]);
   assert.match(sent(some)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：为了节省上下文/);
-  assert.match(sent(some)[1].content, /这次没有提供的是 IMG-001/);
+  assert.match(sent(some)[1].content, /其余 1 张这次没有附原图/);
   assert.equal(some.report.noteAt, 1);
   // One unchecked after the compaction too: its message gets only the short note, the full one being after the summary.
   writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" }, [`${p3}#0`]: { id: "IMG-003", at: "2026-10-12T00:00:00Z" } } }, dir);
@@ -406,12 +407,12 @@ test("v0.5: after a compaction, the images from before it go back after the summ
   // v0.8: IMG-003 is also the request's own first image, so the feature line note joins its short note, first.
   assert.deepEqual(both[4].content.map((block: any) => block.text.slice(0, 5)), ["特征行说明", "上下文管理"]);
   assert.match(both[4].content[1].text, /^上下文管理说明：上面这条消息里的 IMG-003/);
-  // Automatic selection: only the pinned ones go out again; the others are placeholders in its words.
+  // Automatic selection: only the pinned ones go out again; the others are lines, and the note says how to fetch one.
   writeSelection({ threadId: session, unchecked: {}, auto: true, autoSince: "2026-10-12T00:00:00Z", pinned: { "tool:toolu_1#0": { id: "IMG-002", at: "2026-10-12T00:00:00Z" } } } as any, dir);
   const auto = rewriteClaudeBody(request, undefined, session, dir, home, {});
   assert.deepEqual(auto.report.compacted.resent, ["IMG-002"]);
-  assert.deepEqual(partsOf(sent(auto)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
-  assert.match(sent(auto)[0].content[1].text, /cam_view_image/);
+  assert.deepEqual(partsOf(sent(auto)[0]), ["summary", "IMG-002", "image:C", "list:IMG-001"]);
+  assert.match(sent(auto)[1].content, /cam_view_image/);
 });
 
 test("v0.5: the request writing a second summary is rewritten as usual; after it, the images from before both go back", async () => {

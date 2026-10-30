@@ -42,10 +42,10 @@ import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type Claude
 import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, proxyLogDirOf, selectionDirOf } from "./paths.ts";
 import { recordRequest } from "./request-stats.ts";
 import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./routes.ts";
-import { rewriteItems, type Described } from "./rewrite.ts";
+import { addCodexCompacted, rewriteItems, type Described } from "./rewrite.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./setup.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, ensureStableIds, selectionDir, sideChatSelection, stableIdsSince } from "./selection.ts";
-import { loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
+import { imageData, loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -352,7 +352,26 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
   }
   // v0.8: feature lines in a task's own requests, not a side chat's or a subagent's.
   const features = !origin && writesNotes(sessionsDir, threadId);
-  const { items, report } = rewriteItems(json.input, describe, leaveOut, pixels, { lang: currentLang(), copies, features, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  const rewritten = rewriteItems(json.input, describe, leaveOut, pixels, { lang: currentLang(), copies, features, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  const { report } = rewritten;
+  let items = rewritten.items;
+  // v0.10: after Codex compacted the task, the images its compaction did not keep (thread-index.ts), right after its
+  // compaction item: pinned ones (in manual mode, checked ones) as originals, the others one line each.
+  let compacted: Json | null = null;
+  const dropped = features ? index.images.filter((image) => image.compacted) : [];
+  if (dropped.length) {
+    const inRequest = new Set(findImages(json.input).map((ref) => ref.key));
+    const listed = dropped.filter((image) => !inRequest.has(image.key) && !copies.has(image.key)).map((image) => describe(image)!).filter(Boolean);
+    const resend = dropped.filter((image) => !inRequest.has(image.key) && !leaveOut.has(image.key) && !copies.has(image.key)).flatMap((image) => {
+      const data = index.items ? imageData(index.items, image) : null;
+      return data ? [{ image: describe(image)!, url: `data:${image.mime ?? "image/png"};base64,${data}` }] : [];
+    });
+    const added = addCodexCompacted(items, listed, resend, { lang: currentLang(), auto: !!selection.auto });
+    if (added.at !== null) {
+      items = added.items;
+      compacted = { at: added.at, listed: listed.length, resent: resend.map(({ image }) => image.id) };
+    }
+  }
   const summary: Json = {
     images: report.images,
     replaced: report.replaced.map(({ key: _key, ...rest }) => rest),
@@ -363,8 +382,9 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
     ...(origin ? { sideChatOf: origin } : {}),
     ...(report.featureAt !== undefined ? { featureAt: report.featureAt, labeled: report.labeled ?? 0 } : {}),
     ...(report.unknown ? { unknown: report.unknown } : {}),
+    ...(compacted ? { compacted } : {}),
   };
-  if (!report.replaced.length && !report.copies.length && report.featureAt === undefined) return { body: original, report: summary };
+  if (!report.replaced.length && !report.copies.length && report.featureAt === undefined && !compacted) return { body: original, report: summary };
   json.input = items;
   const next = Buffer.from(JSON.stringify(json), "utf8");
   const body = encodeBody(next, encoding);
