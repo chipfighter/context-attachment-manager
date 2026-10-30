@@ -22,8 +22,9 @@ import type { Lang } from "./language.ts";
 import type { Notes, Rating } from "./notes.ts";
 
 type Json = Record<string, any>;
-// notes (v0.8): what the model noted about the image, shown in its placeholder.
-export type Described = { id: string; name: string | null; label: string | null; kind: ImageKind; turn: number | null; width: number | null; height: number | null; notes?: Notes };
+// notes (v0.8): what the model noted about the image, shown in its placeholder. awaiting (v0.10): an image of an
+// interrupted turn sent once more for its feature line (thread-index.ts, awaitingLine); its label says so.
+export type Described = { id: string; name: string | null; label: string | null; kind: ImageKind; turn: number | null; width: number | null; height: number | null; notes?: Notes; awaiting?: boolean };
 export type Replacement = { id: string; key: string; kind: ImageKind; mode: "plain" | "duplicate"; sameAs: string | null; base64Chars: number };
 // noteAt: where the developer message explaining omitted images was inserted, if one was. copies: the ids whose copies
 // fetched in an earlier turn were left out. v0.8: featureAt, where the feature line note went; labeled, how many
@@ -34,6 +35,8 @@ type FetchWords = { title: string; description: string; ids: string; missing: (i
 type Words = {
   kind: Record<ImageKind, string>; unnamed: string; turn: (n: number) => string; thisTurn: string; newImage: string;
   omitted: string; notRepeated: string; included: string; separator: string;
+  // v0.10: the label of an image sent once more for its feature line (Described.awaiting).
+  includedAwaiting: string;
   heading: (id: string, label: string | null, state: string, fields: string[]) => string;
   plain: (id: string) => string; duplicate: (id: string, where: string) => string; note: string;
   autoPlain: (id: string) => string; autoNote: string; copy: (id: string) => string; fetch: FetchWords;
@@ -65,6 +68,7 @@ const WORDS: Record<Lang, Words> = {
     omitted: "已省略",
     notRepeated: "未重复提供",
     included: "已提供",
+    includedAwaiting: "已提供，还没有特征行",
     separator: "，",
     heading: (id, label, state, fields) => `[图片 ${id}${label ? `（${label}）` : ""} ${state}｜${fields.join("｜")}]`,
     // v0.8: shorter; the context management note says why the image is left out (it was "原图被用户省略以节省上下文，情况
@@ -148,6 +152,8 @@ const WORDS: Record<Lang, Words> = {
       "- 一张图里有好几个地点的（分镜、抽帧拼图）写“多个地点”；不在任何地方的，写它是什么：角色、物品、文档、网页。",
       "- 同一个地点沿用你之前用过的叫法。",
       "- 只写看得见的东西，不写“好看”“像谁”这类判断。每张图只写一次，以后不改。用户上传的、你生成的、你查看的、工具返回的图都要写；用 cam_view_image 取回的图和没有编号的图不用写。",
+      "- 标着“[图片 IMG-xxx 已提供，还没有特征行…]”的图，是之前那一轮被打断、没来得及写特征行的，这一轮再提供一次：也给它写一行。",
+      "- 写过的特征行有错（比如用户指出了），照同样的格式整行重写，开头加“更正：”，例如“[//]: # (cam IMG-005 更正：角色｜正面近景，左眉有疤)”，它会替换原来那一行。",
       "- 用户评价某张图时（包括隔了几轮才说），先确定是哪一张，再照用户的原话记一行，15 字以内，例如“[//]: # (cam IMG-003 评价：太暗)”。评价是用户自己的看法，你不认同也照记。拿不准是哪一张就不记，可以在正文里问用户指的是哪一张，但不要提记录的事。用户只是评价、没有提要求时，正文简短回应评价本身就行，不要说明你记了什么、对应到了哪张图。",
       "- 这些行写在正文前面，和正文之间空一行，一张图写一行；括号里不要用半角括号。这一轮没有新图、也没有评价时，不写这些行。这些行只给这个工具读，用户在界面上看不到。正文照常回答，不用提到这些行；用户评价图片时，也不用回应记录这件事，比如“记下了”“我会记住”“之后会参考”。",
       "- 以后被省略的图，占位里会带着你写的特征和记下的评价，对话压缩之后也还在。要选图时先看这些；拿不准时，先把原图要回来看（怎么要，见“上下文管理说明”），或者问用户是哪一张。",
@@ -167,6 +173,7 @@ const WORDS: Record<Lang, Words> = {
     omitted: "omitted",
     notRepeated: "not repeated",
     included: "included",
+    includedAwaiting: "included, no feature line yet",
     separator: ", ",
     heading: (id, label, state, fields) => `[Image ${id}${label ? ` (${label})` : ""} ${state} | ${fields.join(" | ")}]`,
     plain: (id) => `To see it again, write "need ${id}" in your reply.`,
@@ -226,6 +233,8 @@ const WORDS: Record<Lang, Words> = {
       "- An image of several places (a storyboard, a contact sheet) gets \"several places\"; one set nowhere gets what it is: character, object, document, web page.",
       "- For a place you named before, reuse that name.",
       "- Only what can be seen; no judgments such as \"beautiful\" or \"looks like someone\". One line per image, written once and never changed. Write one for the images the user uploaded, the ones you generated or viewed, and those in tool results; not for images you fetched with cam_view_image or images without an ID.",
+      "- An image marked \"[Image IMG-xxx included, no feature line yet…]\" is from an earlier turn that was interrupted before you wrote its line; it is included once more in this turn: write its line too.",
+      "- If a feature line you wrote turns out wrong (for example, the user points it out), write the whole line again in the same form, starting with \"corrected:\", for example \"[//]: # (cam IMG-005 corrected: character | front close-up, scar on the left eyebrow)\"; it replaces the old one.",
       "- When the user rates an image, even turns later, first make sure which one it is, then note the user's own words in a line of about 8 words at most, for example \"[//]: # (cam IMG-003 rated: too dark)\". The rating is the user's own view: note it even if you see it differently. If you are not sure which image it is, do not note it; you may ask the user which one they mean, without mentioning the noting. When the user only rates images and asks for nothing, a short reply to what they said is enough; do not explain what you noted or which image you matched it to.",
       "- Put these lines before your reply with a blank line after them, one image per line, and no parentheses inside them. In a turn with no new image and no rating, write none of these lines. These lines are for this tool only; the user does not see them on screen. Answer as usual and do not mention these lines; when the user rates an image, do not acknowledge the noting either, such as \"noted\", \"I'll keep that in mind\" or \"I'll refer to this later\".",
       "- Images left out later carry your feature line and the ratings you noted in their placeholders, also after a compaction. Check them when you pick an image; when unsure, get the original back first (the \"Context management note\" says how) or ask the user which one.",
@@ -284,7 +293,7 @@ export function duplicatePlaceholder(image: Described, same: Described, lang: La
 // Put right before an image that is still sent, so the model can tell which id it is: Codex's own labels ("[Image #2]")
 // start again in every message.
 export function includedLabel(image: Described, lang: Lang = "zh"): string {
-  return heading(WORDS[lang], image, WORDS[lang].included);
+  return heading(WORDS[lang], image, image.awaiting ? WORDS[lang].includedAwaiting : WORDS[lang].included);
 }
 
 // v0.3: automatic selection.

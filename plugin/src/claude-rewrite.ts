@@ -94,6 +94,8 @@ export type ClaudeRewriteOptions = {
   noted?: boolean;
   // v0.8: the feature line note and ids on this turn's new images too (rewrite.ts).
   features?: boolean;
+  // v0.10: keys of the images sent once more for their feature line; their labels say so.
+  awaiting?: Set<string>;
 };
 
 export function rewriteMessages(
@@ -103,12 +105,13 @@ export function rewriteMessages(
   pixelHash: (image: RequestImage) => string | null,
   options: ClaudeRewriteOptions = {},
 ): { messages: Json[]; report: RewriteReport } {
-  const { lang = "zh", copies = new Map<string, string>(), auto, noted = false, features = false } = options;
+  const { lang = "zh", copies = new Map<string, string>(), auto, noted = false, features = false, awaiting = new Set<string>() } = options;
   const refs = findRequestImages(messages, index);
   const describe = (ref: RequestImage): ClaudeImage | undefined => {
     const image = ref.key ? index.byKey.get(ref.key) : undefined;
     const notes = image ? index.notes?.get(image.id) : undefined;
-    return image && notes ? { ...image, notes } : image;
+    if (!image) return undefined;
+    return notes || awaiting.has(image.key) ? { ...image, ...(notes ? { notes } : {}), ...(awaiting.has(image.key) ? { awaiting: true } : {}) } : image;
   };
   const report: RewriteReport = { images: refs.length, replaced: [], locked: [], sentContentIds: [], copies: [] };
   const copied = refs.filter((ref) => ref.key !== null && copies.has(ref.key));

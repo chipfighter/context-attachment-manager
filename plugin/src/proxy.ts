@@ -45,7 +45,7 @@ import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, t
 import { addCodexCompacted, rewriteItems, type Described } from "./rewrite.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./setup.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, ensureStableIds, selectionDir, sideChatSelection, stableIdsSince } from "./selection.ts";
-import { imageData, loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
+import { awaitingLine, imageData, loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -334,11 +334,13 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
   let index: ThreadIndex;
   try { index = loadThreadIndex(sessionsDir, origin ?? threadId); } catch (error) { return { body: original, report: { skipped: `thread index: ${String(error)}` } }; }
   const selection = side ?? effectiveSelection(threadId, sessionsDir, dir);
+  // v0.10: images sent once more for their feature line (awaitingLine), marked in their labels.
+  const awaiting = new Set<string>();
   const describe = (ref: ImageRef): Described | undefined => {
     const known = index.byKey.get(ref.key);
     // v0.8: with what the model noted about it, for its placeholder.
     const notes = known ? index.notes.get(known.id) : undefined;
-    if (known) return notes ? { ...known, notes } : known;
+    if (known) return { ...known, ...(notes ? { notes } : {}), ...(awaiting.has(known.key) ? { awaiting: true } : {}) };
     const stored = selection.unchecked[ref.key];
     return stored ? { id: stored.id, name: ref.name, label: ref.label, kind: ref.kind, turn: null, width: ref.width, height: ref.height } : undefined;
   };
@@ -346,12 +348,13 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
   const current = side ? index.turns + 1 : currentTurnOf(index, turnId);
   const copies = new Map([...index.copies.values()].filter((copy) => copy.turn === null || copy.turn < current).map((copy) => [copy.key, copy.of]));
   let leaveOut = new Set(Object.keys(selection.unchecked));
-  if (selection.auto) {
-    const pinned = selection.pinned ?? {};
-    leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key]).map((image) => image.key));
-  }
   // v0.8: feature lines in a task's own requests, not a side chat's or a subagent's.
   const features = !origin && writesNotes(sessionsDir, threadId);
+  if (selection.auto) {
+    const pinned = selection.pinned ?? {};
+    for (const image of index.images) if (features && awaitingLine(index, image, current)) awaiting.add(image.key);
+    leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key] && !awaiting.has(image.key)).map((image) => image.key));
+  }
   const rewritten = rewriteItems(json.input, describe, leaveOut, pixels, { lang: currentLang(), copies, features, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
   const { report } = rewritten;
   let items = rewritten.items;
@@ -445,9 +448,11 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   const current = index.turns;
   const copies = new Map([...index.copies.values()].filter((copy) => copy.turn === null || copy.turn < current).map((copy) => [copy.key, copy.of]));
   let leaveOut = new Set(Object.keys(selection.unchecked));
+  // v0.10: images of an interrupted turn without a feature line yet are sent once more (awaitingLine).
+  const awaiting = new Set(selection.auto ? index.images.filter((image) => awaitingLine(index, image, current)).map((image) => image.key) : []);
   if (selection.auto) {
     const pinned = selection.pinned ?? {};
-    leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key]).map((image) => image.key));
+    leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key] && !awaiting.has(image.key)).map((image) => image.key));
   }
   const pixels = (ref: RequestImage) => (ref.key ? index.byKey.get(ref.key)?.pixelSha256 : undefined) ?? pixelHashOfData(ref, ref.block.source.data);
   const lang = currentLang();
@@ -466,7 +471,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   });
   const compactedOut = summaryIn !== null && resend.length < compactedImages.length;
   // v0.8: feature lines in every main conversation (a subagent's requests do not come here).
-  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, noted: compactedOut, features: true, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
+  const rewrote = rewriteMessages(json.messages, index, leaveOut, pixels, { lang, copies, noted: compactedOut, features: true, awaiting, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
   const report = rewrote.report;
   let messages = rewrote.messages;
   let compacted: Json | null = null;

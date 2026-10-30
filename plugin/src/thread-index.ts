@@ -26,8 +26,18 @@ type Json = Record<string, any>;
 export type IndexedImage = ImageRef & { id: string; turn: number | null; bytes: number; pixelSha256: string | null; compacted?: boolean };
 // v0.3: an image the model fetched with our tool, a copy of `of` sent in its own turn only (spec: automatic selection).
 export type FetchedCopy = { key: string; of: string; turn: number | null };
-// v0.10 (Codex): items, the items of the history, which image positions point into.
-export type ThreadIndex = { threadId: string; images: IndexedImage[]; byKey: Map<string, IndexedImage>; turns: number; turnNumbers: Map<string, number>; copies: Map<string, FetchedCopy>; notes: Map<string, Notes>; items?: Json[] };
+// v0.10 (Codex): items, the items of the history, which image positions point into. interrupted: the turns the user
+// stopped before the model wrote its last reply (its record lines); skipped: turns that are only Claude Code's mark of
+// such a stop.
+export type ThreadIndex = { threadId: string; images: IndexedImage[]; byKey: Map<string, IndexedImage>; turns: number; turnNumbers: Map<string, number>; copies: Map<string, FetchedCopy>; notes: Map<string, Notes>; items?: Json[]; interrupted?: Set<number>; skipped?: Set<number> };
+
+// v0.10 (docs/v0.10/plan.md): an image of an interrupted turn without a feature line yet, with no turn finished since:
+// sent once more in the current turn, so the model can write its line (automatic selection would leave it out).
+export function awaitingLine(index: ThreadIndex, image: IndexedImage, current: number): boolean {
+  if (image.turn === null || image.turn >= current || index.notes.get(image.id)?.line || !index.interrupted?.has(image.turn)) return false;
+  for (let turn = image.turn + 1; turn < current; turn++) if (!index.interrupted.has(turn) && !index.skipped?.has(turn)) return false;
+  return true;
+}
 export type Parsed = { offset: number; type: string; payload: Json; timestamp: string | null };
 type FileCache = { size: number; mtimeMs: number; parsedTo: number; records: Parsed[] };
 
@@ -232,6 +242,7 @@ export function buildIndex(threadId: string, history: Parsed[]): ThreadIndex {
   let current: string | null = null;
   // v0.10: the latest compaction of Codex: how many items came before it, and the images of the history it kept.
   let compaction: { before: number; kept: Set<string> } | null = null;
+  const interrupted = new Set<number>();
   for (const record of history) {
     if (record.type === "compacted" && Array.isArray(record.payload.replacement_history)) {
       compaction = { before: items.length, kept: new Set(findImages(record.payload.replacement_history).map((ref) => ref.key)) };
@@ -240,6 +251,7 @@ export function buildIndex(threadId: string, history: Parsed[]): ThreadIndex {
       current = record.payload.turn_id;
       if (!turnNumbers.has(current!)) turnNumbers.set(current!, turnNumbers.size + 1);
     }
+    if (record.type === "event_msg" && record.payload.type === "turn_aborted" && current) interrupted.add(turnNumbers.get(current)!);
     if (record.type !== "response_item") continue;
     items.push(record.payload);
     activeTurn.push(current);
@@ -276,7 +288,7 @@ export function buildIndex(threadId: string, history: Parsed[]): ThreadIndex {
     if (twin) entry.name = twin.name;
   }
   if (compaction) for (const entry of images) if (entry.item < compaction.before && !compaction.kept.has(entry.key)) entry.compacted = true;
-  return { threadId, images, byKey, turns: turnNumbers.size, turnNumbers, copies, notes, items };
+  return { threadId, images, byKey, turns: turnNumbers.size, turnNumbers, copies, notes, items, interrupted };
 }
 
 // The first line alone (session_meta can be long), read in chunks without parsing the rest of the file.

@@ -54,6 +54,8 @@ export type ClaudeIndex = ThreadIndex & {
 };
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// v0.10: the text Claude Code records as a prompt when the user stops a turn.
+const INTERRUPTED = /^\[Request interrupted by user/;
 const FETCHED_LINE = new RegExp(`^\\[(?:图片|Image) (IMG-\\d{3,}) (?:${FETCHED_STATE.zh}|${FETCHED_STATE.en})(?:｜| \\|)`);
 
 export function claudeHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -277,7 +279,7 @@ const numberings = new Map<string, Map<string, string>>();
 function oldNumbering(chain: ClaudeRecord[], from: number, until: string): Map<string, string> {
   let end = from;
   while (end < chain.length && !(typeof chain[end].timestamp === "string" && chain[end].timestamp >= until)) end++;
-  const cacheKey = `${chain[from].uuid} ${chain[end - 1]?.uuid} ${end - from}`;
+  const cacheKey = `${chain[from].uuid}\0${chain[end - 1]?.uuid}\0${end - from}`;
   const known = numberings.get(cacheKey);
   if (known) return known;
   const keys = new Map<string, string>();
@@ -337,6 +339,8 @@ export function buildClaudeIndex(sessionId: string, records: ClaudeRecord[], tra
   let previous: string[] = [];
   // v0.8: what the model noted in record lines at the end of its replies (notes.ts), by image id.
   const notes = new Map<string, Notes>();
+  const interrupted = new Set<number>();
+  const skipped = new Set<number>();
   // v0.10: ids written under another numbering, back to this one's (through the image they named).
   const numberingAt = translator(chain, options.eras);
   const ownId = (numbering: Map<string, string> | null) => (id: string) => (numbering ? byKey.get(numbering.get(id) ?? "")?.id ?? null : id);
@@ -359,6 +363,9 @@ export function buildClaudeIndex(sessionId: string, records: ClaudeRecord[], tra
       turnNumbers.set(record.uuid!, turn);
       if (current.length) previous = current;
       current = [];
+      // v0.10: Claude Code's mark that the user stopped the turn before: that turn was interrupted, this one is no turn.
+      const said = typeof content === "string" ? content : Array.isArray(content) ? content.map(textOf).filter(Boolean).join("\n") : "";
+      if (INTERRUPTED.test(said)) { if (turn > 1) interrupted.add(turn - 1); skipped.add(turn); }
     }
     const compacted = position < lastBoundary;
     const pasted: string[] = [];
@@ -410,7 +417,7 @@ export function buildClaudeIndex(sessionId: string, records: ClaudeRecord[], tra
     const twin = images.find((other) => other.name && (other.contentId === entry.contentId || (entry.pixelSha256 !== null && other.pixelSha256 === entry.pixelSha256)));
     if (twin) entry.name = twin.name;
   }
-  return { threadId: sessionId, images, byKey, turns: turn, turnNumbers, copies, notes, uploads, chain, title: titleOf(records, chain), replies, transcript, summary, previous: previousOf(sessionId, options.eras?.family ?? []) };
+  return { threadId: sessionId, images, byKey, turns: turn, turnNumbers, copies, notes, uploads, chain, title: titleOf(records, chain), replies, transcript, summary, previous: previousOf(sessionId, options.eras?.family ?? []), interrupted, skipped };
 }
 
 // v0.10: the sessions this one continues, most recent first, each with the time this one took over: the one it was
@@ -563,7 +570,7 @@ export function withHistory(file: string, records: ClaudeRecord[], home = claude
   if (!first || !isBoundary(first) || depth > 16) return { records, links: new Map() };
   const original = originalOf(file, records, first, home);
   if (!original) return { records, links: new Map() };
-  const key = `${original} ${first.uuid}`;
+  const key = `${original}\0${first.uuid}`;
   let stamp: string;
   try { stamp = stampOf(original); } catch { return { records, links: new Map() }; }
   let cached = prefixes.get(key);
@@ -638,7 +645,7 @@ export function loadClaudeIndex(sessionId: string, home = claudeHome(), since: s
   if (!file) return emptyClaudeIndex(sessionId);
   const own = readTranscript(file);
   const { records, links } = withHistory(file, own, home);
-  const key = [own.length, records.length, since, listings.get(dirname(file))?.names.length ?? -1].join(" ");
+  const key = [own.length, records.length, since, listings.get(dirname(file))?.names.length ?? -1].join("\0");
   const known = loaded.get(own);
   if (known && known.key === key) return known.index;
   const index = indexFor(sessionId, file, records, links, since);
