@@ -228,3 +228,20 @@ test("the panel's data: each image's scene and noted words, and per turn what wa
   const claude = panelStateOf("s", index, new Set(), null, null, true, [], true, claudeTurnTexts(index.chain));
   assert.deepEqual([claude.images[0].scene, claude.images[0].search], ["white room", "white room | wide shot"]);
 });
+
+test("v0.10: a correction replaces the feature line; a line under another numbering is translated or dropped", () => {
+  const notes = new Map<string, Notes>();
+  addNotes(notes, "[//]: # (cam IMG-005 角色｜正面近景，右眉有疤)\n\nok", 2);
+  addNotes(notes, "[//]: # (cam IMG-005 角色｜正面近景，另一种写法)", 3);
+  assert.equal(notes.get("IMG-005")?.line, "角色｜正面近景，右眉有疤");
+  addNotes(notes, "[//]: # (cam IMG-005 更正：角色｜正面近景，左眉有疤)\n[//]: # (cam IMG-006 corrected: street | wide shot)", 4);
+  assert.equal(notes.get("IMG-005")?.line, "角色｜正面近景，左眉有疤");
+  assert.equal(notes.get("IMG-006")?.line, "street | wide shot");
+  // An empty correction changes nothing.
+  addNotes(notes, "[//]: # (cam IMG-005 更正：)", 5);
+  assert.equal(notes.get("IMG-005")?.line, "角色｜正面近景，左眉有疤");
+  const mapped = new Map<string, Notes>();
+  addNotes(mapped, "[//]: # (cam IMG-001 书房｜窗边)\n[//]: # (cam IMG-002 评价：太暗)\n[//]: # (cam IMG-003 门口｜白天)", 7, (id) => ({ "IMG-001": "IMG-095", "IMG-002": "IMG-096" } as Record<string, string>)[id] ?? null);
+  assert.deepEqual([...mapped.keys()], ["IMG-095", "IMG-096"]);
+  assert.deepEqual(mapped.get("IMG-096")?.ratings, [{ turn: 7, text: "太暗" }]);
+});

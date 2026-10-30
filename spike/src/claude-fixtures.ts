@@ -13,13 +13,14 @@ export const pngC = png(16, 8, () => [255, 255, 255]).toString("base64");
 export const image = (data: string, extra: Json = {}) => ({ type: "image", source: { type: "base64", media_type: "image/png", data }, ...extra });
 export const text = (value: string, extra: Json = {}) => ({ type: "text", text: value, ...extra });
 
-// A transcript builder: each record links to the one before unless told otherwise.
-export function transcript() {
+// A transcript builder: each record links to the one before unless told otherwise. v0.10: `base` offsets its uuids,
+// for a second builder whose records join the first one (a resumed session).
+export function transcript(base = 0) {
   const records: Json[] = [];
   let last: string | null = null;
   let n = 0;
   const add = (record: Json, parent: string | null | undefined = last) => {
-    const uuid = record.uuid ?? `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
+    const uuid = record.uuid ?? `00000000-0000-4000-8000-${String(++n + base).padStart(12, "0")}`;
     const full = { parentUuid: parent ?? null, isSidechain: false, sessionId: "s", ...record, uuid };
     records.push(full);
     if (!full.isSidechain) last = uuid;
@@ -33,6 +34,20 @@ export function transcript() {
     attachment: () => add({ type: "attachment", attachment: { type: "x" } }),
     boundary: () => add({ type: "system", subtype: "compact_boundary", compactMetadata: {}, logicalParentUuid: last }, null),
     summary: (content = "summary") => add({ type: "user", isCompactSummary: true, message: { role: "user", content } }),
+    // v0.10: a compaction that keeps the last messages (Claude Code 2.1.304+), as written where it happened: the
+    // boundary (no parent; its logical parent is the last message), the summary after it, the kept messages left
+    // where they were. The next records hang off the last kept one ("tail", as when the records of the /compact
+    // command were written first) or off the summary. `list`: preservedMessages instead of preservedSegment.
+    compact: (kept: string[], after: "tail" | "summary" = "summary", content = "summary", extra: Json = {}, list = false) => {
+      const tail = kept[kept.length - 1];
+      const anchor = `00000000-0000-4000-8000-${String(++n + base + 500).padStart(12, "0")}`;
+      const metadata = list ? { preservedMessages: { anchorUuid: anchor, uuids: kept, allUuids: kept } } : { preservedSegment: { headUuid: kept[0], anchorUuid: anchor, tailUuid: tail } };
+      const boundary = add({ type: "system", subtype: "compact_boundary", compactMetadata: { trigger: "manual", ...metadata }, logicalParentUuid: tail, ...extra }, null);
+      add({ type: "user", isCompactSummary: true, message: { role: "user", content }, uuid: anchor, ...extra }, boundary);
+      if (after === "tail") last = tail;
+      return { boundary, anchor };
+    },
+    from: (uuid: string) => { last = uuid; },
     get last() { return last; },
   };
 }

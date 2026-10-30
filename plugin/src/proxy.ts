@@ -44,7 +44,7 @@ import { recordRequest } from "./request-stats.ts";
 import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./routes.ts";
 import { rewriteItems, type Described } from "./rewrite.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./setup.ts";
-import { claudeSelection, effectiveSelection, ensureAutoDefault, selectionDir, sideChatSelection } from "./selection.ts";
+import { claudeSelection, effectiveSelection, ensureAutoDefault, ensureStableIds, selectionDir, sideChatSelection, stableIdsSince } from "./selection.ts";
 import { loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
@@ -378,9 +378,9 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
 export function claudeNeedsRewrite(sessionId: string | null, dir = claudeSelectionDirOf(), home = claudeHome()): boolean {
   if (!sessionId) return false;
   let index: ClaudeIndex | null = null;
-  try { index = loadClaudeIndex(sessionId, home); } catch { /* the selection still decides */ }
+  try { index = loadClaudeIndex(sessionId, home, stableIdsSince(dir)); } catch { /* the selection still decides */ }
   try {
-    const selection = claudeSelection(sessionId, dir, index ? claudeStartedAt(index) : null);
+    const selection = claudeSelection(sessionId, dir, index ? claudeStartedAt(index) : null, index?.previous ?? []);
     if (Object.keys(selection.unchecked).length > 0 || selection.autoSince) return true;
   } catch { /* the transcript still decides */ }
   return !!index?.images.length;
@@ -420,8 +420,8 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   if (!Array.isArray(json.messages)) return asIs({ skipped: "no messages array" });
   if (hasUnsafeInteger(text)) return asIs({ skipped: "integer beyond 2^53 would change when re-serialized" });
   let index: ClaudeIndex;
-  try { index = loadClaudeIndex(sessionId, home); } catch (error) { return asIs({ skipped: `thread index: ${String(error)}` }); }
-  const selection = claudeSelection(sessionId, dir, claudeStartedAt(index));
+  try { index = loadClaudeIndex(sessionId, home, stableIdsSince(dir)); } catch (error) { return asIs({ skipped: `thread index: ${String(error)}` }); }
+  const selection = claudeSelection(sessionId, dir, claudeStartedAt(index), index.previous);
   const current = index.turns;
   const copies = new Map([...index.copies.values()].filter((copy) => copy.turn === null || copy.turn < current).map((copy) => [copy.key, copy.of]));
   let leaveOut = new Set(Object.keys(selection.unchecked));
@@ -564,6 +564,8 @@ async function main(): Promise<void> {
   // v0.6: tasks and sessions started from now on have automatic selection on by default (selection.ts).
   ensureAutoDefault(selectionDirOf());
   ensureAutoDefault(claudeSelectionDirOf());
+  // v0.10: from now on Claude sessions resumed after a compaction keep their ids (claude-index.ts).
+  ensureStableIds(claudeSelectionDirOf());
   const portIndex = process.argv.indexOf("--port");
   const port = Number(portIndex >= 0 ? process.argv[portIndex + 1] : DEFAULT_PORT);
   const providerPort = routingPort(port);
@@ -786,7 +788,7 @@ async function main(): Promise<void> {
           details = describeBody(path, json);
           // Measured on the body as Codex sent it, before any rewrite: the panel's "everything sent" baseline.
           if (/\/responses$/.test(path) && Array.isArray(json.input)) imageSizes = imageSizesOf(json.input);
-          if (claudeSession && Array.isArray(json.messages)) imageSizes = claudeImageSizes(json.messages, loadClaudeIndex(claudeSession));
+          if (claudeSession && Array.isArray(json.messages)) imageSizes = claudeImageSizes(json.messages, loadClaudeIndex(claudeSession, claudeHome(), stableIdsSince(claudeSelectionDirOf())));
           if (dumpDir && (/\/responses$/.test(path) || path === "/v1/messages")) {
             mkdirSync(dumpDir, { recursive: true });
             const headers = Object.fromEntries(Object.entries(req.headers).filter(([name]) => /^(x-codex|session_id|conversation_id|openai-beta|content-|anthropic-(beta|version)|x-claude-code-|user-agent)/.test(name)));

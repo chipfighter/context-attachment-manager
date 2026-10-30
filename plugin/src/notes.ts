@@ -8,19 +8,29 @@
 
 // rating: the user's words the model noted, with the turn it noted them in.
 export type Rating = { turn: number | null; text: string };
-// line: the feature line, written once (the first one stands); ratings: oldest first.
+// line: the feature line, written once (the first one stands, unless corrected); ratings: oldest first.
 export type Notes = { line: string | null; ratings: Rating[] };
 
 const RECORD = /^ {0,3}\[\/\/\]:[ \t]*#[ \t]*\(cam[ \t]+(IMG-\d{3,})[ \t]+([^()\n]+?)[ \t]*\)[ \t]*$/gm;
 const RATING = /^(?:评价|rated)[ \t]*[：:][ \t]*/i;
+// v0.10: a feature line the model found wrong (e.g. the user pointed it out), written again in full.
+const CORRECTION = /^(?:更正|corrected)[ \t]*[：:][ \t]*/i;
 
-export function addNotes(notes: Map<string, Notes>, text: string, turn: number | null): void {
-  for (const [, id, body] of text.matchAll(RECORD)) {
+// v0.10: `idOf` turns the id a line names into the image's id now (claude-index.ts: lines written while a resumed
+// transcript was numbered from its own start); null drops the line.
+export function addNotes(notes: Map<string, Notes>, text: string, turn: number | null, idOf: (id: string) => string | null = (id) => id): void {
+  for (const [, named, body] of text.matchAll(RECORD)) {
+    const id = idOf(named);
+    if (!id) continue;
     const entry = notes.get(id) ?? { line: null, ratings: [] };
     const rating = RATING.exec(body);
+    const correction = CORRECTION.exec(body);
     if (rating) {
       const said = body.slice(rating[0].length).trim();
       if (said) entry.ratings.push({ turn, text: said });
+    } else if (correction) {
+      const line = body.slice(correction[0].length).trim();
+      if (line) entry.line = line;
     } else if (entry.line === null) entry.line = body.trim();
     notes.set(id, entry);
   }
