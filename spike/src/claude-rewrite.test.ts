@@ -191,7 +191,7 @@ test("v0.5: after a compaction, the images from before it go back right after th
     block(pngC),
     { type: "text", text: compactList([a], "en") },
   ]);
-  assert.equal(compactList([a], "en"), "[Images from before the compaction, the 1 not included as originals this time: id | name | source | turn | features and ratings]\nIMG-001 | unnamed | uploaded by the user | turn 1");
+  assert.equal(compactList([a], "en"), "[Images from before the compaction, the 1 not included as originals this time: id | name | source | turn | features and ratings]\nIMG-001 | - | upload | turn 1");
   // The note follows as a system message: the full note first, since something is left out, then the count and ids.
   assert.deepEqual(out.messages[1], { role: "system", content: compactedNote([a, c], new Set(["IMG-002"]), "en") });
   const note = out.messages[1].content;
@@ -224,10 +224,12 @@ test("v0.5: after a compaction, the images from before it go back right after th
   const blocks = [{ role: "user", content: [text("summary"), text("<system-reminder>x</system-reminder>")] }];
   const auto = addCompacted(blocks, "summary", [a], [], { lang: "zh", auto: true });
   assert.deepEqual(auto.messages[0].content.map((b: any) => b.text), ["summary", compactList([a], "zh"), "<system-reminder>x</system-reminder>"]);
-  assert.equal(compactLine(a, "zh"), "IMG-001｜未命名｜用户上传｜第 1 轮");
+  assert.equal(compactLine(a, "zh"), "IMG-001｜-｜上传｜第 1 轮");
+  assert.equal(compactLine({ ...a, notes: { line: "书房｜红色方块", ratings: [{ turn: 3, text: "太暗" }] } }, "zh"), "IMG-001｜-｜上传｜第 1 轮｜书房｜红色方块｜评价：第 3 轮“太暗”");
   assert.ok(auto.messages[1].content.startsWith(claudeNote("zh", true)));
   assert.match(auto.messages[1].content, /摘要之前的对话中有 1 张图片（IMG-001）/);
-  assert.match(auto.messages[1].content, /其余 1 张这次没有附原图（自动选图开着/);
+  // None sent as an original: "这 1 张", not "其余".
+  assert.match(auto.messages[1].content, /这 1 张这次没有附原图（自动选图开着/);
   assert.match(auto.messages[1].content, /调用 cam_view_image 工具/);
   // No summary in the request (before the compaction, or another request): nothing changes.
   const before = [{ role: "user", content: [text("hello")] }];

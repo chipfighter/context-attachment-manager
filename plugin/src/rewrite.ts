@@ -34,6 +34,8 @@ export type RewriteReport = { images: number; replaced: Replacement[]; locked: s
 type FetchWords = { title: string; description: string; ids: string; missing: (id: string) => string; unavailable: (id: string) => string; off: string };
 type Words = {
   kind: Record<ImageKind, string>; unnamed: string; turn: (n: number) => string; thisTurn: string; newImage: string;
+  // v0.10: the source in a compact line (compactLine), shorter.
+  kindShort: Record<ImageKind, string>;
   omitted: string; notRepeated: string; included: string; separator: string;
   // v0.10: the label of an image sent once more for its feature line (Described.awaiting).
   includedAwaiting: string;
@@ -51,7 +53,7 @@ type Words = {
   // v0.10, Codex: the images its compaction did not keep, put back after it: how many, how many sent as originals.
   codexCompacted: (count: number, resent: number, auto: boolean) => string;
   // v0.8: how to write feature lines and note ratings; the placeholder's line with them; how long each may be shown.
-  featureNote: string; notes: (line: string | null, ratings: Rating[]) => string; caps: { line: number; rating: number };
+  featureNote: string; notes: (line: string | null, ratings: Rating[]) => string;
 };
 
 // The image sits in the history, so the model concludes it never saw it and takes back what it said about it (user
@@ -61,6 +63,7 @@ type Words = {
 const WORDS: Record<Lang, Words> = {
   zh: {
     kind: { upload: "用户上传", view: "工具查看的图片", generated: "生成的图片", tool: "工具结果里的图片" },
+    kindShort: { upload: "上传", view: "查看", generated: "生成", tool: "工具" },
     unnamed: "未命名",
     turn: (n) => `第 ${n} 轮`,
     thisTurn: "本轮",
@@ -110,7 +113,7 @@ const WORDS: Record<Lang, Words> = {
     compacted: (count, range, missing, auto) => [
       `${missing === 0 ? "上下文管理说明（来自用户安装的上下文素材管理工具）：" : "上下文管理说明："}上面这条消息里，摘要之前的对话中有 ${count} 张图片（${range}）。压缩对话时它们被移出了上下文；这个工具把它们放回了摘要后面：用户${auto ? "固定发送" : "勾选要发送"}的那些前面标着“[图片 IMG-xxx 已提供…]”，紧接着就是原图，它们现在就在你面前，被问到时直接看图回答，不要说看不到。${missing === 0 ? `即使它之前被省略过${auto ? "" : "、或者正是你要过的图"}，也是这样：用户${auto ? "固定发送" : "勾回"}的图回到这里，不会出现在用户的新消息里，不要让用户重新附上。` : ""}这一段是这个工具每次请求时重新放的：图被省略的那些请求里，这里并没有它；它现在出现在你之前的回复前面，只是因为这次放了回来。所以你之前说看不到哪张图，当时是实情，不是错误，不用纠正。`,
       ...(missing === 0 ? [] : [
-        `其余 ${missing} 张这次没有附原图（${auto ? "自动选图开着，之前各轮的图默认不发" : "用户取消了勾选"}，为了节省上下文）：它们在摘要后面的清单里，一张一行，写着编号、名称和你当时记下的特征与评价，清单是这次请求才放上的。你之前看过它们的原图：在压缩之前的对话里，有的在压缩之后也提供过；你对它们的描述和据此做出的判断，不管是在摘要里还是在后面的回复里，都是看着原图做出的，仍然有效，不要收回，也不要说成是猜测或编造。${auto ? "现在你看不到它们，不要补充之前没说过的细节。" : "现在你看不到它们：被问到时，如实说现在看不到（被用户省略了），不要补充之前没说过的细节。"}`,
+        `${missing < count ? "其余" : "这"} ${missing} 张这次没有附原图（${auto ? "自动选图开着，之前各轮的图默认不发" : "用户取消了勾选"}，为了节省上下文）：它们在摘要后面的清单里，一张一行，写着编号、名称和你当时记下的特征与评价，清单是这次请求才放上的。你之前看过它们的原图：在压缩之前的对话里，有的在压缩之后也提供过；你对它们的描述和据此做出的判断，不管是在摘要里还是在后面的回复里，都是看着原图做出的，仍然有效，不要收回，也不要说成是猜测或编造。${auto ? "现在你看不到它们，不要补充之前没说过的细节。" : "现在你看不到它们：被问到时，如实说现在看不到（被用户省略了），不要补充之前没说过的细节。"}`,
         auto
           ? "之前说过的内容不够用时，调用 cam_view_image 工具，传入编号取回原图；不要让用户重新上传。"
           : "问题得看其中某张图才能回答时，不要只说答不了，在回复里单独写一行“需要 IMG-xxx”（写出编号，几张就都写上）：用户看到这一行才知道该勾回哪张图，勾回后原图回到它的位置，你就能看着回答；不要让用户重新上传或重新提供。",
@@ -120,7 +123,7 @@ const WORDS: Record<Lang, Words> = {
     codexCompacted: (count, resent, auto) => [
       `上下文管理说明（来自用户安装的上下文素材管理工具）：这个任务压缩过对话。压缩时，之前各轮里工具查看、生成或返回的 ${count} 张图片没有保留下来，这个工具把它们放回了这里。`,
       resent ? `其中用户${auto ? "固定发送" : "勾选要发送"}的 ${resent} 张，原图就在后面，前面标着“[图片 IMG-xxx 已提供…]”：它们现在就在你面前，被问到时直接看图回答，不要说看不到。` : null,
-      count > resent ? `其余 ${count - resent} 张这次没有附原图（${auto ? "自动选图开着，之前各轮的图默认不发" : "用户取消了勾选"}，为了节省上下文），在下面的清单里一张一行，写着编号、名称和你当时记下的特征与评价。` : null,
+      count > resent ? `${resent ? "其余" : "这"} ${count - resent} 张这次没有附原图（${auto ? "自动选图开着，之前各轮的图默认不发" : "用户取消了勾选"}，为了节省上下文），在下面的清单里一张一行，写着编号、名称和你当时记下的特征与评价。` : null,
       "这些图片在它们出现的那一轮真实存在，你当时看过；你之前对它们的描述，以及据此做出的判断，都是看着原图做出的，仍然有效，不要收回，也不要说成是猜测或编造。现在看不到原图的，不要补充之前没说过的细节。",
       count > resent
         ? auto
@@ -162,10 +165,10 @@ const WORDS: Record<Lang, Words> = {
       line ? `特征：${line}` : null,
       ratings.length ? `评价：${ratings.map((rating) => `${rating.turn !== null ? `第 ${rating.turn} 轮` : ""}“${rating.text}”`).join("，")}` : null,
     ].filter((part) => part !== null).join("；"),
-    caps: { line: 30, rating: 15 },
   },
   en: {
     kind: { upload: "uploaded by the user", view: "viewed with a tool", generated: "generated image", tool: "image from a tool result" },
+    kindShort: { upload: "upload", view: "viewed", generated: "generated", tool: "tool" },
     unnamed: "unnamed",
     turn: (n) => `turn ${n}`,
     thisTurn: "this turn",
@@ -199,7 +202,7 @@ const WORDS: Record<Lang, Words> = {
     compacted: (count, range, missing, auto) => [
       `${missing === 0 ? "Context management note (from the context asset manager the user installed): " : "Context management note: "}in the message above, the conversation before the summary had ${count} images (${range}). Compacting the conversation took them out of context; this tool put them back right after the summary: the ones the user ${auto ? "pinned" : "checked to send"} are marked "[Image IMG-xxx included…]" with the original image right after it. They are in front of you now: when asked about one, look at it and answer from it, and do not say you cannot see it.${missing === 0 ? ` This holds even for an image omitted before${auto ? "" : " or one you asked for"}: an image the user ${auto ? "pins" : "checks again"} comes back there, not in the user's new message, so do not ask for it to be attached again.` : ""} This tool rebuilds this part for every request: in the requests where an image was left out, it was not here; it shows up before your earlier replies now only because it was put back for this request. So if you said before that you could not see an image, that was true then, not a mistake; do not correct it.`,
       ...(missing === 0 ? [] : [
-        `The other ${missing} are not included as originals this time (${auto ? "automatic image selection is on, so images from earlier turns are left out by default" : "the user unchecked them"}, to save context): they are in the list after the summary, one line each, with the id, name, and the features and ratings you noted; the list was put there only for this request. You saw their originals: in the conversation before the compaction, and some also after it. What you said about them and the judgments you based on it, in the summary or in your later replies, were made looking at the original images and remain valid; do not take them back or call them guesses or made up. ${auto ? "You cannot see them now, so do not add details you did not mention before." : "You cannot see them now: if asked, say so truthfully (the user left them out), and do not add details you did not mention before."}`,
+        `${missing < count ? "The other" : "These"} ${missing} are not included as originals this time (${auto ? "automatic image selection is on, so images from earlier turns are left out by default" : "the user unchecked them"}, to save context): they are in the list after the summary, one line each, with the id, name, and the features and ratings you noted; the list was put there only for this request. You saw their originals: in the conversation before the compaction, and some also after it. What you said about them and the judgments you based on it, in the summary or in your later replies, were made looking at the original images and remain valid; do not take them back or call them guesses or made up. ${auto ? "You cannot see them now, so do not add details you did not mention before." : "You cannot see them now: if asked, say so truthfully (the user left them out), and do not add details you did not mention before."}`,
         auto
           ? "When what you said before is not enough, call the cam_view_image tool with the id to fetch the original; do not ask the user to upload it again."
           : "When a question can only be answered by looking at one of them, do not just say you cannot answer; write a line \"need IMG-xxx\" in your reply (with its number; list each one needed): that line is how the user learns which image to check again, and once they do, the original comes back in its place and you can answer from it. Do not ask the user to upload or provide it again.",
@@ -209,7 +212,7 @@ const WORDS: Record<Lang, Words> = {
     codexCompacted: (count, resent, auto) => [
       `Context management note (from the context asset manager the user installed): this task's conversation was compacted. The compaction did not keep ${count} images that tools viewed, generated or returned in earlier turns; this tool put them back here.`,
       resent ? `Of them, the ${resent} the user ${auto ? "pinned" : "checked to send"} follow with their originals, each marked "[Image IMG-xxx included…]": they are in front of you now; when asked about one, look at it and answer from it, and do not say you cannot see it.` : null,
-      count > resent ? `The other ${count - resent} are not included as originals this time (${auto ? "automatic image selection is on, so images from earlier turns are left out by default" : "the user unchecked them"}, to save context): they are in the list below, one line each, with the id, name, and the features and ratings you noted.` : null,
+      count > resent ? `${resent ? "The other" : "These"} ${count - resent} are not included as originals this time (${auto ? "automatic image selection is on, so images from earlier turns are left out by default" : "the user unchecked them"}, to save context): they are in the list below, one line each, with the id, name, and the features and ratings you noted.` : null,
       "These images really existed in the turn where they appeared, and you looked at them then; what you said about them, and the judgments you based on it, were made looking at the original images and remain valid; do not take them back or call them guesses or made up. Do not add details you did not mention before about images you cannot see now.",
       count > resent
         ? auto
@@ -243,7 +246,6 @@ const WORDS: Record<Lang, Words> = {
       line ? `Features: ${line}` : null,
       ratings.length ? `rated: ${ratings.map((rating) => `"${rating.text}"${rating.turn !== null ? ` (turn ${rating.turn})` : ""}`).join(", ")}` : null,
     ].filter((part) => part !== null).join("; "),
-    caps: { line: 100, rating: 50 },
   },
 };
 
@@ -261,13 +263,20 @@ function heading(words: Words, image: Described, state: string): string {
 }
 
 // v0.8: a feature line or rating longer than the note allows is cut after the last punctuation mark (or space) that
-// still fits, with "…"; the model is asked to keep them short, and the panel searches the full text.
+// still fits, with "…"; the model is asked to keep them short, and the panel searches the full text. v0.10: the caps
+// count width, whatever the language setting: a CJK character 10, any other 3, so a cap of 30 fits 30 Chinese
+// characters or 100 Latin ones (an English feature line in a Chinese task was cut to its place before, and lines that
+// differed only after it read the same).
 const CLIP_AT = /[，。；、！？,.;!?｜|：:\s]/u;
+const WIDE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
+const CAPS = { line: 30, rating: 15 };
 export function clip(text: string, max: number): string {
   const chars = [...text.trim()];
-  if (chars.length <= max) return chars.join("");
-  let cut = max;
-  for (let i = max - 1; i > 0; i--) if (CLIP_AT.test(chars[i])) { cut = i; break; }
+  let width = 0;
+  const end = chars.findIndex((char) => (width += WIDE.test(char) ? 10 : 3) > max * 10);
+  if (end < 0) return chars.join("");
+  let cut = end;
+  for (let i = end - 1; i > 0; i--) if (CLIP_AT.test(chars[i])) { cut = i; break; }
   return `${chars.slice(0, cut).join("").trimEnd()}…`;
 }
 
@@ -276,7 +285,7 @@ export function clip(text: string, max: number): string {
 function notesLine(words: Words, image: Described): string | null {
   const { line = null, ratings = [] } = image.notes ?? {};
   if (!line && !ratings.length) return null;
-  return words.notes(line ? clip(line, words.caps.line) : null, ratings.slice(-3).map((rating) => ({ ...rating, text: clip(rating.text, words.caps.rating) })));
+  return words.notes(line ? clip(line, CAPS.line) : null, ratings.slice(-3).map((rating) => ({ ...rating, text: clip(rating.text, CAPS.rating) })));
 }
 
 export function plainPlaceholder(image: Described, lang: Lang = "zh"): string {
@@ -331,10 +340,10 @@ export function compactedNote(images: Described[], sent: Set<string>, lang: Lang
 // (docs/v0.10/plan.md).
 export function compactLine(image: Described, lang: Lang = "zh"): string {
   const words = WORDS[lang];
-  const fields = [image.id, image.name ?? words.unnamed, words.kind[image.kind]];
-  if (image.turn !== null) fields.push(words.turn(image.turn));
-  const noted = notesLine(words, image);
-  if (noted) fields.push(noted);
+  const fields = [image.id, image.name ?? "-", words.kindShort[image.kind], image.turn !== null ? words.turn(image.turn) : "-"];
+  const { line = null, ratings = [] } = image.notes ?? {};
+  if (line) fields.push(clip(line, CAPS.line));
+  if (ratings.length) fields.push(words.notes(null, ratings.slice(-3).map((rating) => ({ ...rating, text: clip(rating.text, CAPS.rating) }))));
   return fields.join(lang === "zh" ? "｜" : " | ");
 }
 

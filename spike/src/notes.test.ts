@@ -49,7 +49,12 @@ test("a long feature line or rating is cut at the last punctuation mark that fit
   assert.equal(clip("深蓝雨夜｜近景，正脸", 30), "深蓝雨夜｜近景，正脸");
   assert.equal(clip("深蓝雨夜｜近景，正脸，霓虹反光，撑着一把透明的伞，背后是很长很长的街道和招牌", 30), "深蓝雨夜｜近景，正脸，霓虹反光，撑着一把透明的伞…");
   assert.equal(clip("一二三四五六七八九十一二三四五六", 15), "一二三四五六七八九十一二三四五…");
-  assert.equal(clip("rainy blue night | close-up, facing the camera", 30), "rainy blue night | close-up,…");
+  // v0.10: the cap counts width, whatever the language setting: 30 fits 30 Chinese characters or 100 Latin ones, so an
+  // English feature line in a Chinese task keeps its features (it was cut to its place before).
+  assert.equal(clip("cafe storefront morning | wide shot, girl reads chalkboard, passersby, cyclist right", 30), "cafe storefront morning | wide shot, girl reads chalkboard, passersby, cyclist right");
+  assert.equal(clip("rainy blue night | close-up, facing the camera, neon reflections on the wet street, a long row of shop signs behind", 30), "rainy blue night | close-up, facing the camera, neon reflections on the wet street, a long row of…");
+  assert.equal(clip("a".repeat(100), 30), "a".repeat(100));
+  assert.equal(clip("a".repeat(101), 30), `${"a".repeat(100)}…`);
 });
 
 const record = (type: string, payload: Record<string, any>): Parsed => ({ offset: 0, type, payload, timestamp: null });

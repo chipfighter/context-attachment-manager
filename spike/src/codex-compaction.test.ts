@@ -74,7 +74,7 @@ test("after a Codex compaction, the images it dropped come back right after its 
   assert.equal(note.role, "developer");
   assert.match(note.content[0].text, /^上下文管理说明（来自用户安装的上下文素材管理工具）：这个任务压缩过对话。压缩时，之前各轮里工具查看、生成或返回的 1 张图片没有保留下来/);
   assert.match(note.content[0].text, /调用 cam_view_image 工具/);
-  assert.match(note.content[0].text, /\nIMG-002｜c\.png｜[^｜]+｜第 2 轮｜特征：街道｜蓝色方块，雨夜；评价：第 3 轮“很好”$/);
+  assert.match(note.content[0].text, /\nIMG-002｜c\.png｜[^｜]+｜第 2 轮｜街道｜蓝色方块，雨夜｜评价：第 3 轮“很好”$/);
   assert.equal(items[at + 2].content[0].text, "现在呢");
   // The upload Codex kept is still a placeholder where it was (an earlier turn's image, automatic selection).
   assert.match(JSON.stringify(items.find((item) => item.id === "msg_1")), /\[图片 IMG-001（\[Image #1\]） 已省略/);
@@ -94,5 +94,5 @@ test("no compaction item in the request, or nothing dropped: nothing is added", 
   const items = [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }];
   assert.deepEqual(addCodexCompacted(items, listed, []), { items, at: null });
   assert.deepEqual(addCodexCompacted([...items, compaction], [], []), { items: [...items, compaction], at: null });
-  assert.equal(compactList(listed, "en"), "[Images from before the compaction, the 1 not included as originals this time: id | name | source | turn | features and ratings]\nIMG-002 | c.png | viewed with a tool | turn 2");
+  assert.equal(compactList(listed, "en"), "[Images from before the compaction, the 1 not included as originals this time: id | name | source | turn | features and ratings]\nIMG-002 | c.png | viewed | turn 2");
 });
