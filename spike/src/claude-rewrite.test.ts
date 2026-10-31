@@ -226,6 +226,12 @@ test("v0.5: after a compaction, the images from before it go back right after th
   assert.deepEqual(auto.messages[0].content.map((b: any) => b.text), ["summary", compactList([a], "zh"), "<system-reminder>x</system-reminder>"]);
   assert.equal(compactLine(a, "zh"), "IMG-001｜-｜上传｜第 1 轮");
   assert.equal(compactLine({ ...a, notes: { line: "书房｜红色方块", ratings: [{ turn: 3, text: "太暗" }] } }, "zh"), "IMG-001｜-｜上传｜第 1 轮｜书房｜红色方块｜评价：第 3 轮“太暗”");
+  // A rating keeps up to 30 Han characters, as a feature line does (the long test lost the second half of a rating at 15).
+  assert.equal(compactLine({ ...a, notes: { line: null, ratings: [{ turn: 9, text: "左边那格光线太平、表情也僵；右边那格手指多了一根" }] } }, "zh"), "IMG-001｜-｜上传｜第 1 轮｜评价：第 9 轮“左边那格光线太平、表情也僵；右边那格手指多了一根”");
+  // The same picture listed again (sent once more) points at the first one instead of repeating its features.
+  const again = { ...a, id: "IMG-002", name: "again.png", kind: "view" as const, turn: 4, contentId: "same", notes: { line: "书房｜红色方块", ratings: [] } };
+  assert.equal(compactList([{ ...a, contentId: "same" }, again], "zh").split("\n")[2], "IMG-002｜again.png｜查看｜第 4 轮｜同 IMG-001");
+  assert.equal(compactList([{ ...a, contentId: "same" }, again], "en").split("\n")[2], "IMG-002 | again.png | viewed | turn 4 | same as IMG-001");
   assert.ok(auto.messages[1].content.startsWith(claudeNote("zh", true)));
   assert.match(auto.messages[1].content, /摘要之前的对话中有 1 张图片（IMG-001）/);
   // None sent as an original: "这 1 张", not "其余".

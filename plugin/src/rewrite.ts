@@ -35,7 +35,7 @@ type FetchWords = { title: string; description: string; ids: string; missing: (i
 type Words = {
   kind: Record<ImageKind, string>; unnamed: string; turn: (n: number) => string; thisTurn: string; newImage: string;
   // v0.10: the source in a compact line (compactLine), shorter.
-  kindShort: Record<ImageKind, string>;
+  kindShort: Record<ImageKind, string>; sameShort: (id: string) => string;
   omitted: string; notRepeated: string; included: string; separator: string;
   // v0.10: the label of an image sent once more for its feature line (Described.awaiting).
   includedAwaiting: string;
@@ -64,6 +64,7 @@ const WORDS: Record<Lang, Words> = {
   zh: {
     kind: { upload: "用户上传", view: "工具查看的图片", generated: "生成的图片", tool: "工具结果里的图片" },
     kindShort: { upload: "上传", view: "查看", generated: "生成", tool: "工具" },
+    sameShort: (id) => `同 ${id}`,
     unnamed: "未命名",
     turn: (n) => `第 ${n} 轮`,
     thisTurn: "本轮",
@@ -169,6 +170,7 @@ const WORDS: Record<Lang, Words> = {
   en: {
     kind: { upload: "uploaded by the user", view: "viewed with a tool", generated: "generated image", tool: "image from a tool result" },
     kindShort: { upload: "upload", view: "viewed", generated: "generated", tool: "tool" },
+    sameShort: (id) => `same as ${id}`,
     unnamed: "unnamed",
     turn: (n) => `turn ${n}`,
     thisTurn: "this turn",
@@ -269,7 +271,9 @@ function heading(words: Words, image: Described, state: string): string {
 // differed only after it read the same).
 const CLIP_AT = /[，。；、！？,.;!?｜|：:\s]/u;
 const WIDE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
-const CAPS = { line: 30, rating: 15 };
+// A rating keeps as much as a feature line: they are the user's own words, and only a few per session (a long replay
+// lost half of one at 15, 2026-10-31).
+const CAPS = { line: 30, rating: 30 };
 export function clip(text: string, max: number): string {
   const chars = [...text.trim()];
   let width = 0;
@@ -336,19 +340,25 @@ export function compactedNote(images: Described[], sent: Set<string>, lang: Lang
 
 // v0.10: an image put back after a compaction without its original, in one line: id, name, source, turn, and what
 // the model noted (as in a placeholder). A placeholder apiece repeated the same words for every image; a session with
-// 130 images before its compaction took 1.3–1.9万 tokens per request that way, about 0.4–0.5万 as lines
-// (docs/v0.10/plan.md).
-export function compactLine(image: Described, lang: Lang = "zh"): string {
+// 127 images before its compaction took about 1.7–2.0万 tokens per request that way, about 0.7–0.9万 as lines
+// (docs/v0.10/plan.md). `same`: the id of an earlier line with the same picture (sent again), named instead of its
+// features.
+export function compactLine(image: Described, lang: Lang = "zh", same: string | null = null): string {
   const words = WORDS[lang];
   const fields = [image.id, image.name ?? "-", words.kindShort[image.kind], image.turn !== null ? words.turn(image.turn) : "-"];
   const { line = null, ratings = [] } = image.notes ?? {};
-  if (line) fields.push(clip(line, CAPS.line));
+  if (same) fields.push(words.sameShort(same));
+  else if (line) fields.push(clip(line, CAPS.line));
   if (ratings.length) fields.push(words.notes(null, ratings.slice(-3).map((rating) => ({ ...rating, text: clip(rating.text, CAPS.rating) }))));
   return fields.join(lang === "zh" ? "｜" : " | ");
 }
 
-export function compactList(images: Described[], lang: Lang = "zh"): string {
-  return [WORDS[lang].compactHeader(images.length), ...images.map((image) => compactLine(image, lang))].join("\n");
+// The images carry what the indexes know of their content (thread-index.ts, IndexedImage): the same digest or pixels
+// is the same picture.
+type Listed = Described & { contentId?: string; pixelSha256?: string | null };
+export function compactList(images: Listed[], lang: Lang = "zh"): string {
+  const sameAs = (image: Listed, at: number) => images.slice(0, at).find((other) => (image.contentId !== undefined && other.contentId === image.contentId) || (image.pixelSha256 && other.pixelSha256 === image.pixelSha256))?.id ?? null;
+  return [WORDS[lang].compactHeader(images.length), ...images.map((image, at) => compactLine(image, lang, sameAs(image, at)))].join("\n");
 }
 
 // v0.10, Codex: right after its compaction item, the images that compaction did not keep (thread-index.ts,
