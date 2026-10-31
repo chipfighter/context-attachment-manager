@@ -9,7 +9,7 @@ Earlier images come back after compaction and resume, with the same IDs, in Code
 ### Features
 
 - After Codex compacts a task, the images that tools viewed, generated or returned before the compaction go back into the request right after it: pinned images as originals, the others one line each with the model's feature line and ratings. Previously only uploaded images survived a Codex compaction. The panel marks these images as from before the compaction.
-- Images put back after a compaction are now one compact list, one line per image (ID, name, source, turn, feature line, ratings), instead of a placeholder each, on both platforms. In a real session with 127 earlier images this is an estimated 5–7K tokens per request instead of 13–19K.
+- Images put back after a compaction are now one compact list, one line per image (ID, name, source, turn, feature line, ratings), instead of a placeholder each, on both platforms. In a real session with 127 earlier images this is an estimated 7–9K tokens per request instead of 17–20K.
 - The model can correct a wrong feature line by writing it again with "corrected:".
 - When the user stops a turn before the model writes the feature lines for its new images, those images are sent once more in the next turn, labelled as still missing a feature line.
 
@@ -25,7 +25,7 @@ Earlier images come back after compaction and resume, with the same IDs, in Code
 
 - After updating, reopen Claude sessions that were open: their image tool still runs the earlier code and numbering until then.
 - Earlier transcripts are read only up to the compaction, and their image data stays on disk until needed: for the longest real session tested (9 transcripts, 210 images), the engine uses about 60 MB more memory and the first index takes under 2 seconds.
-- Verified so far with 282 unit tests and read-only replays of real Codex and Claude sessions. The model self-tests and a live Claude Desktop compaction test are still to run.
+- Verified so far with 282 unit tests, read-only replays of real Codex and Claude sessions, and a live compaction in Claude Desktop. Resuming in Claude Desktop and the model self-tests are still to run.
 
 ## [0.9.1] - 2026-10-29
 
