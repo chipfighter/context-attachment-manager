@@ -29,7 +29,11 @@ export function transcript(base = 0) {
   return {
     records,
     prompt: (content: Json[] | string, extra: Json = {}, parent?: string | null) => add({ type: "user", message: { role: "user", content }, ...extra }, parent),
-    assistant: (block: Json, extra: Json = {}, parent?: string | null) => add({ type: "assistant", message: { role: "assistant", content: [block] }, ...extra }, parent),
+    // messageId: the API message the block belongs to (Claude Code writes each block of one reply as its own record).
+    assistant: (block: Json, extra: Json = {}, parent?: string | null) => {
+      const { messageId, ...rest } = extra;
+      return add({ type: "assistant", message: { role: "assistant", content: [block], ...(messageId ? { id: messageId } : {}) }, ...rest }, parent);
+    },
     toolResult: (toolUseId: string, content: Json[], extra: Json = {}, parent?: string | null) => add({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseId, content }] }, toolUseResult: {}, ...extra }, parent),
     attachment: () => add({ type: "attachment", attachment: { type: "x" } }),
     boundary: () => add({ type: "system", subtype: "compact_boundary", compactMetadata: {}, logicalParentUuid: last }, null),

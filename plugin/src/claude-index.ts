@@ -175,6 +175,9 @@ function relinked(records: ClaudeRecord[], byUuid: Map<string, ClaudeRecord>): M
   return parents;
 }
 
+// v0.10: the calls activeChain found off the chain (out-of-order parallel results) and their results.
+const offChain = new WeakSet<ClaudeRecord>();
+
 // The conversation as it stands: from the newest message (not a subagent's sidechain) back to the start. v0.10:
 // `links` are where boundaries whose history sits in an earlier transcript lead (withHistory).
 export function activeChain(records: ClaudeRecord[], links: Map<string, string> = new Map()): ClaudeRecord[] {
@@ -198,6 +201,28 @@ export function activeChain(records: ClaudeRecord[], links: Map<string, string> 
     record = parent ? byUuid.get(parent) : undefined;
   }
   chain.reverse();
+  // v0.10: the results can come back out of order (Claude Code 2.1.309, 2026-10-31). When the conversation goes on from
+  // a result that is not the last call's, the calls made after that one hang off the chain too. Claude Code gives all
+  // the calls of one reply its message id and sends them together, so they join the chain after that reply's records
+  // and the result the conversation went on from, in the order they were made; their results join below like the
+  // others. Their images were left out before: what was written then is translated (offChain, oldNumbering).
+  const replyOf = (record: ClaudeRecord): string | null => (record.type === "assistant" && typeof record.message?.id === "string" ? record.message.id : null);
+  const replies = new Set(chain.map(replyOf).filter((id): id is string => id !== null));
+  const strays = new Map<string, ClaudeRecord[]>();
+  for (const record of byUuid.values()) {
+    const reply = replyOf(record);
+    if (reply === null || !replies.has(reply) || seen.has(record.uuid!) || record.isSidechain || !blocksOf(record).some((block) => block?.type === "tool_use")) continue;
+    const group = strays.get(reply) ?? [];
+    if (!record.parentUuid || !(seen.has(record.parentUuid) || group.some((other) => other.uuid === record.parentUuid))) continue;
+    strays.set(reply, [...group, record]);
+  }
+  for (const [reply, group] of strays) {
+    let at = chain.length - 1;
+    while (at >= 0 && replyOf(chain[at]) !== reply) at--;
+    while (at + 1 < chain.length && chain[at + 1].type === "user" && blocksOf(chain[at + 1]).length > 0 && blocksOf(chain[at + 1]).every((block) => block?.type === "tool_result")) at++;
+    chain.splice(at + 1, 0, ...group);
+    for (const record of group) { seen.add(record.uuid!); offChain.add(record); }
+  }
   // Parallel tool calls (Claude Code 2.1.293): each result hangs off its own call's record and the conversation goes
   // on from the last result, so the others sit off this chain though Claude Code sends them with it. Each result whose
   // call is on the chain and has no result there joins it right after its call; a result on an abandoned branch
@@ -216,6 +241,7 @@ export function activeChain(records: ClaudeRecord[], links: Map<string, string> 
     const results = blocksOf(record).filter((block) => block?.type === "tool_result");
     if (results.length === 0 || !results.every((block) => calls.has(String(block.tool_use_id)) && !answered.has(String(block.tool_use_id)))) continue;
     for (const block of results) answered.add(String(block.tool_use_id));
+    if (offChain.has(byUuid.get(record.parentUuid)!)) offChain.add(record);
     after.set(record.parentUuid, [...(after.get(record.parentUuid) ?? []), record]);
   }
   return after.size === 0 ? chain : chain.flatMap((record) => [record, ...(after.get(record.uuid!) ?? [])]);
@@ -273,7 +299,8 @@ export type Eras = { family: FamilyFile[]; since: string | null };
 export type ClaudeIndexOptions = { links?: Map<string, string>; eras?: Eras; chain?: ClaudeRecord[] };
 
 // The ids a transcript started at chain position `from` gave its images, as the plugin numbered it then: one by one
-// from there, a copy our fetch tool returned (its label naming an id of this numbering, same content) taking none.
+// from there, a copy our fetch tool returned (its label naming an id of this numbering, same content) taking none, and
+// the calls found off the chain (offChain) taking none either: the plugin did not see them then.
 // Only up to `until` (nothing written later is translated), so it stays the same as the session goes on: kept.
 const numberings = new Map<string, Map<string, string>>();
 function oldNumbering(chain: ClaudeRecord[], from: number, until: string): Map<string, string> {
@@ -287,7 +314,7 @@ function oldNumbering(chain: ClaudeRecord[], from: number, until: string): Map<s
   const content = new Map<string, { contentId: string; pixels: string | null }>();
   for (let position = from; position < end; position++) {
     const record = chain[position];
-    if (record.type !== "user") continue;
+    if (record.type !== "user" || offChain.has(record)) continue;
     for (const found of keysOf(record)) {
       if (seen.has(found.key)) continue;
       seen.add(found.key);
@@ -311,13 +338,18 @@ function translator(chain: ClaudeRecord[], eras: Eras | undefined): (timestamp: 
   const positions = new Map<string, number>();
   chain.forEach((record, at) => { if (typeof record.uuid === "string") positions.set(record.uuid, at); });
   const family = eras.family.filter((file) => positions.has(file.start)).sort((a, b) => a.created.localeCompare(b.created));
-  if (!family.some((file) => file.start !== chain[0].uuid)) return () => null;
+  // Calls found off the chain shift every id after theirs, in the session's first transcript too.
+  const hidden = chain.some((record) => offChain.has(record));
+  if (!hidden && !family.some((file) => file.start !== chain[0].uuid)) return () => null;
   const used = new Map<string, Map<string, string>>();
   return (timestamp) => {
     if (typeof timestamp !== "string" || timestamp >= eras.since!) return null;
     let start: string | null = null;
     for (const file of family) if (file.created <= timestamp) start = file.start;
-    if (start === null || start === chain[0].uuid) return null;
+    if (start === null || start === chain[0].uuid) {
+      if (!hidden) return null;
+      start = chain[0].uuid!;
+    }
     if (!used.has(start)) used.set(start, oldNumbering(chain, positions.get(start)!, eras.since!));
     return used.get(start)!;
   };

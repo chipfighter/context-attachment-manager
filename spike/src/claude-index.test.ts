@@ -60,6 +60,50 @@ test("parallel tool calls: a result hanging off its own call is part of the conv
   ]);
 });
 
+// The calls of one reply, the conversation going on from b's result: Claude Code 2.1.309, 2026-10-31.
+function outOfOrder(t: ReturnType<typeof transcript>, at = "") {
+  const reply = { messageId: "msg_parallel", ...(at ? { timestamp: at } : {}) };
+  const read = (name: string) => ({ type: "tool_use", id: `toolu_${name}`, name: "Read", input: { file_path: `C:\\work\\${name}.png` } });
+  const useA = t.assistant(read("a"), reply);
+  const useB = t.assistant(read("b"), reply);
+  const useC = t.assistant(read("c"), reply);
+  // The results came back a, c, b: the third call hangs off the second one's record, beside b's result.
+  t.toolResult("toolu_a", [image(pngA)], {}, useA);
+  t.toolResult("toolu_c", [image(pngC)], {}, useC);
+  return t.toolResult("toolu_b", [image(pngB)], {}, useB);
+}
+
+test("parallel tool calls whose results came back out of order: calls off the chain count too, in call order", () => {
+  const t = transcript();
+  t.prompt("Read a.png, b.png and c.png together");
+  const resultB = outOfOrder(t);
+  t.assistant(text("Three images."), { messageId: "msg_next" }, resultB);
+  assert.deepEqual(buildClaudeIndex("s", t.records).images.map((entry) => [entry.id, entry.key, entry.name]), [
+    ["IMG-001", "tool:toolu_a#0", "a.png"],
+    ["IMG-002", "tool:toolu_b#0", "b.png"],
+    ["IMG-003", "tool:toolu_c#0", "c.png"],
+  ]);
+});
+
+test("record lines written before this version, which left such a call out, are translated to the ids it gives now", () => {
+  const t = transcript();
+  t.prompt("Read a.png, b.png and c.png together", { timestamp: "2026-10-30T10:00:00.000Z" });
+  const resultB = outOfOrder(t, "2026-10-30T10:00:01.000Z");
+  t.assistant(text("Three images."), { messageId: "msg_2", timestamp: "2026-10-30T10:00:02.000Z" }, resultB);
+  t.prompt("Read d.png", { timestamp: "2026-10-30T10:01:00.000Z" });
+  t.assistant({ type: "tool_use", id: "toolu_d", name: "Read", input: { file_path: "C:\\work\\d.png" } }, { messageId: "msg_3", timestamp: "2026-10-30T10:01:01.000Z" });
+  t.toolResult("toolu_d", [image(pngA)], { timestamp: "2026-10-30T10:01:02.000Z" });
+  // Written while c.png had no id: this IMG-003 is d.png.
+  t.assistant(text("[//]: # (cam IMG-003 desk｜d sheet)\n\nOne more."), { messageId: "msg_4", timestamp: "2026-10-30T10:01:03.000Z" });
+  const before = buildClaudeIndex("s", t.records, null, { eras: { family: [], since: "2026-10-31T00:00:00.000Z" } });
+  assert.equal(before.images.find((entry) => entry.key === "tool:toolu_d#0")?.id, "IMG-004");
+  assert.equal(before.notes.get("IMG-004")?.line, "desk｜d sheet");
+  assert.equal(before.notes.get("IMG-003"), undefined);
+  // Written by this version: its IMG-003 is c.png.
+  const after = buildClaudeIndex("s", t.records, null, { eras: { family: [], since: "2026-10-29T00:00:00.000Z" } });
+  assert.equal(after.notes.get("IMG-003")?.line, "desk｜d sheet");
+});
+
 test("a tool result left on an abandoned branch stays out", () => {
   const t = transcript();
   t.prompt("first");

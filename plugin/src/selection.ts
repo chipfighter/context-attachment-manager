@@ -81,7 +81,24 @@ function sinceIn(name: string, dir: string): string | null {
 export const ensureAutoDefault = (dir = selectionDir, now = new Date()): void => ensureSince(AUTO_DEFAULT, dir, now);
 // null until this version has run here: then nothing is on by default.
 export const autoDefaultSince = (dir = selectionDir): string | null => sinceIn(AUTO_DEFAULT, dir);
-export const ensureStableIds = (dir = selectionDir, now = new Date()): void => ensureSince(STABLE_IDS, dir, now);
+// The numbering rules the ids follow. 2: the calls of a reply found off the chain, when their results came back out of
+// order, get ids too (claude-index.ts). Under newer rules the start time starts again, so what was written under the
+// earlier ones is translated.
+const ID_RULES = 2;
+export function ensureStableIds(dir = selectionDir, now = new Date()): void {
+  const file = join(dir, STABLE_IDS);
+  let rules: unknown;
+  try {
+    rules = JSON.parse(readFileSync(file, "utf8")).rules;
+  } catch {
+    mkdirSync(dir, { recursive: true });
+    try { writeFileSync(file, JSON.stringify({ since: now.toISOString(), rules: ID_RULES }, null, 2), { flag: "wx" }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    return;
+  }
+  if (rules === ID_RULES) return;
+  writeFileSync(file, JSON.stringify({ since: now.toISOString(), rules: ID_RULES }, null, 2));
+  sinceOf.delete(file);
+}
 // null until this version has run here: then nothing is translated.
 export const stableIdsSince = (dir = selectionDir): string | null => sinceIn(STABLE_IDS, dir);
 

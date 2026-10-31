@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { hasUnchecked, needsRewrite } from "../../plugin/src/proxy.ts";
-import { autoDefaultSince, effectiveSelection, ensureAutoDefault, mainTaskOf, readSelection, sideChatSelection, writeSelection } from "../../plugin/src/selection.ts";
+import { autoDefaultSince, effectiveSelection, ensureAutoDefault, ensureStableIds, mainTaskOf, readSelection, sideChatSelection, stableIdsSince, writeSelection } from "../../plugin/src/selection.ts";
 import { startThread } from "./testfixtures.ts";
 
 const PARENT = "01a0d301-0000-7000-8000-0000000000f0";
@@ -98,6 +98,24 @@ test("v0.6: the default's start time is written once and kept", () => {
   ensureAutoDefault(dir, new Date("2026-09-24T11:00:00Z"));
   ensureAutoDefault(dir, new Date("2026-09-25T00:00:00Z"));
   assert.equal(autoDefaultSince(dir), "2026-09-24T11:00:00.000Z");
+});
+
+// v0.10: the ids' start time is written once too, but starts again when the numbering rules change: what was written
+// under the earlier rules is then translated (claude-index.ts).
+test("v0.10: the stable ids' start time is kept, and starts again under newer numbering rules", () => {
+  const { dir } = setup();
+  assert.equal(stableIdsSince(dir), null);
+  ensureStableIds(dir, new Date("2026-11-01T00:00:00Z"));
+  ensureStableIds(dir, new Date("2026-11-02T00:00:00Z"));
+  assert.equal(stableIdsSince(dir), "2026-11-01T00:00:00.000Z");
+  // Written by a build before parallel calls off the chain got ids (no rules in the file).
+  const older = mkdtempSync(join(tmpdir(), "cam-stable-"));
+  writeFileSync(join(older, "stable-ids.json"), JSON.stringify({ since: "2026-10-31T01:13:00.000Z" }));
+  assert.equal(stableIdsSince(older), "2026-10-31T01:13:00.000Z");
+  ensureStableIds(older, new Date("2026-11-03T00:00:00Z"));
+  assert.equal(stableIdsSince(older), "2026-11-03T00:00:00.000Z");
+  ensureStableIds(older, new Date("2026-11-04T00:00:00Z"));
+  assert.equal(stableIdsSince(older), "2026-11-03T00:00:00.000Z");
 });
 
 test("v0.6: a task started after the default began has automatic selection on, unless it has its own switch", () => {
