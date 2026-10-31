@@ -202,12 +202,11 @@ async function startRouting($, attempts = 60) {
 async function restoreRouting($) {
   const saved = await readRouting($)
   if (!saved?.active) return
-  const restore = async (name, managed, original) => {
-    if (await $.env.get(name) === managed) await $.env.set(name, original ?? undefined)
-  }
-  await restore('ANTHROPIC_BASE_URL', saved.managedBaseUrl ?? `http://127.0.0.1:${saved.port}`, saved.originalBaseUrl)
-  await restore('NO_PROXY', saved.managedNoProxy ?? loopbackAdded(saved.originalNoProxy), saved.originalNoProxy)
-  await restore('no_proxy', saved.managedNoProxyLower ?? loopbackAdded(saved.originalNoProxyLower), saved.originalNoProxyLower)
+  // Each variable is put back only while it still has the value this mod set. The names are spelled out: Claude Code
+  // 2.1.309 refuses a module whose $.env calls take a name from a variable.
+  if (await $.env.get('ANTHROPIC_BASE_URL') === (saved.managedBaseUrl ?? `http://127.0.0.1:${saved.port}`)) await $.env.set('ANTHROPIC_BASE_URL', saved.originalBaseUrl ?? undefined)
+  if (await $.env.get('NO_PROXY') === (saved.managedNoProxy ?? loopbackAdded(saved.originalNoProxy))) await $.env.set('NO_PROXY', saved.originalNoProxy ?? undefined)
+  if (await $.env.get('no_proxy') === (saved.managedNoProxyLower ?? loopbackAdded(saved.originalNoProxyLower))) await $.env.set('no_proxy', saved.originalNoProxyLower ?? undefined)
   routingState = { ...saved, active: false, reason: null }
   await $.state.set(ROUTING, routingState)
 }
