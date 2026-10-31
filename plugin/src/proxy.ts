@@ -23,6 +23,7 @@ import http, { type IncomingHttpHeaders } from "node:http";
 import net from "node:net";
 import { dirname, join } from "node:path";
 import type { Duplex } from "node:stream";
+import { setTimeout as sleep } from "node:timers/promises";
 import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
@@ -428,6 +429,11 @@ export function thinkingRejected(status: number, body: string): boolean {
 // once the attempt goes through (null: not the session's conversation); made: the histories its thinking was made
 // after; sure: the record says all its thinking fits, so a refusal means the record misses what went out.
 export type ClaudeAttempt = { body: Buffer; report: Json; history: string | null; sent: string | null; made: string[]; sure: boolean };
+// v0.10: how long a request waits for its newest images to reach the transcript (a long-task eval caught 3 of a turn's
+// images going out without ids, the transcript written a moment after the request; the user's logs had 119 such of
+// 8904 requests). A request whose images never reach it waits the whole time once.
+const LATE_WAIT_MS = 1500;
+const LATE_STEP_MS = 100;
 
 // v0.4: the same rules as rewriteBody, for a Claude Code request (Anthropic Messages, claude-rewrite.ts). The current
 // turn is the transcript's latest prompt: Claude Code writes it before it sends the request.
@@ -498,6 +504,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
     ...(compacted ? { compacted } : {}),
     ...(report.featureAt !== undefined ? { featureAt: report.featureAt, labeled: report.labeled ?? 0 } : {}),
     ...(report.unknown ? { unknown: report.unknown } : {}),
+    ...(report.late ? { late: report.late } : {}),
   };
   const changed = report.replaced.length > 0 || report.copies.length > 0 || compacted !== null || report.featureAt !== undefined;
   // Once the engine has sent the session a changed history, thinking made after it may be in every later request, even
@@ -923,13 +930,20 @@ async function main(): Promise<void> {
     }); };
     if (!rewrite && !claudeRewrite) { send([{ body: null, report: null, edited: false }]); return; }
     collect();
-    req.on("end", () => {
+    req.on("end", async () => {
       const original = Buffer.concat(chunks);
       const encoding = req.headers["content-encoding"] as string | undefined;
-      let out: { body: Buffer; report: Json; attempts?: ClaudeAttempt[] };
-      try { out = claudeRewrite ? rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
-      catch (error) { out = { body: original, report: { skipped: `rewrite failed: ${String(error)}` } }; }
-      const attempts: Attempt[] = out.attempts?.length ? out.attempts.map((attempt) => ({ ...attempt, edited: attempt.body !== original })) : [{ body: out.body, report: out.report, edited: out.body !== original }];
+      const rewriteNow = (): { body: Buffer; report: Json; attempts?: ClaudeAttempt[] } => {
+        try { return claudeRewrite ? rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
+        catch (error) { return { body: original, report: { skipped: `rewrite failed: ${String(error)}` } }; }
+      };
+      let out = rewriteNow();
+      // v0.10: the newest images not in the transcript yet (claude-rewrite.ts, late): read it again for a moment, so
+      // they go out with their ids now and the model can note them in this reply.
+      let waited = 0;
+      for (; claudeRewrite && out.report?.late && waited < LATE_WAIT_MS; waited += LATE_STEP_MS) { await sleep(LATE_STEP_MS); out = rewriteNow(); }
+      const withWait = (report: Json) => (waited ? { ...report, waitedMs: waited } : report);
+      const attempts: Attempt[] = out.attempts?.length ? out.attempts.map((attempt) => ({ ...attempt, report: withWait(attempt.report), edited: attempt.body !== original })) : [{ body: out.body, report: withWait(out.report), edited: out.body !== original }];
       send(attempts);
     });
   };

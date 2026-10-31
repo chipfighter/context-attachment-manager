@@ -29,7 +29,7 @@ export type Replacement = { id: string; key: string; kind: ImageKind; mode: "pla
 // noteAt: where the developer message explaining omitted images was inserted, if one was. copies: the ids whose copies
 // fetched in an earlier turn were left out. v0.8: featureAt, where the feature line note went; labeled, how many
 // images sent got their id; unknown, how many images of the request the index did not know (e.g. not recorded yet).
-export type RewriteReport = { images: number; replaced: Replacement[]; locked: string[]; sentContentIds: string[]; copies: string[]; noteAt?: number; featureAt?: number; labeled?: number; unknown?: number };
+export type RewriteReport = { images: number; replaced: Replacement[]; locked: string[]; sentContentIds: string[]; copies: string[]; noteAt?: number; featureAt?: number; labeled?: number; unknown?: number; late?: number };
 
 type FetchWords = { title: string; description: string; ids: string; missing: (id: string) => string; unavailable: (id: string) => string; off: string };
 type Words = {

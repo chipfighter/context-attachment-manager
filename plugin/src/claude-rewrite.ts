@@ -119,8 +119,13 @@ export function rewriteMessages(
   const sent = refs.filter((ref) => !drop.includes(ref) && !copied.includes(ref));
   report.sentContentIds = sent.map((ref) => ref.contentId);
   // A copy the model fetched this turn is known as one, not as an image.
-  const unknown = refs.filter((ref) => !copied.includes(ref) && !(ref.key && index.copies?.has(ref.key)) && !describe(ref)).length;
-  if (unknown) report.unknown = unknown;
+  const unknown = refs.filter((ref) => !copied.includes(ref) && !(ref.key && index.copies?.has(ref.key)) && !describe(ref));
+  if (unknown.length) report.unknown = unknown.length;
+  // v0.10: unknown images after the model's latest reply: Claude Code can send a request a moment before those records
+  // reach its transcript, and they would go out without ids (the engine reads the transcript again, proxy.ts).
+  const lastReply = messages.map((message) => message?.role).lastIndexOf("assistant");
+  const late = unknown.filter((ref) => ref.msg > lastReply).length;
+  if (late) report.late = late;
   // v0.8: the first image the index knows; the feature line note follows its message.
   const first = features ? refs.find((ref) => describe(ref)) : undefined;
   if (!drop.length && !copied.length && !first) return { messages, report };

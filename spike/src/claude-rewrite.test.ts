@@ -30,6 +30,19 @@ test("a pasted image not in the transcript yet has no key; one matching no recor
   assert.equal(findRequestImages(messages, index).at(-1)!.key, null);
 });
 
+test("v0.10: unknown images after the model's latest reply are counted as late (the transcript may not have them yet)", () => {
+  const { t } = usualSession();
+  const index = buildClaudeIndex("s", t.records);
+  const fresh = { role: "user", content: [image(pngB), text("new one")] };
+  const now = rewriteMessages([...usualRequest(), fresh], index, new Set(), noPixels).report;
+  assert.equal(now.unknown, 1);
+  assert.equal(now.late, 1);
+  // Once the model has answered after it, an image the transcript still lacks is not waited for.
+  const after = rewriteMessages([...usualRequest(), fresh, { role: "assistant", content: [text("ok")] }, { role: "user", content: [text("next")] }], index, new Set(), noPixels).report;
+  assert.equal(after.unknown, 1);
+  assert.equal(after.late, undefined);
+});
+
 test("records joined into one message still match, in order", () => {
   const t = transcript();
   const p1 = t.prompt([image(pngA), text("one")]);
