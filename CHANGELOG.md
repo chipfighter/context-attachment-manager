@@ -17,7 +17,7 @@ Earlier images come back after compaction and resume, with the same IDs, in Code
 
 - Since 0.9.0, Claude Code 2.1.309 refused to load the plugin's Claude mod, because it named environment variables through a variable. Claude sessions then did not go through the plugin at all: no placeholders, no Auto-select, even though the image tool still showed. The mod now names each variable directly.
 - Claude Code 2.1.304 and later keep the last messages through a compaction. The plugin now links them the way Claude Code does, so it recognizes the compaction and puts the earlier images back; before, such a compaction could put none back.
-- When Claude Desktop resumes a session into a new transcript, the plugin follows it back to the earlier transcripts, also across several resumes and forks. Images keep their IDs, feature lines and ratings. Before, IDs restarted in the new transcript, so earlier feature lines could attach to the wrong image; lines written that way are now matched back to the right image.
+- When Claude Desktop continues a session in a new transcript (it does when you edit an earlier message and send it again), the plugin follows it back to the earlier transcripts, also across several such forks. Images keep their IDs, feature lines and ratings. Before, IDs restarted in the new transcript, so earlier feature lines could attach to the wrong image; lines written that way are now matched back to the right image.
 - Resumed and forked Claude sessions start with the previous session's checked, pinned and Auto-select settings.
 - Long feature lines and ratings are cut by width rather than by character count, whatever the language setting, so English feature lines in a Chinese setup are no longer cut down to the place alone.
 
@@ -25,7 +25,7 @@ Earlier images come back after compaction and resume, with the same IDs, in Code
 
 - After updating, reopen Claude sessions that were open: their image tool still runs the earlier code and numbering until then.
 - Earlier transcripts are read only up to the compaction, and their image data stays on disk until needed: for the longest real session tested (9 transcripts, 210 images), the engine uses about 60 MB more memory and the first index takes under 2 seconds.
-- Verified so far with 282 unit tests, read-only replays of real Codex and Claude sessions, and a live compaction in Claude Desktop. Resuming in Claude Desktop and the model self-tests are still to run.
+- Verified so far with 282 unit tests, read-only replays of real Codex and Claude sessions, and a live test in Claude Desktop: a compaction, a restart of the session, and an edited earlier message that moved the session to a new transcript. The model self-tests are still to run.
 
 ## [0.9.1] - 2026-10-29
 
