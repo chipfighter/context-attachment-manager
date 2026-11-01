@@ -25,6 +25,7 @@ Context Attachment Manager（上下文素材管理器，2026-10-11 前叫 Codex 
 - 仓库里的文档和代码不写用户本机的具体路径；通用位置（如 `~/.codex`、`%LOCALAPPDATA%`）可以写。
 - 对外的信息以英文为主：README.md、INSTALL.md、CONTRIBUTING.md、eval/README.md、仓库简介、CHANGELOG.md（发布时就是 Release 说明）用英文，README_CN.md、eval/README_CN.md 是中文版；`docs/` 下的规格、方案和开发记录，以及本文件，保持中文（用户 2026-09-28 定）。
 - 评测的报告和结果放在 `eval/`，脚本在 `spike/src/eval-*.ts`。README 是给所有用户看的，只在底部留一小节，用白话说两句并链接过去；评测是写给工程师看的（用户 2026-10-24 定）。
+- CHANGELOG 的每一版（也就是 Release 说明）是写给所有用户看的：开头一句话说这一版带来什么，再用白话分“新功能”“修复”“更新后要做的”“怎么测的”，讲用户能感受到的变化；内部机制、token 数、版本号细节等写给工程师的内容，放进最后一个折叠的 `<details>` 技术细节里（用户 2026-11-01 定）。
 - 先在 Windows 上开发和测试。技术栈用 TypeScript/Node。
 - 界面开发：Claude 自己截图检查效果；做到界面的关键节点时，截图给用户看，停下来等反馈再继续（用户 2026-09-24 确认）。
 - 测试时调用模型一律用 `gpt-6-sol`，推理强度 `low`，包括脚本自测和桌面版测试，为了省 token（用户 2026-09-24 要求）。
