@@ -27,21 +27,21 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { codexHome } from "./codexconfig.ts";
-import { bindThread, isUserThread, newThreads, resolveThread } from "./binding.ts";
-import { claudeStartedAt, loadClaudeIndex } from "./claude-index.ts";
+import { codexHome } from "./adapters/codex/codexconfig.ts";
+import { bindThread, isUserThread, newThreads, resolveThread } from "./adapters/codex/binding.ts";
+import { claudeStartedAt, loadClaudeIndex } from "./adapters/claude/claude-index.ts";
 import { DEFAULT_PORT, ensureEngine } from "./engine.ts";
-import { isEntryPoint } from "./entry.ts";
+import { isEntryPoint } from "./core/entry.ts";
 import { currentLang, langOf, rememberLang, type Lang } from "./language.ts";
 import { say } from "./messages.ts";
-import { migrateDataOnce } from "./migrate-data.ts";
-import { applySelection, claudeImageFor, imageFor, loadPanelState, type ClaudePanelOptions, type PanelState } from "./panel-state.ts";
-import { claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./paths.ts";
+import { migrateDataOnce } from "./core/migrate-data.ts";
+import { applySelection, claudeImageFor, imageFor, loadPanelState, type ClaudePanelOptions, type PanelState } from "./panel/panel-state.ts";
+import { claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./core/paths.ts";
 import { fetchedLabel, fetchWords } from "./rewrite.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, ensureStableIds, stableIdsSince } from "./selection.ts";
-import { connectDirectly, useEngine, usesEngine } from "./setup.ts";
-import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, setPixelCache, sideChatOrigin } from "./thread-index.ts";
-import { threadTitle } from "./thread-names.ts";
+import { connectDirectly, useEngine, usesEngine } from "./adapters/codex/setup.ts";
+import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, setPixelCache, sideChatOrigin } from "./adapters/codex/thread-index.ts";
+import { threadTitle } from "./adapters/codex/thread-names.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -120,7 +120,7 @@ export const serverInfo = (lang: Lang) => ({ name: "codex-attachment-manager", t
 
 export function readResource(uri: string): Json {
   if (uri !== PANEL_URI) throw new Error(`unknown resource ${uri}`);
-  const text = readFileSync(join(here, "panel.html"), "utf8");
+  const text = readFileSync(join(here, "panel", "panel.html"), "utf8");
   // The page is self-contained: images arrive as data URLs through tool calls, nothing is fetched.
   return { contents: [{ uri, mimeType: PANEL_MIME, text, _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] }, prefersBorder: false } } }] };
 }

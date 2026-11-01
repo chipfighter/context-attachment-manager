@@ -19,7 +19,7 @@
 
 import { FETCHED_STATE, findImages, type ImageKind, type ImageRef } from "./images.ts";
 import type { Lang } from "./language.ts";
-import type { Notes, Rating } from "./notes.ts";
+import type { Notes, Rating } from "./core/notes.ts";
 
 type Json = Record<string, any>;
 // notes (v0.8): what the model noted about the image, shown in its placeholder. awaiting (v0.10): an image of an

@@ -11,9 +11,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AppServer, type Notification } from "./appserver.ts";
-import { findCodexCli, runCodex } from "../../plugin/src/codexcli.ts";
+import { findCodexCli, runCodex } from "../../plugin/src/adapters/codex/codexcli.ts";
 import { engineHealth, type Health } from "../../plugin/src/engine.ts";
-import { MARKETPLACE, PLUGIN, PLUGIN_ID, SERVER_NAME } from "../../plugin/src/install.ts";
+import { MARKETPLACE, PLUGIN, PLUGIN_ID, SERVER_NAME } from "../../plugin/src/adapters/codex/install.ts";
 
 type Json = Record<string, any>;
 const root = resolve(import.meta.dirname, "..", "..");

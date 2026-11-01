@@ -5,7 +5,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { codexHome } from "../../plugin/src/codexconfig.ts";
+import { codexHome } from "../../plugin/src/adapters/codex/codexconfig.ts";
 import { AppServer, findBundledCodex } from "../src/appserver.ts";
 import { archiveThreads } from "../src/testkit.ts";
 

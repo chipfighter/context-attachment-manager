@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync,
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { migrateWindowsData, oldWindowsFolders } from "../../plugin/src/migrate-data.ts";
+import { migrateWindowsData, oldWindowsFolders } from "../../plugin/src/core/migrate-data.ts";
 
 const NAME = "codex-attachment-manager";
 

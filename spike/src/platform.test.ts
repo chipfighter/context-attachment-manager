@@ -6,8 +6,8 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import test from "node:test";
 import { launcher } from "../../plugin/src/cam.ts";
-import { cliCandidates } from "../../plugin/src/codexcli.ts";
-import { dataDir } from "../../plugin/src/paths.ts";
+import { cliCandidates } from "../../plugin/src/adapters/codex/codexcli.ts";
+import { dataDir } from "../../plugin/src/core/paths.ts";
 
 const home = join("/", "home", "someone");
 

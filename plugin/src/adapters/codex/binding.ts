@@ -10,7 +10,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { bindingsDirOf } from "./paths.ts";
+import { bindingsDirOf } from "../../core/paths.ts";
 import { hasRollout, threadsStartedSince } from "./thread-index.ts";
 
 type Json = Record<string, any>;

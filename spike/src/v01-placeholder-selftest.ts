@@ -15,14 +15,14 @@ import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { AppServer, findBundledCodex } from "./appserver.ts";
-import { codexHome } from "../../plugin/src/codexconfig.ts";
+import { codexHome } from "../../plugin/src/adapters/codex/codexconfig.ts";
 import { engineHealth } from "../../plugin/src/engine.ts";
 import { languageFileOf, rememberLang } from "../../plugin/src/language.ts";
-import { selectionDirOf } from "../../plugin/src/paths.ts";
-import { readRequestStats } from "../../plugin/src/request-stats.ts";
+import { selectionDirOf } from "../../plugin/src/core/paths.ts";
+import { readRequestStats } from "../../plugin/src/core/request-stats.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
 import { archiveThreads, runTurn, TEST_EFFORT, TEST_MODEL, testImages, text } from "./testkit.ts";
-import { loadThreadIndex } from "../../plugin/src/thread-index.ts";
+import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));

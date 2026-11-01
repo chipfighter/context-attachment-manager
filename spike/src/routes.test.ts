@@ -7,14 +7,14 @@ import test from "node:test";
 import { routeOf } from "../../plugin/src/proxy.ts";
 
 test("registered providers retain their platform, origin, port, base path and query without exposing the target in the local URL", async () => {
-  const routes = await import("../../plugin/src/routes.ts").catch(() => null);
+  const routes = await import("../../plugin/src/core/routes.ts").catch(() => null);
   assert.ok(routes, "persistent provider routes are available");
   const root = mkdtempSync(join(tmpdir(), "cam-routes-"));
   const codex = routes.registerRoute({ platform: "codex", baseUrl: "http://127.0.0.1:12345/provider/v1?tenant=one" }, root);
   const claude = routes.registerRoute({ platform: "claude", baseUrl: "https://relay.example/anthropic" }, root);
   assert.notEqual(codex.id, claude.id);
   assert.deepEqual(routes.registerRoute({ platform: "codex", baseUrl: codex.baseUrl }, root), codex);
-  const script = `import { registerRoute } from ${JSON.stringify(new URL("../../plugin/src/routes.ts", import.meta.url).href)}; process.stdout.write(registerRoute(${JSON.stringify({ platform: "codex", baseUrl: codex.baseUrl })}, ${JSON.stringify(root)}).id);`;
+  const script = `import { registerRoute } from ${JSON.stringify(new URL("../../plugin/src/core/routes.ts", import.meta.url).href)}; process.stdout.write(registerRoute(${JSON.stringify({ platform: "codex", baseUrl: codex.baseUrl })}, ${JSON.stringify(root)}).id);`;
   assert.equal(execFileSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8" }), codex.id, "a fresh process uses the existing binding after an engine replacement");
   assert.match(routes.routeBaseUrl(17891, codex.id), /^http:\/\/localhost:17892\/__cam\/routes\/[a-f0-9]{32}$/, "registered traffic uses a port older engines never listen on");
   const forwarded = routeOf(`/__cam/routes/${codex.id}/responses?beta=1`, { "x-api-key": "synthetic-relay-key" }, root);
@@ -37,7 +37,7 @@ test("registered providers retain their platform, origin, port, base path and qu
 });
 
 test("route registration refuses non-HTTP targets, embedded credentials and recursive engine routes", async () => {
-  const routes = await import("../../plugin/src/routes.ts").catch(() => null);
+  const routes = await import("../../plugin/src/core/routes.ts").catch(() => null);
   assert.ok(routes, "persistent provider routes are available");
   const root = mkdtempSync(join(tmpdir(), "cam-routes-"));
   for (const baseUrl of ["file:///etc/passwd", "https://user:secret@relay.example/v1", "https://relay.example/v1#fragment", "http://localhost:17891/__cam/routes/abc", "https://relay.example/\r\nx"]) {

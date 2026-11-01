@@ -316,9 +316,9 @@ function startTasks(count: number): void {
 
 const { callTool, resetSetupBaseline } = await import("../../plugin/src/plugin-server.ts");
 const { imageSizesOf } = await import("../../plugin/src/proxy.ts");
-const { recordRequest } = await import("../../plugin/src/request-stats.ts");
-const { connectDirectly, useEngine } = await import("../../plugin/src/setup.ts");
-const { requestStatsDirOf } = await import("../../plugin/src/paths.ts");
+const { recordRequest } = await import("../../plugin/src/core/request-stats.ts");
+const { connectDirectly, useEngine } = await import("../../plugin/src/adapters/codex/setup.ts");
+const { requestStatsDirOf } = await import("../../plugin/src/core/paths.ts");
 const sessionsDir = join(root, "sessions");
 const meta = { threadId: THREAD, thread_id: THREAD };
 // Start with the red square, the copy of the blue circle and the large noise image unchecked, so both placeholder
@@ -369,7 +369,7 @@ function writeStats(kind: string): void {
 // v0.8: the two copies' last requests (turn 7), and a subagent and a side chat of the auto one.
 {
   const { recordChild } = await import("../../plugin/src/children.ts");
-  const { childrenDirOf } = await import("../../plugin/src/paths.ts");
+  const { childrenDirOf } = await import("../../plugin/src/core/paths.ts");
   const stats = requestStatsDirOf(process.env.CAM_DATA_DIR);
   for (const [id, file, auto] of V08_TASKS.flatMap(([main, manual]) => [[main, `rollout-2026-09-24T13-00-00-${main}.jsonl`, true], [manual, `rollout-2026-09-24T13-30-00-${manual}.jsonl`, false]] as const)) {
     const items = readFileSync(join(day, file), "utf8").trim().split("\n").map((raw) => JSON.parse(raw)).filter((record) => record.type === "response_item").map((record) => record.payload);
@@ -462,7 +462,7 @@ let extra = 0;
 createServer((request, response) => {
   const reply = (status: number, type: string, body: string) => { response.writeHead(status, { "content-type": type, "cache-control": "no-store" }); response.end(body); };
   if (request.method === "GET" && (request.url === "/" || request.url?.startsWith("/?"))) return reply(200, "text/html; charset=utf-8", HOST);
-  if (request.method === "GET" && request.url === "/panel.html") return reply(200, "text/html; charset=utf-8", readFileSync(join(here, "..", "..", "plugin", "src", "panel.html"), "utf8"));
+  if (request.method === "GET" && request.url === "/panel.html") return reply(200, "text/html; charset=utf-8", readFileSync(join(here, "..", "..", "plugin", "src", "panel", "panel.html"), "utf8"));
   if (request.method === "POST" && request.url?.startsWith("/stats")) {
     writeStats(new URL(request.url, "http://x").searchParams.get("kind") ?? "normal");
     return reply(200, "application/json", "{}");

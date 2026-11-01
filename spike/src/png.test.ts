@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { deflateSync } from "node:zlib";
-import { decodePng } from "../../plugin/src/png.ts";
+import { decodePng } from "../../plugin/src/core/png.ts";
 
 function chunk(type: string, data: Buffer): Buffer {
   const length = Buffer.alloc(4);

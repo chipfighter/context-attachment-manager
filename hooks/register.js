@@ -5,7 +5,7 @@
 //    route with $.env.set, before the first request where it can. Official and Anthropic-compatible relay endpoints
 //    both work; Bedrock, Vertex and Foundry keep their native transport. Process-local settings are restored only
 //    while they still have the values this mod installed. Authentication stays with the registered upstream.
-// 2. The way to the panel. The panel is the Codex panel itself (plugin/src/panel.html), served by the engine as a page
+// 2. The way to the panel. The panel is the Codex panel itself (plugin/src/panel/panel.html), served by the engine as a page
 //    for this session (proxy.ts, /__cam/panel): a mod draws only its own simple elements (no web page), and Claude
 //    Code opens no MCP app for the user. /cam opens the page in Claude Desktop's own browser, beside the conversation
 //    (user 2026-10-10). A small pane comes up only when there is something to say: the page could not open there (the

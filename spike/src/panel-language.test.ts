@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-const page = readFileSync(new URL("../../plugin/src/panel.html", import.meta.url), "utf8");
+const page = readFileSync(new URL("../../plugin/src/panel/panel.html", import.meta.url), "utf8");
 const texts = JSON.parse(/<script type="application\/json" id="messages">([\s\S]*?)<\/script>/.exec(page)![1]);
 
 test("the panel recognizes Japanese host locales without changing the model language parser", async () => {
@@ -35,7 +35,7 @@ test("Claude's fallback pane also has a complete Japanese interface", () => {
 });
 
 test("Claude uses its own locale, rereads changes, and leaves the settings read-only", async () => {
-  const { claudePanelLanguage } = await import("../../plugin/src/panel-language.ts");
+  const { claudePanelLanguage } = await import("../../plugin/src/panel/panel-language.ts");
   const root = mkdtempSync(join(tmpdir(), "cam-panel-locale-"));
   const config = join(root, "config.json");
   const options = { settingsFiles: [config], env: { LANG: "en_US.UTF-8", CAM_LANG: "zh" }, home: root };
@@ -52,7 +52,7 @@ test("Claude uses its own locale, rereads changes, and leaves the settings read-
 });
 
 test("Claude desktop settings are located for Windows, macOS and Linux", async () => {
-  const { claudePanelLanguage } = await import("../../plugin/src/panel-language.ts");
+  const { claudePanelLanguage } = await import("../../plugin/src/panel/panel-language.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-desktop-locale-"));
   const local = join(home, "local"), roaming = join(home, "roaming"), xdg = join(home, "xdg");
   const cases = [

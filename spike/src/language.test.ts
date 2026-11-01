@@ -95,7 +95,7 @@ test("the plugin's texts exist in both languages with the same {values}", () => 
 });
 
 test("the panel's texts exist in both languages with the same {values}; English may add a form for one", () => {
-  const page = readFileSync(join(here, "..", "..", "plugin", "src", "panel.html"), "utf8");
+  const page = readFileSync(join(here, "..", "..", "plugin", "src", "panel", "panel.html"), "utf8");
   const table = JSON.parse(/<script type="application\/json" id="messages">([\s\S]*?)<\/script>/.exec(page)![1]);
   const base = (keys: string[]) => keys.filter((key) => !key.endsWith("_one")).sort();
   assert.deepEqual(base(Object.keys(table.en)), base(Object.keys(table.zh)));

@@ -28,26 +28,26 @@ import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import { childOf, recordChild } from "./children.ts";
-import { claudeHome, claudeImageData, claudeStartedAt, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
+import { claudeHome, claudeImageData, claudeStartedAt, loadClaudeIndex, type ClaudeIndex } from "./adapters/claude/claude-index.ts";
 import { addCompacted, findRequestImages, rewriteMessages, summaryAt, type RequestImage, type Resend } from "./claude-rewrite.ts";
 import { keepCacheRead, marksOutside, REMEMBERED, sentPrefixOf, type SentPrefix } from "./claude-cache.ts";
 import { chainOf, fitThinking, readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./claude-thinking.ts";
-import { codexHome } from "./codexconfig.ts";
+import { codexHome } from "./adapters/codex/codexconfig.ts";
 import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForCodex } from "./engine.ts";
 import { findImages, type ImageRef } from "./images.ts";
-import { isEntryPoint } from "./entry.ts";
+import { isEntryPoint } from "./core/entry.ts";
 import { currentLang } from "./language.ts";
-import { migrateDataOnce } from "./migrate-data.ts";
+import { migrateDataOnce } from "./core/migrate-data.ts";
 import { say } from "./messages.ts";
-import { claudePanelLanguage } from "./panel-language.ts";
-import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type ClaudePanelOptions } from "./panel-state.ts";
-import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, proxyLogDirOf, selectionDirOf } from "./paths.ts";
-import { recordRequest } from "./request-stats.ts";
-import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./routes.ts";
+import { claudePanelLanguage } from "./panel/panel-language.ts";
+import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type ClaudePanelOptions } from "./panel/panel-state.ts";
+import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, proxyLogDirOf, selectionDirOf } from "./core/paths.ts";
+import { recordRequest } from "./core/request-stats.ts";
+import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./core/routes.ts";
 import { addCodexCompacted, rewriteItems, type Described } from "./rewrite.ts";
-import { connectDirectly, pluginGone, usesEngine } from "./setup.ts";
+import { connectDirectly, pluginGone, usesEngine } from "./adapters/codex/setup.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, ensureStableIds, selectionDir, sideChatSelection, stableIdsSince } from "./selection.ts";
-import { awaitingLine, imageData, loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
+import { awaitingLine, imageData, loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./adapters/codex/thread-index.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -291,11 +291,6 @@ export function hasUnsafeInteger(json: string): boolean {
     if (match[1] && !Number.isSafeInteger(Number(match[1]))) return true;
   }
   return false;
-}
-
-export function hasUnchecked(threadId: string | null, dir = selectionDir, sessionsDir = join(codexHome(), "sessions")): boolean {
-  if (!threadId) return false;
-  try { return Object.keys(effectiveSelection(threadId, sessionsDir, dir).unchecked).length > 0; } catch { return false; }
 }
 
 // Whether a thread's requests go through the rewrite (and so over HTTP): something unchecked, or automatic selection
@@ -570,8 +565,8 @@ export function ownRequest(headers: IncomingHttpHeaders): boolean {
 
 // The panel page for a Claude Code session: the same panel.html as in Codex, with panel-web.js before its own script.
 export function claudePanelPage(dir = here): string {
-  const page = readFileSync(join(dir, "panel.html"), "utf8");
-  const bridge = readFileSync(join(dir, "panel-web.js"), "utf8");
+  const page = readFileSync(join(dir, "panel", "panel.html"), "utf8");
+  const bridge = readFileSync(join(dir, "panel", "panel-web.js"), "utf8");
   const at = page.indexOf("<script>");
   if (at < 0) throw new Error("panel.html has no script");
   return `${page.slice(0, at)}<script>\n${bridge}\n</script>\n${page.slice(at)}`;

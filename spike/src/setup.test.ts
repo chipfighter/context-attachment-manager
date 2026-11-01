@@ -9,8 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { callTool, resetSetupBaseline } from "../../plugin/src/plugin-server.ts";
-import { connectDirectly, pluginGone, useEngine, usesEngine } from "../../plugin/src/setup.ts";
-import * as setup from "../../plugin/src/setup.ts";
+import { connectDirectly, pluginGone, useEngine, usesEngine } from "../../plugin/src/adapters/codex/setup.ts";
+import * as setup from "../../plugin/src/adapters/codex/setup.ts";
 import { sampleSessions, THREAD } from "./testfixtures.ts";
 
 // These tests check the Chinese wording: the language is fixed, so neither the system's language nor one a panel

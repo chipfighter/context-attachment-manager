@@ -6,7 +6,7 @@
 // Set up like v03-auto-selftest.ts: a test engine of this checkout (its own port and data folder, --dump-requests for
 // the bodies it sent), this checkout's plugin server attached to the test app-server for cam_view_image, the tools that
 // act on the machine off, a read-only sandbox, the tasks archived at the end. Automatic selection is on by default
-// (v0.6), so no switch is set. The compaction is Codex's own (thread/compact/start), as p3-selftest.ts does it.
+// (v0.6), so no switch is set. The compaction is Codex's own (thread/compact/start).
 // Thread F: an upload; an upload and an image opened with the image viewer; the user's ratings; a question about all
 // three, answered from their placeholders. Thread K: a character's medium shot; two other assets; the close-up the user
 // calls the best; a compaction; which image to take for the facial features; what the other two look like.
@@ -22,11 +22,11 @@ import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { AppServer, findBundledCodex } from "./appserver.ts";
-import { codexHome } from "../../plugin/src/codexconfig.ts";
+import { codexHome } from "../../plugin/src/adapters/codex/codexconfig.ts";
 import { engineHealth } from "../../plugin/src/engine.ts";
 import { languageFileOf, rememberLang, type Lang } from "../../plugin/src/language.ts";
-import { sceneOf } from "../../plugin/src/notes.ts";
-import { loadThreadIndex } from "../../plugin/src/thread-index.ts";
+import { sceneOf } from "../../plugin/src/core/notes.ts";
+import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { archiveThreads, CORNER_IMAGES, png, runTurn, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 
 type Json = Record<string, any>;

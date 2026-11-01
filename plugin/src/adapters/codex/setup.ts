@@ -9,8 +9,8 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { join } from "node:path";
 import { codexHome, persistedEnv, proxyStatus } from "./codexconfig.ts";
 import { MARKETPLACE, PLUGIN, planInstall, planUninstall, pluginStatus, type Plan, type UserProxyEnv } from "./install.ts";
-import { dataDir } from "./paths.ts";
-import { registerRoute, routeBaseUrl, validateBaseUrl } from "./routes.ts";
+import { dataDir } from "../../core/paths.ts";
+import { registerRoute, routeBaseUrl, validateBaseUrl } from "../../core/routes.ts";
 
 export const codexFiles = () => ({ configFile: join(codexHome(), "config.toml"), envFile: join(codexHome(), ".env") });
 export const readConfig = (): string => (existsSync(codexFiles().configFile) ? readFileSync(codexFiles().configFile, "utf8") : "");

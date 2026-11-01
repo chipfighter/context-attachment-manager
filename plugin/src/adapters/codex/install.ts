@@ -6,8 +6,8 @@
 // Input: current texts and the user's persisted proxy variables. Output: next texts (envText null = delete the file).
 
 import { coversLoopback, disableMcpServer, disableProxy, enableNoProxy, enableProxy, noProxyValue } from "./codexconfig.ts";
-import { systemLang } from "./language.ts";
-import { say } from "./messages.ts";
+import { systemLang } from "../../language.ts";
+import { say } from "../../messages.ts";
 
 export const PLUGIN = "codex-attachment-manager";
 export const MARKETPLACE = "codex-attachment-manager";
