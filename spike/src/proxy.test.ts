@@ -246,6 +246,39 @@ test("the panel's last request is the session's conversation, not Claude Desktop
   assert.equal(claudeConversationRequest(describeBody("/backend-api/codex/responses", { input: [] })), false);
 });
 
+test("v0.10: once the engine changes the history, a cache mark moves to where the request sent before had one", async () => {
+  const { usualSession, usualRequest } = await import("./claude-fixtures.ts");
+  const { rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
+  const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
+  const session = "11111111-2222-4333-8444-555555555556";
+  const { t } = usualSession();
+  mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+  writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  const mark = { type: "ephemeral", ttl: "1h" };
+  // As Claude Code sends them: two marks in the system prompt, two at the end of the messages.
+  const request = (marked: number) => {
+    const messages = usualRequest();
+    const last = messages[marked].content.at(-1);
+    messages[marked] = { ...messages[marked], content: [...messages[marked].content.slice(0, -1), { ...last, cache_control: mark }] };
+    return Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", tools: [{ name: "Read" }], system: [{ type: "text", text: "a", cache_control: mark }, { type: "text", text: "b", cache_control: mark }], messages }));
+  };
+  // The request before, when the Read call was the last assistant message: sent with nothing left out.
+  const before = rewriteClaudeBody(request(3), undefined, session, dir, home, {});
+  assert.ok(before.attempts[0].prefix);
+  writeSelection({ threadId: session, unchecked: { "tool:toolu_1#0": { id: "IMG-003", at: "2026-10-10T00:00:00Z" } } }, dir);
+  const out = rewriteClaudeBody(request(7), undefined, session, dir, home, {}, null, [before.attempts[0].prefix!]);
+  const sent = JSON.parse(out.body.toString("utf8")).messages;
+  const at = sent.findIndex((message: any) => message.content?.[0]?.type === "tool_use");
+  assert.deepEqual(out.report.cacheMarks.read, { message: at, block: 0 });
+  assert.deepEqual(sent[at].content[0].cache_control, mark);
+  // Moved from the last assistant message, which comes after the change; the end keeps its mark.
+  assert.equal(sent.filter((message: any) => message.content?.some?.((block: any) => block.cache_control)).length, 2);
+  assert.ok(sent.at(-1).content.at(-1).cache_control);
+  // Without the request before, Claude Code's marks are left as they are.
+  assert.equal(rewriteClaudeBody(request(7), undefined, session, dir, home, {}).report.cacheMarks, undefined);
+});
+
 test("a Claude Code request is rewritten from the session's transcript and selection, with images also with nothing unchecked", async () => {
   const { usualSession, usualRequest } = await import("./claude-fixtures.ts");
   const { claudeNeedsRewrite, rewriteClaudeBody, claudeImageSizes } = await import("../../plugin/src/proxy.ts");

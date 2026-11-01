@@ -16,6 +16,18 @@ const RATING = /^(?:评价|rated)[ \t]*[：:][ \t]*/i;
 // v0.10: a feature line the model found wrong (e.g. the user pointed it out), written again in full.
 const CORRECTION = /^(?:更正|corrected)[ \t]*[：:][ \t]*/i;
 
+// v0.10: what a placeholder shows of an image's notes: the ratings noted by its own turn. A rating noted later would
+// change a placeholder that went out before it, and the prompt cache from there on (claude-cache.ts); the model has it
+// in its own reply. After a compaction the list shows everything noted before it (claude-index.ts, compactedNotes).
+export function notesBy(notes: Notes | undefined, turn: number | null): Notes | undefined {
+  if (!notes || turn === null) return notes;
+  const ratings = notes.ratings.filter((rating) => rating.turn === null || rating.turn <= turn);
+  if (ratings.length === notes.ratings.length) return notes;
+  return notes.line || ratings.length ? { line: notes.line, ratings } : undefined;
+}
+
+export const copyNotes = (notes: Map<string, Notes>): Map<string, Notes> => new Map([...notes].map(([id, entry]) => [id, { line: entry.line, ratings: [...entry.ratings] }]));
+
 // v0.10: `idOf` turns the id a line names into the image's id now (claude-index.ts: lines written while a resumed
 // transcript was numbered from its own start); null drops the line.
 export function addNotes(notes: Map<string, Notes>, text: string, turn: number | null, idOf: (id: string) => string | null = (id) => id): void {

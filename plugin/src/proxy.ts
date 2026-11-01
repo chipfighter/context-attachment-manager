@@ -30,6 +30,7 @@ import zlib from "node:zlib";
 import { childOf, recordChild } from "./children.ts";
 import { claudeHome, claudeImageData, claudeStartedAt, loadClaudeIndex, type ClaudeIndex } from "./claude-index.ts";
 import { addCompacted, findRequestImages, rewriteMessages, summaryAt, type RequestImage, type Resend } from "./claude-rewrite.ts";
+import { keepCacheRead, marksOutside, REMEMBERED, sentPrefixOf, type SentPrefix } from "./claude-cache.ts";
 import { chainOf, fitThinking, readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./claude-thinking.ts";
 import { codexHome } from "./codexconfig.ts";
 import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForCodex } from "./engine.ts";
@@ -428,7 +429,8 @@ export function thinkingRejected(status: number, body: string): boolean {
 // without any thinking, always accepted; the original as Claude Code built it. history/sent: the chains to remember
 // once the attempt goes through (null: not the session's conversation); made: the histories its thinking was made
 // after; sure: the record says all its thinking fits, so a refusal means the record misses what went out.
-export type ClaudeAttempt = { body: Buffer; report: Json; history: string | null; sent: string | null; made: string[]; sure: boolean };
+// prefix: where its cache marks are, to remember once it is sent (claude-cache.ts).
+export type ClaudeAttempt = { body: Buffer; report: Json; history: string | null; sent: string | null; made: string[]; sure: boolean; prefix?: SentPrefix };
 // v0.10: how long a request waits for its newest images to reach the transcript (a long-task eval caught 3 of a turn's
 // images going out without ids, the transcript written a moment after the request; the user's logs had 119 such of
 // 8904 requests). A request whose images never reach it waits the whole time once.
@@ -439,7 +441,7 @@ const LATE_STEP_MS = 100;
 // turn is the transcript's latest prompt: Claude Code writes it before it sends the request.
 // CAM_EXPERIMENT_BLOCK_BINDING (experiments only, docs/v0.4/tasks.md T04-01): asks Anthropic to check thinking with
 // that prefix_mismatch_behavior, as for an account created from 2026-08-31; the report names the beta header to add.
-export function rewriteClaudeBody(original: Buffer, encoding: string | undefined, sessionId: string, dir = claudeSelectionDirOf(), home = claudeHome(), env = process.env, thinking: ThinkingRecord | null = null): { body: Buffer; report: Json; attempts: ClaudeAttempt[] } {
+export function rewriteClaudeBody(original: Buffer, encoding: string | undefined, sessionId: string, dir = claudeSelectionDirOf(), home = claudeHome(), env = process.env, thinking: ThinkingRecord | null = null, previous: SentPrefix[] = []): { body: Buffer; report: Json; attempts: ClaudeAttempt[]; prefix?: SentPrefix } {
   const asIs = (report: Json) => ({ body: original, report, attempts: [] });
   const decoded = decodeBody(original, encoding);
   if (!decoded) return asIs({ skipped: "undecodable body" });
@@ -467,7 +469,8 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   // placeholders. With any of those, the full note follows the summary, and later messages get only their short notes.
   // v0.8: each with what the model noted about it, for its placeholder.
   const compactedImages = index.images.filter((image) => image.compacted).map((image) => {
-    const notes = index.notes.get(image.id);
+    // v0.10: as they stood at the compaction, so the list stays the same until the next one (claude-index.ts).
+    const notes = index.compactedNotes.get(image.id);
     return notes ? { ...image, notes } : image;
   });
   const summaryIn = index.summary && compactedImages.length ? summaryAt(json.messages, index.summary) : null;
@@ -509,25 +512,34 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   const changed = report.replaced.length > 0 || report.copies.length > 0 || compacted !== null || report.featureAt !== undefined;
   // Once the engine has sent the session a changed history, thinking made after it may be in every later request, even
   // with nothing left out now (an image checked again).
-  if (!changed && !thinking?.edited) return { body: original, report: summary, attempts: [] };
-  const rewritten = changed ? messages : json.messages;
-  const fit = thinking ? fitThinking(json.messages, rewritten, thinking) : null;
   // Side requests (no tools: the desktop's status summary, auto mode's check) are not the conversation.
   const conversation = Array.isArray(json.tools) && json.tools.length > 0;
+  if (!changed && !thinking?.edited) return { body: original, report: summary, attempts: [], ...(conversation ? { prefix: sentPrefixOf(json.messages) } : {}) };
+  const rewritten = changed ? messages : json.messages;
+  const fit = thinking ? fitThinking(json.messages, rewritten, thinking) : null;
   const history = fit && conversation ? fit.history : null;
   const experiment = env.CAM_EXPERIMENT_BLOCK_BINDING?.trim();
+  // v0.10: the cache marks placed so this request reads what the ones before wrote, and the next one can read this
+  // one after the images still sent as originals are left out (claude-cache.ts): with automatic selection, the first
+  // such image that is not pinned.
+  const pinnedNow = selection.pinned ?? {};
+  const volatileIn = (list: Json[]) => {
+    const ref = selection.auto ? findRequestImages(list, index).find((found) => !(found.key && pinnedNow[found.key])) : undefined;
+    return ref ? { message: ref.msg, block: ref.part } : null;
+  };
   const encode = (list: Json[], extra: Json) => {
-    const out: Json = { ...json, messages: list };
+    const placed = conversation ? keepCacheRead(list, previous, marksOutside(json), volatileIn(list)) : { messages: list, marks: null };
+    const out: Json = { ...json, messages: placed.messages };
     const asked = experiment && json.thinking && typeof json.thinking === "object";
     if (asked) out.thinking = { ...json.thinking, block_binding: { prefix_mismatch_behavior: experiment } };
     const next = Buffer.from(JSON.stringify(out), "utf8");
     const body = encodeBody(next, encoding);
-    return { body, report: { ...summary, ...extra, ...(asked ? { experiment: { blockBinding: experiment, beta: "thinking-binding-controls-2026-08-01" } } : {}), decodedBefore: decoded.length, decodedAfter: next.length, encodedBefore: original.length, encodedAfter: body.length } };
+    return { body, report: { ...summary, ...extra, ...(placed.marks ? { cacheMarks: placed.marks } : {}), ...(asked ? { experiment: { blockBinding: experiment, beta: "thinking-binding-controls-2026-08-01" } } : {}), decodedBefore: decoded.length, decodedAfter: next.length, encodedBefore: original.length, encodedAfter: body.length }, ...(conversation ? { prefix: sentPrefixOf(placed.messages) } : {}) };
   };
   const attempts: ClaudeAttempt[] = [];
   const made = fit?.made ?? [];
   const add = (list: Json[], extra: Json, sent: string, sure: boolean) => attempts.push({ ...encode(list, extra), history, sent: history ? sent : null, made, sure });
-  const asBuilt = (extra: Json, sure: boolean) => attempts.push({ body: original, report: { ...summary, ...extra }, history, sent: history, made, sure });
+  const asBuilt = (extra: Json, sure: boolean) => attempts.push({ body: original, report: { ...summary, ...extra }, history, sent: history, made, sure, ...(conversation ? { prefix: sentPrefixOf(json.messages) } : {}) });
   if (!thinking?.strict) {
     if (changed) add(rewritten, {}, chainOf(rewritten), fit?.left === 0);
     else asBuilt({}, fit!.left === 0);
@@ -640,6 +652,15 @@ async function main(): Promise<void> {
     thinkingRecords.set(sessionId, record);
     for (const key of thinkingRecords.keys()) if (thinkingRecords.size > 50) thinkingRecords.delete(key);
     return record;
+  };
+  // v0.10: per session, where the conversation requests sent last had their cache marks, newest first
+  // (claude-cache.ts); memory only.
+  const sentPrefixes = new Map<string, SentPrefix[]>();
+  const rememberPrefix = (sessionId: string, prefix: SentPrefix) => {
+    const kept = [prefix, ...(sentPrefixes.get(sessionId) ?? [])].slice(0, REMEMBERED);
+    sentPrefixes.delete(sessionId);
+    sentPrefixes.set(sessionId, kept);
+    for (const key of sentPrefixes.keys()) if (sentPrefixes.size > 50) sentPrefixes.delete(key);
   };
   log({ at: startedAt, event: "engine-start", pid: process.pid, port, build, version });
   if (!process.argv.includes("--stay")) {
@@ -841,7 +862,7 @@ async function main(): Promise<void> {
     // What to send, in order: body null streams the request through unchanged. v0.4: Anthropic refusing an attempt's
     // thinking after the changed history (thinkingRejected) moves on to the next one (see ClaudeAttempt), the last being
     // the original as Claude Code built it; the statistics say which went out (the panel shows a fallback).
-    type Attempt = { body: Buffer | null; report: Json | null; edited: boolean } & Partial<Pick<ClaudeAttempt, "history" | "sent" | "made" | "sure">>;
+    type Attempt = { body: Buffer | null; report: Json | null; edited: boolean } & Partial<Pick<ClaudeAttempt, "history" | "sent" | "made" | "sure" | "prefix">>;
     const connecting = new AbortController();
     res.once("close", () => {
       if (!res.writableFinished) { connecting.abort(); finish("client closed before the response ended"); }
@@ -895,6 +916,7 @@ async function main(): Promise<void> {
           return;
         }
         // The thinking the model makes now comes after what this attempt sent.
+        if (status >= 200 && status < 300 && claudeSession && attempt.prefix) rememberPrefix(claudeSession, attempt.prefix);
         if (status >= 200 && status < 300 && thinking && claudeSession && attempt.history && attempt.sent && recordSent(thinking, attempt.history, attempt.sent, attempt.made ?? [])) {
           try { writeThinkingRecord(claudeSession, thinking); } catch { /* kept in memory */ }
         }
@@ -933,8 +955,8 @@ async function main(): Promise<void> {
     req.on("end", async () => {
       const original = Buffer.concat(chunks);
       const encoding = req.headers["content-encoding"] as string | undefined;
-      const rewriteNow = (): { body: Buffer; report: Json; attempts?: ClaudeAttempt[] } => {
-        try { return claudeRewrite ? rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
+      const rewriteNow = (): { body: Buffer; report: Json; attempts?: ClaudeAttempt[]; prefix?: SentPrefix } => {
+        try { return claudeRewrite ? rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking, sentPrefixes.get(claudeSession!) ?? []) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
         catch (error) { return { body: original, report: { skipped: `rewrite failed: ${String(error)}` } }; }
       };
       let out = rewriteNow();
@@ -943,7 +965,7 @@ async function main(): Promise<void> {
       let waited = 0;
       for (; claudeRewrite && out.report?.late && waited < LATE_WAIT_MS; waited += LATE_STEP_MS) { await sleep(LATE_STEP_MS); out = rewriteNow(); }
       const withWait = (report: Json) => (waited ? { ...report, waitedMs: waited } : report);
-      const attempts: Attempt[] = out.attempts?.length ? out.attempts.map((attempt) => ({ ...attempt, report: withWait(attempt.report), edited: attempt.body !== original })) : [{ body: out.body, report: withWait(out.report), edited: out.body !== original }];
+      const attempts: Attempt[] = out.attempts?.length ? out.attempts.map((attempt) => ({ ...attempt, report: withWait(attempt.report), edited: attempt.body !== original })) : [{ body: out.body, report: withWait(out.report), edited: out.body !== original, prefix: out.prefix }];
       send(attempts);
     });
   };

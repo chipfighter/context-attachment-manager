@@ -10,7 +10,7 @@ import test from "node:test";
 import { buildClaudeIndex } from "../../plugin/src/claude-index.ts";
 import { rewriteMessages } from "../../plugin/src/claude-rewrite.ts";
 import { findImages, type ImageRef } from "../../plugin/src/images.ts";
-import { addNotes, sceneOf, type Notes } from "../../plugin/src/notes.ts";
+import { addNotes, notesBy, sceneOf, type Notes } from "../../plugin/src/notes.ts";
 import { autoPlaceholder, clip, featureNote, plainPlaceholder, rewriteItems, type Described } from "../../plugin/src/rewrite.ts";
 import { buildIndex, writesNotes, type Parsed } from "../../plugin/src/thread-index.ts";
 import { claudeTurnTexts, loadPanelState, panelStateOf } from "../../plugin/src/panel-state.ts";
@@ -159,6 +159,36 @@ test("Claude: the feature line note follows the message holding the first image,
   const some = rewriteMessages(messages, index, new Set([`${p2}#0`]), () => null, { features: true });
   assert.deepEqual(some.messages.map((message) => message.role), ["user", "system", "assistant", "user", "system"]);
   assert.deepEqual([some.report.featureAt, some.report.noteAt], [1, 4]);
+});
+
+// v0.10: a placeholder or the list after a compaction changing later rewrote the prompt cache from there (claude-cache.ts).
+test("v0.10: a placeholder shows the ratings of the image's own turn; the list after a compaction, the notes as they stood then", () => {
+  assert.deepEqual(notesBy({ line: "书房｜红色方块", ratings: [{ turn: 1, text: "好" }, { turn: 3, text: "太暗" }] }, 2), { line: "书房｜红色方块", ratings: [{ turn: 1, text: "好" }] });
+  assert.equal(notesBy({ line: null, ratings: [{ turn: 3, text: "太暗" }] }, 2), undefined);
+  const notes = { line: "x", ratings: [{ turn: null, text: "好" }] };
+  assert.equal(notesBy(notes, 1), notes);
+  const t = transcript();
+  const p1 = t.prompt([image(pngA), text("first")]);
+  t.assistant(text("[//]: # (cam IMG-001 书房｜红色方块)\n\nA red square."));
+  t.prompt("too dark");
+  t.assistant(text("[//]: # (cam IMG-001 评价：太暗)\n\nNoted."));
+  const messages = [
+    { role: "user", content: [image(pngA), text("first")] },
+    { role: "assistant", content: [text("A red square.")] },
+    { role: "user", content: [text("too dark")] },
+    { role: "assistant", content: [text("Noted.")] },
+    { role: "user", content: [text("next")] },
+  ];
+  const placeholder = rewriteMessages(messages, buildClaudeIndex("s", t.records), new Set([`${p1}#0`]), () => null, { features: true, auto: { currentTurn: 3 } }).messages[0].content[0].text;
+  assert.match(placeholder, /书房｜红色方块/);
+  assert.doesNotMatch(placeholder, /太暗/);
+  t.boundary();
+  t.summary();
+  t.prompt("after");
+  t.assistant(text("[//]: # (cam IMG-001 评价：又好了)\n\nOk."));
+  const index = buildClaudeIndex("s", t.records);
+  assert.deepEqual(index.compactedNotes.get("IMG-001")?.ratings.map((rating) => rating.text), ["太暗"]);
+  assert.deepEqual(index.notes.get("IMG-001")?.ratings.map((rating) => rating.text), ["太暗", "又好了"]);
 });
 
 // 2026-10-19: right after a tool result, Haiku 5.5 took the note for part of what the tool returned and refused it.

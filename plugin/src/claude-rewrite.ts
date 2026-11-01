@@ -17,6 +17,7 @@
 import type { ClaudeIndex, ClaudeImage } from "./claude-index.ts";
 import { imageDigest, type ImageDigest, type ImageKind } from "./images.ts";
 import type { Lang } from "./language.ts";
+import { notesBy } from "./notes.ts";
 import { autoPlaceholder, claudeNote, compactedNote, compactList, copyNote, duplicatePlaceholder, featureNote, hereNote, includedLabel, newImageWord, plainPlaceholder, type Described, type RewriteReport } from "./rewrite.ts";
 
 type Json = Record<string, any>;
@@ -109,7 +110,8 @@ export function rewriteMessages(
   const refs = findRequestImages(messages, index);
   const describe = (ref: RequestImage): ClaudeImage | undefined => {
     const image = ref.key ? index.byKey.get(ref.key) : undefined;
-    const notes = image ? index.notes?.get(image.id) : undefined;
+    // v0.10: as noted by the image's own turn, so a placeholder stays as it first went out (notes.ts).
+    const notes = image ? notesBy(index.notes?.get(image.id), image.turn) : undefined;
     if (!image) return undefined;
     return notes || awaiting.has(image.key) ? { ...image, ...(notes ? { notes } : {}), ...(awaiting.has(image.key) ? { awaiting: true } : {}) } : image;
   };

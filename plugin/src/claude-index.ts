@@ -23,7 +23,7 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, s
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { baseName, FETCHED_STATE, imageDigest, type ImageKind, type ImageRef } from "./images.ts";
-import { addNotes, type Notes } from "./notes.ts";
+import { addNotes, copyNotes, type Notes } from "./notes.ts";
 import { pixelHashOfData, type FetchedCopy, type IndexedImage, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
@@ -51,6 +51,9 @@ export type ClaudeIndex = ThreadIndex & {
   summary: string | null;
   // v0.10: the sessions this one continues, most recent first (for its selection, selection.ts).
   previous: Array<{ sessionId: string; at: string | null }>;
+  // v0.10: the notes as they stood at the latest compaction, for the list put back after it (proxy.ts): one noted
+  // later is in the model's reply after the summary, and changing the list would rewrite the whole prompt cache.
+  compactedNotes: Map<string, Notes>;
 };
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -371,12 +374,14 @@ export function buildClaudeIndex(sessionId: string, records: ClaudeRecord[], tra
   let previous: string[] = [];
   // v0.8: what the model noted in record lines at the end of its replies (notes.ts), by image id.
   const notes = new Map<string, Notes>();
+  let compactedNotes = notes;
   const interrupted = new Set<number>();
   const skipped = new Set<number>();
   // v0.10: ids written under another numbering, back to this one's (through the image they named).
   const numberingAt = translator(chain, options.eras);
   const ownId = (numbering: Map<string, string> | null) => (id: string) => (numbering ? byKey.get(numbering.get(id) ?? "")?.id ?? null : id);
   chain.forEach((record, position) => {
+    if (position === lastBoundary) compactedNotes = copyNotes(notes);
     const content = record.message?.content;
     if (record.type === "assistant" && Array.isArray(content)) {
       const idOf = ownId(numberingAt(record.timestamp));
@@ -449,7 +454,7 @@ export function buildClaudeIndex(sessionId: string, records: ClaudeRecord[], tra
     const twin = images.find((other) => other.name && (other.contentId === entry.contentId || (entry.pixelSha256 !== null && other.pixelSha256 === entry.pixelSha256)));
     if (twin) entry.name = twin.name;
   }
-  return { threadId: sessionId, images, byKey, turns: turn, turnNumbers, copies, notes, uploads, chain, title: titleOf(records, chain), replies, transcript, summary, previous: previousOf(sessionId, options.eras?.family ?? []), interrupted, skipped };
+  return { threadId: sessionId, images, byKey, turns: turn, turnNumbers, copies, notes, uploads, chain, title: titleOf(records, chain), replies, transcript, summary, previous: previousOf(sessionId, options.eras?.family ?? []), interrupted, skipped, compactedNotes };
 }
 
 // v0.10: the sessions this one continues, most recent first, each with the time this one took over: the one it was
