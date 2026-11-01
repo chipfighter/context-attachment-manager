@@ -1,4 +1,4 @@
-// Purpose: v0.4 — claude-thinking.ts: which thinking still fits after the engine changed the history before it, and
+// Purpose: v0.4 — anthropic-messages/thinking.ts: which thinking still fits after the engine changed the history before it, and
 // the per-session record of what the engine sent. Input: synthetic message lists and a temporary folder; output: Node
 // test assertions only.
 
@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { chainOf, fitThinking, newThinkingRecord, readThinkingRecord, recordSent, rememberSent, writeThinkingRecord } from "../../plugin/src/claude-thinking.ts";
+import { chainOf, fitThinking, newThinkingRecord, readThinkingRecord, recordSent, rememberSent, writeThinkingRecord } from "../../plugin/src/adapters/protocols/anthropic-messages/thinking.ts";
 
 type Json = Record<string, any>;
 const think = (signature: string) => ({ type: "thinking", thinking: "", signature });

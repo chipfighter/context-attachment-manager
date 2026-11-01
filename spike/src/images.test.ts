@@ -3,7 +3,8 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findImages, imageSize } from "../../plugin/src/images.ts";
+import { findImages } from "../../plugin/src/adapters/protocols/openai-responses/images.ts";
+import { imageSize } from "../../plugin/src/core/images.ts";
 import { png } from "./testkit.ts";
 
 const url = (bytes: Buffer) => `data:image/png;base64,${bytes.toString("base64")}`;

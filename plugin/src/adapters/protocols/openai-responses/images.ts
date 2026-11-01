@@ -1,16 +1,15 @@
-// Purpose: P2 — find every image in a list of Responses items (a request's `input`, or a rollout's response_items)
+// Purpose: P2 — find every image in a list of Responses items (a request's `input`, or a Codex rollout's response_items)
 // and describe it: a key that names the same occurrence in both places, its kind and name, and a content digest.
 // v0.2 — the source the panel filters by: the kind, except for the screenshots Codex desktop attaches to a comment on a
 // PDF page or a web page, told apart by the caption Codex writes before them. The text for the model does not use it.
 // v0.3 — an image our fetch tool returned carries, in the line before it, the id it is a copy of (thread-index.ts).
+// v0.11 — the Responses request format's reader (docs/v0.11/plan.md); the digest and kinds are the core's
+// (core/images.ts). The names and captions it reads are Codex's own; for another client they simply do not match.
 // Input: items as parsed JSON. Output: ImageRef[] in item order (pure, no I/O).
 
-import { createHash } from "node:crypto";
+import { baseName, FETCHED_STATE, imageDigest, type ImageDigest, type ImageKind, type ImageSource } from "../../../core/images.ts";
 
 type Json = Record<string, any>;
-export type ImageKind = "upload" | "view" | "generated" | "tool";
-export type ImageSource = ImageKind | "pdf" | "browser";
-export type ImageDigest = { contentId: string; mime: string | null; base64Chars: number; width: number | null; height: number | null };
 
 export type ImageRef = ImageDigest & {
   key: string;
@@ -35,9 +34,6 @@ export type ImageRef = ImageDigest & {
   fetchedId: string | null;
 };
 
-// v0.3 — the state our fetch tool (cam_view_image) writes in the line before each image it returns, in either
-// language, so the image is known as a copy of that id. The rest of the line is the usual heading (rewrite.ts).
-export const FETCHED_STATE = { zh: "取回的原图", en: "fetched original" } as const;
 const FETCHED_LINE = new RegExp(`^\\[(?:图片|Image) (IMG-\\d{3,}) (?:${FETCHED_STATE.zh}|${FETCHED_STATE.en})(?:｜| \\|)`);
 
 const OPEN_TAG = /^<image name=(\[Image #\d+\]) path="(.*)">$/s;
@@ -47,59 +43,11 @@ const PDF_CAPTION = /^The next image shows (?:PDF page (\d+)|the PDF page) at th
 const BROWSER_CAPTION = /^The next image (?:shows the browser page at the time of|is untrusted page evidence from the browser page for) Comment \d+\./;
 const PDF_PATH = /^PDF path: (.+)$/gm;
 
-export function baseName(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
-// Width and height from the image header only, so large images are not decoded.
-export function imageSize(bytes: Buffer): { width: number; height: number } | null {
-  if (bytes.length >= 24 && bytes.readUInt32BE(0) === 0x89504e47) return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
-  if (bytes.length >= 10 && bytes.toString("ascii", 0, 3) === "GIF") return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
-  if (bytes.length >= 30 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP") {
-    const chunk = bytes.toString("ascii", 12, 16);
-    if (chunk === "VP8X") return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
-    if (chunk === "VP8 ") return { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff };
-    if (chunk === "VP8L") { const bits = bytes.readUInt32LE(21); return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }; }
-    return null;
-  }
-  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
-    let offset = 2;
-    while (offset + 9 < bytes.length) {
-      if (bytes[offset] !== 0xff) return null;
-      const marker = bytes[offset + 1];
-      if (marker === 0xff) { offset++; continue; }
-      const length = bytes.readUInt16BE(offset + 2);
-      // SOF0–SOF15 carry the frame size, except DHT (C4), JPG (C8) and DAC (CC).
-      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) };
-      offset += 2 + length;
-    }
-  }
-  return null;
-}
-
-const digests = new WeakMap<object, ImageDigest>();
-
-// Keyed by the part object, so re-reading the same cached rollout records does not hash the same images again.
-function digest(owner: object, value: string, mime: string | null): ImageDigest {
-  const known = digests.get(owner);
-  if (known) return known;
-  const header = Buffer.from(value.slice(0, 96 * 1024), "base64");
-  const size = imageSize(header);
-  const result = { contentId: createHash("sha256").update(value).digest("hex"), mime, base64Chars: value.length, width: size?.width ?? null, height: size?.height ?? null };
-  digests.set(owner, result);
-  return result;
-}
-
-// v0.4: the same digest for an image block of a Claude Code transcript or request (raw base64, not a data URL).
-export function imageDigest(owner: object, value: string, mime: string | null): ImageDigest {
-  return digest(owner, value, mime);
-}
-
 function partDigest(part: Json): ImageDigest | null {
   if (part?.type !== "input_image" && part?.type !== "output_image") return null;
   if (typeof part.file_id === "string") return { contentId: `file:${part.file_id}`, mime: null, base64Chars: 0, width: null, height: null };
   const inline = typeof part.image_url === "string" ? /^data:([^;,]+);base64,/.exec(part.image_url) : null;
-  return inline ? digest(part, part.image_url.slice(inline[0].length), inline[1]) : null;
+  return inline ? imageDigest(part, part.image_url.slice(inline[0].length), inline[1]) : null;
 }
 
 // v0.10.1 — reading the path of a view_image call in code-mode source, without running it.
@@ -227,7 +175,7 @@ export function findImages(items: Json[]): ImageRef[] {
     };
 
     if (item.type === "image_generation_call" && typeof item.result === "string" && item.result) {
-      const found = digest(item, item.result, "image/png");
+      const found = imageDigest(item, item.result, "image/png");
       refs.push({ ...found, key: keyFor(0, found.contentId), item: index, part: null, openTag: null, closeTag: null, kind: "generated", replaceable: false, name: null, label: null, turnId, source: "generated", pdfPage: null, pdfName: null, fetchedId: null });
       return;
     }

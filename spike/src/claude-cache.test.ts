@@ -1,10 +1,10 @@
 // Purpose: v0.10 — where the engine puts the prompt-cache marks of a Claude Code request, so it still reads what the
-// ones before it wrote after the engine changed the history (claude-cache.ts). Input: requests shaped like Claude
+// ones before it wrote after the engine changed the history (anthropic-messages/cache.ts). Input: requests shaped like Claude
 // Code's (two marks at the end of the messages, two in the system prompt). Output: Node test assertions only.
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { keepCacheRead, marksOutside, sentPrefixOf } from "../../plugin/src/claude-cache.ts";
+import { keepCacheRead, marksOutside, sentPrefixOf } from "../../plugin/src/adapters/protocols/anthropic-messages/cache.ts";
 
 const mark = { type: "ephemeral", ttl: "1h" };
 const text = (value: string, marked = false) => ({ type: "text", text: value, ...(marked ? { cache_control: mark } : {}) });

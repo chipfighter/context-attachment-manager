@@ -29,12 +29,13 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import { childOf, recordChild } from "./children.ts";
 import { claudeHome, claudeImageData, claudeStartedAt, loadClaudeIndex, type ClaudeIndex } from "./adapters/claude/claude-index.ts";
-import { addCompacted, findRequestImages, rewriteMessages, summaryAt, type RequestImage, type Resend } from "./claude-rewrite.ts";
-import { keepCacheRead, marksOutside, REMEMBERED, sentPrefixOf, type SentPrefix } from "./claude-cache.ts";
-import { chainOf, fitThinking, readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./claude-thinking.ts";
+import { addCompacted, summaryAt, type RequestImage, type Resend } from "./adapters/protocols/anthropic-messages/rewrite.ts";
+import { findRequestImages, rewriteMessages } from "./adapters/claude/claude-rewrite.ts";
+import { keepCacheRead, marksOutside, REMEMBERED, sentPrefixOf, type SentPrefix } from "./adapters/protocols/anthropic-messages/cache.ts";
+import { chainOf, fitThinking, readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./adapters/protocols/anthropic-messages/thinking.ts";
 import { codexHome } from "./adapters/codex/codexconfig.ts";
 import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForCodex } from "./engine.ts";
-import { findImages, type ImageRef } from "./images.ts";
+import { findImages, type ImageRef } from "./adapters/protocols/openai-responses/images.ts";
 import { isEntryPoint } from "./core/entry.ts";
 import { currentLang } from "./language.ts";
 import { migrateDataOnce } from "./core/migrate-data.ts";
@@ -44,7 +45,8 @@ import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type Claude
 import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, proxyLogDirOf, selectionDirOf } from "./core/paths.ts";
 import { recordRequest } from "./core/request-stats.ts";
 import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./core/routes.ts";
-import { addCodexCompacted, rewriteItems, type Described } from "./rewrite.ts";
+import { addCodexCompacted, rewriteItems } from "./adapters/protocols/openai-responses/rewrite.ts";
+import type { Described } from "./core/words.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./adapters/codex/setup.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, ensureStableIds, selectionDir, sideChatSelection, stableIdsSince } from "./selection.ts";
 import { awaitingLine, imageData, loadThreadIndex, pixelHashOf, pixelHashOfData, setPixelCache, sideChatOrigin, writesNotes, type ThreadIndex } from "./adapters/codex/thread-index.ts";
@@ -420,11 +422,11 @@ export function thinkingRejected(status: number, body: string): boolean {
 
 // v0.4: what to send for a Claude Code request, each next one when Anthropic refuses the thinking after the changed
 // history (thinkingRejected): the rewrite with all its thinking (an account that lets it through); the rewrite without
-// the thinking that no longer fits (claude-thinking.ts), first once the account is known to refuse it; the rewrite
+// the thinking that no longer fits (anthropic-messages/thinking.ts), first once the account is known to refuse it; the rewrite
 // without any thinking, always accepted; the original as Claude Code built it. history/sent: the chains to remember
 // once the attempt goes through (null: not the session's conversation); made: the histories its thinking was made
 // after; sure: the record says all its thinking fits, so a refusal means the record misses what went out.
-// prefix: where its cache marks are, to remember once it is sent (claude-cache.ts).
+// prefix: where its cache marks are, to remember once it is sent (anthropic-messages/cache.ts).
 export type ClaudeAttempt = { body: Buffer; report: Json; history: string | null; sent: string | null; made: string[]; sure: boolean; prefix?: SentPrefix };
 // v0.10: how long a request waits for its newest images to reach the transcript (a long-task eval caught 3 of a turn's
 // images going out without ids, the transcript written a moment after the request; the user's logs had 119 such of
@@ -432,7 +434,7 @@ export type ClaudeAttempt = { body: Buffer; report: Json; history: string | null
 const LATE_WAIT_MS = 1500;
 const LATE_STEP_MS = 100;
 
-// v0.4: the same rules as rewriteBody, for a Claude Code request (Anthropic Messages, claude-rewrite.ts). The current
+// v0.4: the same rules as rewriteBody, for a Claude Code request (Anthropic Messages, anthropic-messages/rewrite.ts). The current
 // turn is the transcript's latest prompt: Claude Code writes it before it sends the request.
 // CAM_EXPERIMENT_BLOCK_BINDING (experiments only, docs/v0.4/tasks.md T04-01): asks Anthropic to check thinking with
 // that prefix_mismatch_behavior, as for an account created from 2026-08-31; the report names the beta header to add.
@@ -459,7 +461,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   }
   const pixels = (ref: RequestImage) => (ref.key ? index.byKey.get(ref.key)?.pixelSha256 : undefined) ?? pixelHashOfData(ref, ref.block.source.data);
   const lang = currentLang();
-  // v0.5: after a compaction, the images from before it go back right after the summary (claude-rewrite.ts): the ones
+  // v0.5: after a compaction, the images from before it go back right after the summary (anthropic-messages/rewrite.ts): the ones
   // the user keeps sending (checked, or pinned with automatic selection) read from the transcript, the others as
   // placeholders. With any of those, the full note follows the summary, and later messages get only their short notes.
   // v0.8: each with what the model noted about it, for its placeholder.
@@ -515,7 +517,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   const history = fit && conversation ? fit.history : null;
   const experiment = env.CAM_EXPERIMENT_BLOCK_BINDING?.trim();
   // v0.10: the cache marks placed so this request reads what the ones before wrote, and the next one can read this
-  // one after the images still sent as originals are left out (claude-cache.ts): with automatic selection, the first
+  // one after the images still sent as originals are left out (anthropic-messages/cache.ts): with automatic selection, the first
   // such image that is not pinned.
   const pinnedNow = selection.pinned ?? {};
   const volatileIn = (list: Json[]) => {
@@ -639,7 +641,7 @@ async function main(): Promise<void> {
     } catch { /* only the panel's list misses it */ }
   };
   // v0.4: per Claude Code session, whether its account refuses thinking after a changed history and what was sent
-  // (claude-thinking.ts); the latest sessions stay in memory.
+  // (anthropic-messages/thinking.ts); the latest sessions stay in memory.
   const thinkingRecords = new Map<string, ThinkingRecord>();
   const thinkingOf = (sessionId: string): ThinkingRecord => {
     const record = thinkingRecords.get(sessionId) ?? readThinkingRecord(sessionId);
@@ -649,7 +651,7 @@ async function main(): Promise<void> {
     return record;
   };
   // v0.10: per session, where the conversation requests sent last had their cache marks, newest first
-  // (claude-cache.ts); memory only.
+  // (anthropic-messages/cache.ts); memory only.
   const sentPrefixes = new Map<string, SentPrefix[]>();
   const rememberPrefix = (sessionId: string, prefix: SentPrefix) => {
     const kept = [prefix, ...(sentPrefixes.get(sessionId) ?? [])].slice(0, REMEMBERED);
@@ -955,7 +957,7 @@ async function main(): Promise<void> {
         catch (error) { return { body: original, report: { skipped: `rewrite failed: ${String(error)}` } }; }
       };
       let out = rewriteNow();
-      // v0.10: the newest images not in the transcript yet (claude-rewrite.ts, late): read it again for a moment, so
+      // v0.10: the newest images not in the transcript yet (core/plan.ts, late): read it again for a moment, so
       // they go out with their ids now and the model can note them in this reply.
       let waited = 0;
       for (; claudeRewrite && out.report?.late && waited < LATE_WAIT_MS; waited += LATE_STEP_MS) { await sleep(LATE_STEP_MS); out = rewriteNow(); }

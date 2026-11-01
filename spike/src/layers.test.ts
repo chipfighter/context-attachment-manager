@@ -15,15 +15,12 @@ const src = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", 
 
 const PENDING = new Set<string>([
   "adapters/claude/claude-index.ts -> adapters/codex/thread-index.ts",
-  "adapters/claude/claude-index.ts -> images.ts",
   "adapters/codex/install.ts -> language.ts",
   "adapters/codex/install.ts -> messages.ts",
-  "adapters/codex/thread-index.ts -> images.ts",
   "panel/panel-state.ts -> adapters/claude/claude-index.ts",
   "panel/panel-state.ts -> adapters/codex/thread-index.ts",
   "panel/panel-state.ts -> adapters/codex/thread-names.ts",
   "panel/panel-state.ts -> children.ts",
-  "panel/panel-state.ts -> images.ts",
   "panel/panel-state.ts -> selection.ts",
 ]);
 

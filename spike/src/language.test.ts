@@ -12,7 +12,8 @@ import { fileURLToPath } from "node:url";
 import { codexUiLocale, currentLang, langOf, rememberLang, storedLang, systemLang } from "../../plugin/src/language.ts";
 import { MESSAGES, say } from "../../plugin/src/messages.ts";
 import { callTool, toolsFor } from "../../plugin/src/plugin-server.ts";
-import { OMISSION_NOTE, omissionNote, rewriteItems, type Described } from "../../plugin/src/rewrite.ts";
+import { OMISSION_NOTE, omissionNote, type Described } from "../../plugin/src/core/words.ts";
+import { rewriteItems } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
 import { sampleSessions } from "./testfixtures.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
