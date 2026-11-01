@@ -2,6 +2,27 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [Unreleased]
+
+Images Codex opens get their file names more often, and never someone else's.
+
+### Fixed
+
+- **File names for images Codex opens.** When Codex opened an image through a path it built in code (a folder plus the file name, for example), the image got no name in the panel or in the list after a compaction, so you could not refer to it by its file name. It now gets its name whenever the file name is written in the code.
+- **No more names on the wrong image.** When Codex opened several images in one step and the name of one could not be told, the next one's name could land on it, and images the model fetched back in the same step could take a name too. A name now goes only to the image it belongs to; when that is unclear, the image gets none.
+
+### How we tested
+
+- Unit tests, and the image names in this machine's 163 Codex tasks read with the old and the new version: 20 images got their name, none got a different one, and the 10 that lost theirs had a wrong one (mostly a folder name).
+
+<details>
+<summary>Technical details</summary>
+
+- The engine reads the `path` of each `view_image` call in code-mode source without running it, and takes its last string when that is an image file name: `p + "a.png"`, `` `${dir}/a.png` `` and `join(dir, "a.png")` give `a.png`; `p + name`, a bare `".png"`, `?:` and `||` give none.
+- Images that `cam_view_image` returned in the same code are copies, known by the line before them, and take no name; the other images follow the calls in order only when their count matches the number of calls.
+
+</details>
+
 ## [0.10.0] - 2026-11-01
 
 Long conversations keep their images. When Codex or Claude Code compacts a long conversation, or when you go back to an earlier Claude session, the images from earlier turns are no longer lost: they keep their numbers, and the model can still tell which is which and open the right one again.

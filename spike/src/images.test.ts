@@ -84,6 +84,38 @@ test("view_image through a variable path is still a viewed image; single-quoted 
   assert.deepEqual(findImages(items).map((r) => [r.kind, r.name]), [["view", null], ["view", "e.png"]]);
 });
 
+// v0.10.1 — a path built in code still names its image when the file name is written in it (the v10-compaction self-test,
+// 2026-11-01: gpt-6-sol joined a folder and "a.png"), in the order of the calls.
+const exec = (callId: string, input: string, images: Buffer[]) => [
+  { type: "custom_tool_call", call_id: callId, name: "exec", input },
+  { type: "custom_tool_call_output", id: `out_${callId}`, call_id: callId, output: images.map((bytes) => ({ type: "input_image", image_url: url(bytes) })) },
+];
+
+test("view_image paths built in code name their images when the file name is written in them", () => {
+  const names = (input: string, count = 1) => findImages(exec("c", input, Array(count).fill(red))).map((r) => r.name);
+  assert.deepEqual(names('const p="D:\\\\w\\\\";const r=await Promise.all([tools.view_image({path:p+"a.png"}),tools.view_image({path:p+"b.png"})]);for(let i=0;i<r.length;i++){text(i?"b.png":"a.png");image(r[i].image_url)}', 2), ["a.png", "b.png"]);
+  assert.deepEqual(names("await tools.view_image({path: `${dir}/c.png`})"), ["c.png"], "a template string");
+  assert.deepEqual(names('await tools.view_image({ detail: "original", path: path.join(dir, "d.png") })'), ["d.png"], "path not the first key, through join()");
+});
+
+test("a path whose file name is not written stays unnamed, and no name moves to another image", () => {
+  const names = (input: string, count = 1) => findImages(exec("c", input, Array(count).fill(red))).map((r) => r.name);
+  assert.deepEqual(names("await tools.view_image({path: dir + name})"), [null]);
+  assert.deepEqual(names('await tools.view_image({path: dir + "/" + f + ".png"})'), [null], "only the extension is written");
+  assert.deepEqual(names('await tools.view_image({path: dark ? "x.png" : "y.png"})'), [null], "one of two names");
+  assert.deepEqual(names('await tools.view_image({path}); await tools.view_image({path: "e.png"})', 2), [null, "e.png"], "the first call's name is unknown");
+  assert.deepEqual(names('for (const f of files) await tools.view_image({path: f}); await tools.view_image({path: "g.png"})', 3), [null, null, null], "more images than calls: which is which is unknown");
+});
+
+test("images the same code fetched with cam_view_image do not take a view_image call's name", () => {
+  const fetched = (id: string, bytes: Buffer) => [{ type: "input_text", text: `[图片 ${id} 取回的原图｜x.png｜用户上传｜第 1 轮｜4×4]` }, { type: "input_image", image_url: url(bytes) }];
+  const run = (input: string, output: Array<Record<string, any>>) => findImages([{ type: "custom_tool_call", call_id: "c", name: "exec", input }, { type: "custom_tool_call_output", id: "out", call_id: "c", output }]).map((r) => [r.name, r.fetchedId]);
+  const fetch = 'const r = await tools.mcp__codex_attachment_manager__cam_view_image({ids:["IMG-017","IMG-018"]}); for (const c of r.content) c.type === "image" ? image(c) : text(c.text);';
+  const view = 'const scene = await tools.view_image({path: "D:/w/t02.png"}); image(scene.image_url);';
+  assert.deepEqual(run(fetch + view, [...fetched("IMG-017", red), ...fetched("IMG-018", red), { type: "input_image", image_url: url(blue) }]), [[null, "IMG-017"], [null, "IMG-018"], ["t02.png", null]], "fetched first");
+  assert.deepEqual(run(view + fetch, [{ type: "input_image", image_url: url(blue) }, ...fetched("IMG-017", red)]), [["t02.png", null], [null, "IMG-017"]], "viewed first");
+});
+
 // v0.2 — Codex desktop (26.924) comments on a PDF or a web page: one text part with the comments (for a PDF with
 // "PDF path:" and "PDF page:" lines), then per comment a caption and the screenshot, a plain image without tags. Laid out
 // as in a real PDF comment the user made on 2026-09-29; the content here is made up.
