@@ -200,11 +200,20 @@ async function runOne(run: Run, label: string, port: number, effort: string, qui
   const result: Json = { run: run.name, arm, model: MODELS[model], effort, images: images.length, startedAt: new Date().toISOString(), steps: [] };
   let session = new Session(args(), env, work, join(runDir, "events-main.jsonl"));
   const record = (step: Json) => { result.steps.push(step); writeFileSync(join(root, `${run.name}.json`), JSON.stringify(result, null, 2)); };
+  // An API error that is not the account's limit (the network, the upstream): the same step once more a minute later;
+  // twice in a row ends the run, whose further steps would only fail too (2026-11-01: 36 steps of 502s).
+  let broken = false;
+  const sendStep = async (content: Json[], timeoutMs: number) => {
+    const apiError = (sent: Awaited<ReturnType<Session["send"]>>) => !!sent.result?.is_error && /API Error/i.test(String(sent.result.result)) && !/limit/i.test(String(sent.result.result));
+    let sent = await session.send(content, timeoutMs);
+    if (apiError(sent)) { await sleep(60_000); sent = await session.send(content, timeoutMs); broken = apiError(sent); }
+    return sent;
+  };
   const ask = async (question: Question) => {
-    const sent = await session.send([{ type: "text", text: question.say }], QUESTION_TIMEOUT);
+    const sent = await sendStep([{ type: "text", text: question.say }], QUESTION_TIMEOUT);
     const reply = sent.result?.result ?? "";
     record({ step: question.key, kind: "question", ms: sent.ms, timedOut: sent.timedOut, error: sent.result?.is_error ?? null, reply, ...score(question, reply), expected: question.answer, target: question.target, needsOriginal: question.needsOriginal, ...turnOf(sent.events) });
-    return sent.result !== null;
+    return sent.result !== null && !broken;
   };
 
   result.quotaAtStart = { ...quota };
@@ -216,15 +225,15 @@ async function runOne(run: Run, label: string, port: number, effort: string, qui
       if (step.type === "turn") {
         turnNo++;
         const content = [{ type: "text", text: step.say }, ...step.upload.map(upload)];
-        let sent = await session.send(content, TURN_TIMEOUT);
+        let sent = await sendStep(content, TURN_TIMEOUT);
         // Refused for the account's limit: the same turn again once the window has started again.
         if (sent.result?.is_error && /limit/i.test(String(sent.result.result))) { await waitForWindow(record, true); sent = await session.send(content, TURN_TIMEOUT); }
         record({ step: `T${turnNo}`, kind: "turn", ms: sent.ms, timedOut: sent.timedOut, error: sent.result?.is_error ?? null, reply: sent.result?.result ?? "", ...turnOf(sent.events) });
-        if (!sent.result) break;
+        if (!sent.result || broken) break;
       } else if (step.type === "compact") {
-        const sent = await session.send([{ type: "text", text: "/compact" }], TURN_TIMEOUT);
+        const sent = await sendStep([{ type: "text", text: "/compact" }], TURN_TIMEOUT);
         record({ step: `compact-${step.label}`, kind: "compact", ms: sent.ms, timedOut: sent.timedOut, error: sent.result?.is_error ?? null, ...turnOf(sent.events) });
-        if (!sent.result) break;
+        if (!sent.result || broken) break;
       } else if (step.block === "fork") {
         const from = session.sessionId;
         await session.close();
@@ -240,6 +249,7 @@ async function runOne(run: Run, label: string, port: number, effort: string, qui
       }
       if (!result.session) result.session = session.sessionId;
     }
+    if (broken) record({ step: "stopped", kind: "stopped", reason: "API errors twice in a row" });
   } finally {
     await session.close();
     engine?.kill();

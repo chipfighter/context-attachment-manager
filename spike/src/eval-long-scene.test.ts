@@ -44,4 +44,9 @@ test("eval-long: scoring", () => {
   assert.equal(score(sit, "坐着，坐在椅子上").verdict, "right");
   assert.equal(score(sit, "站着").verdict, "wrong");
   assert.equal(score(count, "一共 3 版").said, "3");
+  // Strict: more than one answer is not right, even with the right one among them.
+  assert.equal(score(q("Q1"), "不是 s04_v2.png，是 s04_v1.png").verdict, "ambiguous");
+  assert.equal(score(q("Q1"), "s04_v1.png 或 s03_v1.png").verdict, "wrong");
+  assert.equal(score(digit, "第 1 镜两版女主都在画面中间，没有站在左边的版本。v1 角落数字是 90，v2 是 61。").verdict, "ambiguous");
+  assert.equal(score(sit, "不是站着，是坐着").verdict, "ambiguous");
 });

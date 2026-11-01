@@ -434,22 +434,30 @@ export function scene(): Scene {
 export const visible = (reply: string) => reply.replace(/\[\/\/\]:[ \t]*#[ \t]*\(cam[^)\n]*\)/g, "").trim();
 const CN: Record<string, string> = { 零: "0", 一: "1", 二: "2", 两: "2", 三: "3", 四: "4", 五: "5", 六: "6", 七: "7", 八: "8", 九: "9", 十: "10" };
 
-// right, wrong (another file, number or word), or none (no answer of the asked kind: "I can't tell" and the like).
-export function score(question: Question, reply: string): { verdict: "right" | "wrong" | "none"; said: string | null } {
+// right, wrong (another file, number or word), ambiguous (more than one, the right one among them: "not s04_v2.png
+// but s04_v1.png", or two numbers for two versions), or none (no answer of the asked kind: "I can't tell" and the
+// like). Only right counts. A reply that takes back an earlier answer is marked by the summary for a look by hand.
+export type Verdict = "right" | "wrong" | "ambiguous" | "none";
+export function score(question: Question, reply: string): { verdict: Verdict; said: string | null } {
   const shown = visible(reply);
-  const judge = (said: string | null) => ({ verdict: said === null ? "none" as const : said === question.answer ? "right" as const : "wrong" as const, said });
+  const judge = (found: string[]) => {
+    const said = [...new Set(found)];
+    if (!said.length) return { verdict: "none" as const, said: null };
+    const verdict: Verdict = said.length > 1 ? (said.includes(question.answer) ? "ambiguous" : "wrong") : said[0] === question.answer ? "right" : "wrong";
+    return { verdict, said: said.join(",") };
+  };
   switch (question.expect) {
-    case "file": return judge(/[\w-]+\.png\b/i.exec(shown)?.[0].toLowerCase() ?? null);
+    case "file": return judge([...shown.matchAll(/[\w-]+\.png\b/gi)].map((match) => match[0].toLowerCase()));
     case "number": {
       const clean = shown.replace(/[\w-]+\.png\b/gi, "").replace(/IMG-\d+/g, "").replace(/set_\d+/g, "").replace(/第\s*\d+\s*[镜版张段批轮行帧]/g, "").replace(/\bv\d+\b/gi, "");
       // Digits first: a Chinese numeral is often just a word ("一共", "一张").
-      const match = /(?<![0-9])[0-9]{1,3}(?![0-9])/.exec(clean)?.[0] ?? /[零一二两三四五六七八九十]/.exec(clean)?.[0] ?? null;
-      return judge(match === null ? null : CN[match] ?? match);
+      const digits = [...clean.matchAll(/(?<![0-9])[0-9]{1,3}(?![0-9])/g)].map((match) => match[0]);
+      const words = digits.length ? [] : [...clean.matchAll(/[零一二两三四五六七八九十]/g)].slice(0, 1).map((match) => CN[match[0]]);
+      return judge([...digits, ...words]);
     }
     case "word": {
       const options = question.answer === "坐" ? ["坐", "站", "举", "指", "跳"] : ["左", "右"];
-      const hit = options.map((word) => ({ word, at: shown.indexOf(word) })).filter((item) => item.at >= 0).sort((a, b) => a.at - b.at)[0];
-      return judge(hit?.word ?? null);
+      return judge(options.filter((word) => shown.includes(word)));
     }
     case "text": return { verdict: /weather/i.test(shown) ? "right" : "wrong", said: shown.slice(0, 80) };
   }
