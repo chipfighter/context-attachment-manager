@@ -86,10 +86,13 @@ const WORDS: Record<Lang, Words> = {
       "标着“[图片 IMG-xxx 已提供…]”的图片现在就在你面前，即使它之前被省略过、或者正是你要过的图：被问到它时，直接看图回答，不要说看不到。",
     ].join("\n"),
     autoPlain: (id) => `需要原图时调用 cam_view_image，传入“${id}”。`,
+    // 2026-11-01, long-task eval (Haiku 5.5, effort low): after a compaction the model stopped reading the files the
+    // user named, five turns running ("没有收到图片内容，只有文字说明"): "do not read image files with other tools" was
+    // taken for every image. It now says the omitted ones, and that new images are looked at as usual.
     autoNote: [
       "上下文管理说明（来自用户安装的上下文素材管理工具）：这个任务开着“自动选图”。为了节省上下文，之前各轮的图片默认不再随请求提供，后面的对话里，它们原来的位置换成了“[图片 IMG-xxx 已省略…]”这样的占位文字；本轮新出现的图片照常提供，用户固定发送的图片也照常提供，前面标着“[图片 IMG-xxx 已提供…]”，紧接着就是原图。",
       "这些图片在它们出现的那一轮真实存在，你当时收到并看过；你之前对它们的描述，以及据此做出的判断，都是看着原图做出的，仍然有效。不要因为现在看不到，就认为之前的回答是猜测或错误，也不要收回或道歉。",
-      "回答需要看某张被省略的图片、而你之前说过的内容不够用时，调用 cam_view_image 工具，传入它的编号（几张就一次传几个），原图会出现在这次的工具结果里，前面标着“[图片 IMG-xxx 取回的原图…]”，拿到后看图回答。之前说过的内容够用时，不要调用。现在看不到的画面细节，不要猜测或补充；不要让用户重新上传图片，也不要用其他工具去读取图片文件。",
+      "回答需要看某张被省略的图片、而你之前说过的内容不够用时，调用 cam_view_image 工具，传入它的编号（几张就一次传几个），原图会出现在这次的工具结果里，前面标着“[图片 IMG-xxx 取回的原图…]”，拿到后看图回答。之前说过的内容够用时，不要调用。现在看不到的画面细节，不要猜测或补充；不要让用户重新上传图片，也不要用其他工具去读取这些被省略的图片的文件；用户新让你看的图片不受影响，照常去看。",
       "用 cam_view_image 取回的图片只在本轮提供，下一轮又会换回占位文字；之后还需要时，再调用一次。标着“已提供”或“取回的原图”的图片现在就在你面前：被问到它时，直接看图回答，不要说看不到。",
     ].join("\n"),
     copy: (id) => `[${id} 的原图：模型当时用 cam_view_image 取回，只在那一轮提供，现在已省略]`,
@@ -128,7 +131,7 @@ const WORDS: Record<Lang, Words> = {
       "这些图片在它们出现的那一轮真实存在，你当时看过；你之前对它们的描述，以及据此做出的判断，都是看着原图做出的，仍然有效，不要收回，也不要说成是猜测或编造。现在看不到原图的，不要补充之前没说过的细节。",
       count > resent
         ? auto
-          ? "回答需要看清单里的某张图、而你之前说过的内容不够用时，调用 cam_view_image 工具，传入它的编号（几张就一次传几个），原图会出现在这次的工具结果里；不要让用户重新上传，也不要用其他工具去读取图片文件。"
+          ? "回答需要看清单里的某张图、而你之前说过的内容不够用时，调用 cam_view_image 工具，传入它的编号（几张就一次传几个），原图会出现在这次的工具结果里；不要让用户重新上传，也不要用其他工具去读取清单里这些图片的文件；用户新让你看的图片不受影响，照常去看。"
           : "问题得看清单里某张图才能回答时，在回复里单独写一行“需要 IMG-xxx”（写出编号，几张就都写上）：用户勾回后，原图会回到这里；不要让用户重新上传。"
         : null,
     ].filter((line) => line !== null).join("\n"),
@@ -193,7 +196,7 @@ const WORDS: Record<Lang, Words> = {
     autoNote: [
       "Context management note (from the context asset manager the user installed): this task has automatic image selection on. To save context, images from earlier turns are no longer included in requests by default: further on in the conversation, where those images were, there is now placeholder text such as \"[Image IMG-xxx omitted…]\". Images new in this turn are included as usual, and so are the images the user pinned, marked \"[Image IMG-xxx included…]\" with the original image right after it.",
       "These images really existed in the turn where they appeared, and you received and looked at them then; what you said about them before, and the judgments you based on it, were made looking at the original images and remain valid. Do not treat your earlier answers as guesses or mistakes because you cannot see the images now, and do not take them back or apologize.",
-      "When an answer needs an omitted image and what you said about it before is not enough, call the cam_view_image tool with its id (several ids at once if you need several); the original comes back in that tool result, marked \"[Image IMG-xxx fetched original…]\", and you answer from it. When what you said before is enough, do not call it. Do not guess or add visual details you cannot see now; do not ask the user to upload images again, and do not read image files with other tools.",
+      "When an answer needs an omitted image and what you said about it before is not enough, call the cam_view_image tool with its id (several ids at once if you need several); the original comes back in that tool result, marked \"[Image IMG-xxx fetched original…]\", and you answer from it. When what you said before is enough, do not call it. Do not guess or add visual details you cannot see now; do not ask the user to upload images again, and do not read the files of omitted images with other tools. Images the user newly asks you to look at are not affected: look at them as usual.",
       "An image you get with cam_view_image is included only in this turn; from the next turn on it is a placeholder again. Call the tool again if you need it later. An image marked \"included\" or \"fetched original\" is in front of you now: when asked about it, look at it and answer from it, and do not say you cannot see it.",
     ].join("\n"),
     copy: (id) => `[Original of ${id}: fetched by the model with cam_view_image, included only in that turn, now omitted]`,
@@ -218,7 +221,7 @@ const WORDS: Record<Lang, Words> = {
       "These images really existed in the turn where they appeared, and you looked at them then; what you said about them, and the judgments you based on it, were made looking at the original images and remain valid; do not take them back or call them guesses or made up. Do not add details you did not mention before about images you cannot see now.",
       count > resent
         ? auto
-          ? "When an answer needs an image from the list and what you said about it before is not enough, call the cam_view_image tool with its id (several ids at once if you need several); the original comes back in that tool result. Do not ask the user to upload images again, and do not read image files with other tools."
+          ? "When an answer needs an image from the list and what you said about it before is not enough, call the cam_view_image tool with its id (several ids at once if you need several); the original comes back in that tool result. Do not ask the user to upload images again, and do not read the files of the listed images with other tools. Images the user newly asks you to look at are not affected: look at them as usual."
           : "When a question can only be answered by looking at an image from the list, write a line \"need IMG-xxx\" in your reply (with its number; list each one needed): once the user checks it again, the original comes back here. Do not ask the user to upload it again."
         : null,
     ].filter((line) => line !== null).join("\n"),

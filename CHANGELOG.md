@@ -23,6 +23,7 @@ Earlier images come back after compaction and resume, with the same IDs, in Code
 - Long feature lines and ratings are cut by width rather than by character count, whatever the language setting, so English feature lines in a Chinese setup are no longer cut down to the place alone. Ratings now keep as much as feature lines (30 Chinese characters or 100 letters, up from 15 characters), so the user's words are no longer cut in half.
 - In Claude Code, when the model read several images at once and the results came back out of order, an image could get no ID (since 0.4): it went out as an original in every request and was lost after a compaction. Every such image now gets its ID, in the order it was read; feature lines written before are matched to the new IDs.
 - In Claude Code, a request sometimes went out a moment before Claude Code had written the turn's newest images to its transcript (about 1 request in 75 in the logs on the development machine). Those images went without IDs, so the model could not note them in that reply. The engine now reads the transcript again for up to 1.5 seconds when that happens.
+- The note to the model said not to read image files with other tools, meaning the omitted ones, which it should fetch with the image tool. After a compaction, a small model took it for every image and stopped looking at the new files the user named. The note now names the omitted images only and says new ones are looked at as usual.
 
 ### Notes
 
