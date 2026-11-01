@@ -231,6 +231,7 @@
   - K 组（用户的案例）：角色中景、两张别的素材、近景并说“这张最好”，用 app-server 的 `thread/compact/start` 压缩，再问五官参考用哪张、压缩前那两张是什么样。检查压缩后的请求里每张图都是带特征行的占位、选的是近景、答得出压缩前的图。
   - 关卡的探针、结果和发布前的自测结果见 [v0.8/plan.md](v0.8/plan.md) 第 3、5 节。
 - **评测**（2026-10-24，`eval-keyframes.ts`、`eval-summary.ts`）：一个短剧关键帧任务，9 张合成关键帧（每张 3–4 MB），三组：不装插件（测试引擎只转发、计字节：它的勾选目录里把自动选图的起始时间写成很久以后，任务都算旧任务）、当前插件、0.7.1（从发布标签取出，没有特征行）。任务一问完后重启 app-server 再问一题，任务二压缩后再问。记下能不能发出去、压缩前后找图对不对、取了几张图、token。报告、结果和复现步骤在 [eval/](../eval/README_CN.md)，README 只在底部留一小节链接过去。
+- **长任务评测**（2026-11-01，`eval-long.ts`、`eval-long-scene.ts`、`eval-long-setup.ts`、`eval-long-summary.ts`）：Claude Code 命令行，一个会话一个进程，像桌面版那样一条条发消息；评测用自己的配置文件夹，插件用 `--plugin-dir` 加载，各组各用自己的引擎端口和数据文件夹。51 张合成图、16 轮，自动压缩关掉，在两个固定位置发 `/compact`，最后用 `--resume … --fork-session` 分叉。判分只认一个答案；token 和费用取 Claude Code 的会话总计。脚本看着账号用量，一周额度到 90% 就停。报告在 [eval/long-task/](../eval/long-task/README_CN.md)。
 
 ## 11. 依赖的 Codex 行为和已知的坑
 

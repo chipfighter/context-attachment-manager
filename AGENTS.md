@@ -14,7 +14,7 @@ Context Attachment Manager（上下文素材管理器，2026-10-11 前叫 Codex 
 - [docs/v0.10/plan.md](docs/v0.10/plan.md)：v0.10 方案，压缩和续接之后照样拿回之前的图，编号不变（开发中，未发布；关卡结果见方案第 3 节）。
 - [docs/history/v0.1/](docs/history/v0.1/)：v0.1 的开发记录（原方案、任务记录、各阶段报告、最初的构想），只作参考，不作依据。
 - [CHANGELOG.md](CHANGELOG.md)：每个版本的更新记录，发布时就是 Release 说明。
-- [eval/README_CN.md](eval/README_CN.md)：评测（英文版 [eval/README.md](eval/README.md)），装插件和不装插件的对比：方法、结果和复现步骤。
+- [eval/README_CN.md](eval/README_CN.md)：评测（英文版 [eval/README.md](eval/README.md)），装插件和不装插件的对比：方法、结果和复现步骤。这一份是 Codex 里的关键帧对话；Claude Code 里压缩两次再分叉的长任务在 [eval/long-task/](eval/long-task/README_CN.md)。
 
 ## 已确认的规矩
 

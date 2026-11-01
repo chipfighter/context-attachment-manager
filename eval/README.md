@@ -2,6 +2,8 @@
 
 **English** · [简体中文](README_CN.md)
 
+Also: [a long task in Claude Code, compacted twice and then forked](long-task/README.md) (2026-11-01).
+
 Run on 2026-10-24. Plugin 0.9.0, plus 0.7.1 for comparison. Codex app-server from Codex desktop (`codex-cli 0.163.0-alpha.11`), model `gpt-6-sol` at low reasoning effort, Windows 11. This is a small test: one scenario, one final run per setup, plus two pilot runs that shaped it.
 
 ## In short
@@ -107,7 +109,7 @@ Leaving the earlier images out takes about 14k tokens off the context. But every
 - One final run per setup: no statistics.
 - Synthetic images. Real keyframes are easier to recognize, and look more alike.
 - One model (`gpt-6-sol`, low effort) and Codex only; Claude Code was not tested.
-- A short task: nine images and one compaction. The case that led to feature lines was a long task in which, after a compaction, the model picked an early medium shot instead of the close-up the user had called the best. A test like that needs dozens of images and several compactions.
+- A short task: nine images and one compaction. The case that led to feature lines was a long task in which, after a compaction, the model picked an early medium shot instead of the close-up the user had called the best. A test like that needs dozens of images and several compactions. A longer task, 51 images with two compactions and a fork, was later run in Claude Code: see [long-task](long-task/README.md).
 - One machine, uploading through a local proxy, where HTTP requests of 7.8 MB took 25–65 seconds. The WebSocket refusal came within seconds regardless. Whether HTTP could carry 42 MB on a faster link was not tested.
 
 ## Run it yourself
