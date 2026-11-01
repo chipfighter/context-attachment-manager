@@ -17,6 +17,10 @@ import { awaitingLine, loadThreadIndex } from "../../plugin/src/thread-index.ts"
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
 import { png } from "./testkit.ts";
 
+// These tests check the Chinese wording: the language is fixed, so neither the system's language nor one a panel
+// reported on this machine decides it (v0.1-14).
+process.env.CAM_LANG = "zh";
+
 type Json = Record<string, any>;
 const threadId = "01a0d301-0000-7000-8000-0000000000bf";
 const red = `data:image/png;base64,${png(16, 16, () => [220, 30, 30]).toString("base64")}`;
