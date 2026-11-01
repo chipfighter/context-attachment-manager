@@ -7,14 +7,14 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { decodePng } from "../../plugin/src/png.ts";
-import { applySelection, imageFor, loadPanelState, panelStateOf, requestedIds, sendInfo } from "../../plugin/src/panel-state.ts";
-import { childrenDirOf, requestStatsDirOf } from "../../plugin/src/paths.ts";
+import { decodePng } from "../../plugin/src/core/png.ts";
+import { applySelection, imageFor, loadPanelState, panelStateOf, requestedIds, sendInfo } from "../../plugin/src/panel/panel-state.ts";
+import { childrenDirOf, requestStatsDirOf } from "../../plugin/src/core/paths.ts";
 import { recordChild } from "../../plugin/src/children.ts";
-import { recordRequest } from "../../plugin/src/request-stats.ts";
+import { recordRequest } from "../../plugin/src/core/request-stats.ts";
 import { readSelection, writeSelection } from "../../plugin/src/selection.ts";
 import { assistant, line, red, sampleSessions, startThread, THREAD, turn, upload } from "./testfixtures.ts";
-import { shrink } from "../../plugin/src/thumbnail.ts";
+import { shrink } from "../../plugin/src/core/thumbnail.ts";
 import { png } from "./testkit.ts";
 
 const records = (text: string) => text.trim().split("\n").map((raw) => JSON.parse(raw));
@@ -131,7 +131,7 @@ test("v0.4: the panel is told when the engine left out thinking that no longer f
 
 test("v0.5: images from before a Claude Code compaction go out again when checked, and are marked as such", async () => {
   const { image, pngA, text, transcript } = await import("./claude-fixtures.ts");
-  const { buildClaudeIndex } = await import("../../plugin/src/claude-index.ts");
+  const { buildClaudeIndex } = await import("../../plugin/src/adapters/claude/claude-index.ts");
   const t = transcript();
   const p1 = t.prompt([image(pngA), text("first")]);
   t.assistant(text("ok"));
@@ -263,7 +263,7 @@ test("the task's panel lists its subagents and side chats with their last reques
 });
 
 test("the image preview supports Ctrl+wheel zoom and preserves keyboard and backdrop behavior", async () => {
-  const html = readFileSync(join(import.meta.dirname, "..", "..", "plugin", "src", "panel.html"), "utf8");
+  const html = readFileSync(join(import.meta.dirname, "..", "..", "plugin", "src", "panel", "panel.html"), "utf8");
   const messagesJson = /<script type="application\/json" id="messages">([\s\S]*?)<\/script>/.exec(html)![1];
   const scriptCode = /<script>\s*(\(\(\) => \{[\s\S]*?\}\)\(\);)\s*<\/script>/.exec(html)![1];
 

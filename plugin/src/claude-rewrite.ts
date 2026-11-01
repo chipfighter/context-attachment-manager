@@ -14,10 +14,10 @@
 // turn; placeholders carry what the model noted.
 // Input: the request's messages, the session's index, the keys to leave out. Output: new messages plus a report.
 
-import type { ClaudeIndex, ClaudeImage } from "./claude-index.ts";
+import type { ClaudeIndex, ClaudeImage } from "./adapters/claude/claude-index.ts";
 import { imageDigest, type ImageDigest, type ImageKind } from "./images.ts";
 import type { Lang } from "./language.ts";
-import { notesBy } from "./notes.ts";
+import { notesBy } from "./core/notes.ts";
 import { autoPlaceholder, claudeNote, compactedNote, compactList, copyNote, duplicatePlaceholder, featureNote, hereNote, includedLabel, newImageWord, plainPlaceholder, type Described, type RewriteReport } from "./rewrite.ts";
 
 type Json = Record<string, any>;

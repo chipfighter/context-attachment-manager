@@ -14,8 +14,8 @@ import test from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { buildOf, compareVersions, countClaudeInPs, countClaudeProcesses, countCodexInPs, countCodexProcesses, engineHealth, ensureEngine, isEngineHealth, shouldReplace, watchForCodex, type Health } from "../../plugin/src/engine.ts";
-import { selectionDirOf } from "../../plugin/src/paths.ts";
-import { readRequestStats, recordRequest } from "../../plugin/src/request-stats.ts";
+import { selectionDirOf } from "../../plugin/src/core/paths.ts";
+import { readRequestStats, recordRequest } from "../../plugin/src/core/request-stats.ts";
 import { autoDefaultSince, writeSelection } from "../../plugin/src/selection.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));

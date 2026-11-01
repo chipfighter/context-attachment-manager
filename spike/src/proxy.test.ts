@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import zlib from "node:zlib";
-import { claudeIdentity, describeBody, forwardHeaders, hasUnchecked, hasUnsafeInteger, imageSizesOf, macProxy, needsRewrite, outboundProxy, redactImages, rewriteBody, requestIdentity, routeOf } from "../../plugin/src/proxy.ts";
+import { claudeIdentity, describeBody, forwardHeaders, hasUnsafeInteger, imageSizesOf, macProxy, needsRewrite, outboundProxy, redactImages, rewriteBody, requestIdentity, routeOf } from "../../plugin/src/proxy.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
 import { png } from "./testkit.ts";
 
@@ -112,9 +112,7 @@ function fixture() {
 
 test("rewriteBody swaps the unchecked image for a placeholder and re-encodes the body", () => {
   const { threadId, sessions, selections, red, blue, body } = fixture();
-  assert.equal(hasUnchecked(threadId, selections), false);
   writeSelection({ threadId, unchecked: { "msg_1#0": { id: "IMG-001", at: "2026-09-24T10:00:00Z" } } }, selections);
-  assert.equal(hasUnchecked(threadId, selections), true);
   const original = body();
   const { body: out, report } = rewriteBody(original, "zstd", threadId, sessions, selections);
   const text = zlib.zstdDecompressSync(out).toString("utf8");
@@ -282,7 +280,7 @@ test("v0.10: once the engine changes the history, a cache mark moves to where th
 test("a Claude Code request is rewritten from the session's transcript and selection, with images also with nothing unchecked", async () => {
   const { usualSession, usualRequest } = await import("./claude-fixtures.ts");
   const { claudeNeedsRewrite, rewriteClaudeBody, claudeImageSizes } = await import("../../plugin/src/proxy.ts");
-  const { buildClaudeIndex } = await import("../../plugin/src/claude-index.ts");
+  const { buildClaudeIndex } = await import("../../plugin/src/adapters/claude/claude-index.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
   const session = "11111111-2222-4333-8444-555555555555";

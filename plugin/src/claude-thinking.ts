@@ -12,7 +12,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { claudeThinkingDirOf } from "./paths.ts";
+import { claudeThinkingDirOf } from "./core/paths.ts";
 
 type Json = Record<string, any>;
 const THINKING = new Set(["thinking", "redacted_thinking"]);

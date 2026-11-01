@@ -6,8 +6,8 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { enableMcpServer } from "../../plugin/src/codexconfig.ts";
-import { needsNoProxy, planInstall, planUninstall, pluginStatus, SERVER_NAME } from "../../plugin/src/install.ts";
+import { enableMcpServer } from "../../plugin/src/adapters/codex/codexconfig.ts";
+import { needsNoProxy, planInstall, planUninstall, pluginStatus, SERVER_NAME } from "../../plugin/src/adapters/codex/install.ts";
 
 // These tests check the Chinese wording: the language is fixed, so neither the system's language nor one a panel
 // reported on this machine decides it (v0.1-14).

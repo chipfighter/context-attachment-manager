@@ -37,12 +37,14 @@ export async function engineHealth(port = DEFAULT_PORT, timeoutMs = 800): Promis
   }
 }
 
-// Which code a runtime folder holds: a hash of its .ts files, line endings normalised (a copy made from a Windows
-// checkout has CRLF). null when the folder is gone, e.g. a plugin version Codex has removed.
+// Which code a runtime folder holds: a hash of its .ts files, subfolders included (v0.11), line endings normalised (a
+// copy made from a Windows checkout has CRLF). A flat folder hashes as before. null when the folder is gone, e.g. a
+// plugin version Codex has removed.
 export function buildOf(dir = here): string | null {
   try {
     const hash = createHash("sha256");
-    for (const name of readdirSync(dir).filter((file) => file.endsWith(".ts")).sort()) {
+    const names = readdirSync(dir, { recursive: true, encoding: "utf8" }).map((name) => name.replaceAll("\\", "/"));
+    for (const name of names.filter((file) => file.endsWith(".ts")).sort()) {
       hash.update(`${name}\0${readFileSync(join(dir, name), "utf8").replaceAll("\r\n", "\n")}\0`);
     }
     return hash.digest("hex").slice(0, 12);

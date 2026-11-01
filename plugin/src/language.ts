@@ -13,8 +13,8 @@
 
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { codexHome } from "./codexconfig.ts";
-import { dataDir } from "./paths.ts";
+import { codexHome } from "./adapters/codex/codexconfig.ts";
+import { dataDir } from "./core/paths.ts";
 
 export type Lang = "zh" | "en";
 // codex: the panel got Codex's interface language; system: it only had the system's.

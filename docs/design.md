@@ -16,19 +16,21 @@
 
 另一条路线是在新任务里重建历史（阶段 0 验证过，技术上可行）。没有采用，因为用户要在同一个任务里看到连续的对话，见 [history/v0.1/phase0-report.md](history/v0.1/phase0-report.md)。
 
+v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不认识任何平台的核心，`panel/` 是面板，`adapters/<平台>/` 是各平台的接入；`plugin/src` 顶层放入口（`plugin-server.ts`、`proxy.ts`、`cam.ts`）和还没拆完的文件。分层规则由 `spike/src/layers.test.ts` 检查。
+
 | 部分 | 代码（`plugin/src`） | 作用 |
 |---|---|---|
-| 引擎 | `proxy.ts`、`engine.ts`、`routes.ts` | 本机代理：按绑定线路转发、改写请求、记录每个任务最近一次请求的统计；全机只有一个 |
+| 引擎 | `proxy.ts`、`engine.ts`、`core/routes.ts` | 本机代理：按绑定线路转发、改写请求、记录每个任务最近一次请求的统计；全机只有一个 |
 | 插件服务 | `plugin-server.ts` | Codex 为每个会话启动的 MCP 服务：拉起并看守引擎，给面板提供数据；v0.3 起还给模型提供取图工具 |
-| 面板 | `panel.html`、`panel-state.ts` | 侧边面板里的 MCP 应用，以及它要显示的数据 |
-| 任务索引 | `thread-index.ts`、`images.ts`、`thumbnail.ts`、`png.ts`、`thread-names.ts` | 从 Codex 的任务记录里只读地找出图片和它的来源、编号、生成缩略图、读任务名 |
-| 改写 | `rewrite.ts`、`selection.ts`、`request-stats.ts` | 占位符、说明和标签；勾选状态；请求统计 |
-| 接入和安装 | `codexconfig.ts`、`setup.ts`、`install.ts`、`codexcli.ts`、`cam.ts`、`plugin-cache.ts` | 管理 Codex 配置里带标记的块；用 Codex 的命令行装卸插件；保护升级中的旧运行文件；`cam` 命令行 |
-| 其他 | `language.ts`、`messages.ts`、`paths.ts`、`migrate-data.ts`、`binding.ts`、`entry.ts` | 语言、文字表、数据目录、旧数据迁移、新任务绑定 |
+| 面板 | `panel/panel.html`、`panel/panel-state.ts` | 侧边面板里的 MCP 应用，以及它要显示的数据 |
+| 任务索引 | `adapters/codex/thread-index.ts`、`images.ts`、`core/thumbnail.ts`、`core/png.ts`、`adapters/codex/thread-names.ts` | 从 Codex 的任务记录里只读地找出图片和它的来源、编号、生成缩略图、读任务名 |
+| 改写 | `rewrite.ts`、`selection.ts`、`core/request-stats.ts`、`core/notes.ts` | 占位符、说明和标签；勾选状态；请求统计；特征行 |
+| 接入和安装 | `adapters/codex/`：`codexconfig.ts`、`setup.ts`、`install.ts`、`codexcli.ts`、`plugin-cache.ts`、`binding.ts`；`cam.ts` | 管理 Codex 配置里带标记的块；用 Codex 的命令行装卸插件；保护升级中的旧运行文件；新任务绑定；`cam` 命令行 |
+| 其他 | `language.ts`、`messages.ts`、`core/paths.ts`、`core/migrate-data.ts`、`core/entry.ts` | 语言、文字表、数据目录、旧数据迁移 |
 | Claude 接入（v0.4） | `hooks/register.js`（Mod，不在 `plugin/src`） | 把会话的请求地址指向引擎；`/cam` 打开面板（v0.6 起有图时自动打开）；取图工具免确认 |
-| Claude 会话索引和改写（v0.4） | `claude-index.ts`、`claude-rewrite.ts` | 从 Claude Code 的会话记录找图、编号；改写 Anthropic Messages 请求 |
+| Claude 会话索引和改写（v0.4） | `adapters/claude/claude-index.ts`、`claude-rewrite.ts` | 从 Claude Code 的会话记录找图、编号；改写 Anthropic Messages 请求 |
 | Claude 思考记录（v0.4） | `claude-thinking.ts` | 账号校验思考记录时，去掉和实际发出的历史对不上的思考 |
-| 面板页（v0.4） | `panel-web.js` | 引擎把 `panel.html` 作为网页提供时，代替 MCP 应用的宿主 |
+| 面板页（v0.4） | `panel/panel-web.js`、`panel/panel-language.ts` | 引擎把 `panel.html` 作为网页提供时，代替 MCP 应用的宿主 |
 
 引擎和插件服务之间只通过数据目录里的文件共享状态，任何一方不在，另一方都照常工作。
 

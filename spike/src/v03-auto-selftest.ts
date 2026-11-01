@@ -22,13 +22,13 @@ import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { AppServer, findBundledCodex } from "./appserver.ts";
-import { codexHome } from "../../plugin/src/codexconfig.ts";
+import { codexHome } from "../../plugin/src/adapters/codex/codexconfig.ts";
 import { engineHealth } from "../../plugin/src/engine.ts";
 import { languageFileOf, rememberLang, type Lang } from "../../plugin/src/language.ts";
-import { requestStatsDirOf, selectionDirOf } from "../../plugin/src/paths.ts";
-import { readRequestStats } from "../../plugin/src/request-stats.ts";
+import { requestStatsDirOf, selectionDirOf } from "../../plugin/src/core/paths.ts";
+import { readRequestStats } from "../../plugin/src/core/request-stats.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
-import { loadThreadIndex } from "../../plugin/src/thread-index.ts";
+import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { archiveThreads, CORNER_IMAGES, runTurn, says, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 
 type Json = Record<string, any>;

@@ -7,8 +7,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { codexHome } from "../../plugin/src/codexconfig.ts";
-import { loadThreadIndex } from "../../plugin/src/thread-index.ts";
+import { codexHome } from "../../plugin/src/adapters/codex/codexconfig.ts";
+import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 
 type Json = Record<string, any>;
 const localRoot = join(resolve(dirname(fileURLToPath(import.meta.url)), "../.."), "local");

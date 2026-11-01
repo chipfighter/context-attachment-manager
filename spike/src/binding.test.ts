@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { bindThread, boundThread, isUserThread, newThreads, resolveThread, type Shown } from "../../plugin/src/binding.ts";
+import { bindThread, boundThread, isUserThread, newThreads, resolveThread, type Shown } from "../../plugin/src/adapters/codex/binding.ts";
 import { startThread } from "./testfixtures.ts";
 
 const PANEL = "01a0d301-0000-7000-8000-00000000f00d";

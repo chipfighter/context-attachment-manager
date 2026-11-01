@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { buildClaudeIndex, claudeImageData, loadClaudeIndex, readHistoryTranscript } from "../../plugin/src/claude-index.ts";
+import { buildClaudeIndex, claudeImageData, loadClaudeIndex, readHistoryTranscript } from "../../plugin/src/adapters/claude/claude-index.ts";
 import { claudeSelection, writeSelection } from "../../plugin/src/selection.ts";
 import { image, pngA, pngB, pngC, text, transcript } from "./claude-fixtures.ts";
 import { png } from "./testkit.ts";

@@ -18,8 +18,8 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { selectionDirOf } from "./paths.ts";
-import { forkOrigin, spawnParent, threadStartedAt } from "./thread-index.ts";
+import { selectionDirOf } from "./core/paths.ts";
+import { forkOrigin, spawnParent, threadStartedAt } from "./adapters/codex/thread-index.ts";
 
 export type Mark = { id: string; at: string };
 export type Selection = { threadId: string; unchecked: Record<string, Mark>; auto?: boolean; autoAt?: string; autoSince?: string; pinned?: Record<string, Mark>; inheritedFrom?: string };

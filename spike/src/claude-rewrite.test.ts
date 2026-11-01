@@ -7,7 +7,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildClaudeIndex } from "../../plugin/src/claude-index.ts";
+import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.ts";
 import { addCompacted, findRequestImages, rewriteMessages, summaryAt } from "../../plugin/src/claude-rewrite.ts";
 import { autoPlaceholder, claudeNote, compactedNote, compactLine, compactList, hereNote, includedLabel, plainPlaceholder } from "../../plugin/src/rewrite.ts";
 import { image, pngA, pngB, pngC, text, transcript, usualRequest, usualSession } from "./claude-fixtures.ts";

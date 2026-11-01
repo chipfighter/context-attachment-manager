@@ -16,9 +16,9 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
-import { findImages, type ImageRef } from "./images.ts";
-import { addNotes, type Notes } from "./notes.ts";
-import { decodePng } from "./png.ts";
+import { findImages, type ImageRef } from "../../images.ts";
+import { addNotes, type Notes } from "../../core/notes.ts";
+import { decodePng } from "../../core/png.ts";
 
 type Json = Record<string, any>;
 // v0.10: compacted, before Codex last compacted the thread and not in the history it kept (its tool outputs): the

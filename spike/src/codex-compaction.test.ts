@@ -13,7 +13,7 @@ import zlib from "node:zlib";
 import { rewriteBody } from "../../plugin/src/proxy.ts";
 import { addCodexCompacted, compactList } from "../../plugin/src/rewrite.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
-import { loadThreadIndex } from "../../plugin/src/thread-index.ts";
+import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { png } from "./testkit.ts";
 
 // These tests check the Chinese wording: the language is fixed, so neither the system's language nor one a panel

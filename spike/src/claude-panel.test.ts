@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { claudeSelectionDirOf } from "../../plugin/src/paths.ts";
+import { claudeSelectionDirOf } from "../../plugin/src/core/paths.ts";
 import { callClaudeTool, claudeToolsFor } from "../../plugin/src/plugin-server.ts";
 import { claudeNeedsRewrite, claudePanelApi, claudePanelPage, ownRequest, rewriteClaudeBody } from "../../plugin/src/proxy.ts";
 import { ensureAutoDefault } from "../../plugin/src/selection.ts";
@@ -149,7 +149,7 @@ test("the panel page is the Codex panel.html with the engine bridge before its o
 });
 
 test("the Claude browser bridge uses the app language and notifies an already open panel when it changes", async () => {
-  const script = readFileSync(new URL("../../plugin/src/panel-web.js", import.meta.url), "utf8");
+  const script = readFileSync(new URL("../../plugin/src/panel/panel-web.js", import.meta.url), "utf8");
   let language = "ja";
   const messages: any[] = [];
   const window = {

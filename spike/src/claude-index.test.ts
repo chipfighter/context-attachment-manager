@@ -7,7 +7,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { activeChain, buildClaudeIndex, claudeImageData, loadClaudeIndex, transcriptOf } from "../../plugin/src/claude-index.ts";
+import { activeChain, buildClaudeIndex, claudeImageData, loadClaudeIndex, transcriptOf } from "../../plugin/src/adapters/claude/claude-index.ts";
 import { image, pngA, pngB, pngC, text, transcript, usualSession } from "./claude-fixtures.ts";
 
 test("images get ids in conversation order: pasted ones by record, tool ones by tool_use_id", () => {

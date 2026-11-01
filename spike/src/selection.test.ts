@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { hasUnchecked, needsRewrite } from "../../plugin/src/proxy.ts";
+import { needsRewrite } from "../../plugin/src/proxy.ts";
 import { autoDefaultSince, effectiveSelection, ensureAutoDefault, ensureStableIds, mainTaskOf, readSelection, sideChatSelection, stableIdsSince, writeSelection } from "../../plugin/src/selection.ts";
 import { startThread } from "./testfixtures.ts";
 
@@ -38,7 +38,7 @@ test("a fork takes what its parent had unchecked by the time of the fork, and ke
   assert.deepEqual(Object.values(fork.unchecked).map((entry) => entry.id), ["IMG-001"], "IMG-002 was unchecked after the fork");
   assert.equal(fork.inheritedFrom, PARENT);
   assert.equal(existsSync(join(dir, `${FORK}.json`)), true);
-  assert.equal(hasUnchecked(FORK, dir, sessionsDir), true);
+  assert.equal(needsRewrite(FORK, dir, sessionsDir), true);
 });
 
 test("after the fork the two selections are independent", () => {
@@ -56,7 +56,7 @@ test("a fork of a fork asks its own parent; ordinary threads stay empty and get 
   assert.deepEqual(Object.values(effectiveSelection(FORK2, sessionsDir, dir).unchecked).map((entry) => entry.id), ["IMG-001"]);
   assert.deepEqual(effectiveSelection(PLAIN, sessionsDir, dir).unchecked, {});
   assert.equal(existsSync(join(dir, `${PLAIN}.json`)), false);
-  assert.equal(hasUnchecked(PLAIN, dir, sessionsDir), false);
+  assert.equal(needsRewrite(PLAIN, dir, sessionsDir), false);
 });
 
 test("a thread whose rollout is not written yet is looked up again later", () => {

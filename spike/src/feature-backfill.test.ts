@@ -9,11 +9,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import zlib from "node:zlib";
-import { buildClaudeIndex } from "../../plugin/src/claude-index.ts";
+import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.ts";
 import { rewriteBody, rewriteClaudeBody } from "../../plugin/src/proxy.ts";
 import { featureNote } from "../../plugin/src/rewrite.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
-import { awaitingLine, loadThreadIndex } from "../../plugin/src/thread-index.ts";
+import { awaitingLine, loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
 import { png } from "./testkit.ts";
 

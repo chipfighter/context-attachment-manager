@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 
 test("installing a new cache preserves the older runtime even when Codex cleans its contents", async () => {
-  const mod = await import("../../plugin/src/plugin-cache.ts").catch(() => null);
+  const mod = await import("../../plugin/src/adapters/codex/plugin-cache.ts").catch(() => null);
   assert.ok(mod, "installation protects existing runtime copies");
   const root = mkdtempSync(join(tmpdir(), "cam-cache-test-"));
   const old = join(root, "0.8.3"); mkdirSync(old);
@@ -19,7 +19,7 @@ test("installing a new cache preserves the older runtime even when Codex cleans 
 });
 
 test("a failed reinstall restores missing files in the existing version", async () => {
-  const mod = await import("../../plugin/src/plugin-cache.ts").catch(() => null);
+  const mod = await import("../../plugin/src/adapters/codex/plugin-cache.ts").catch(() => null);
   assert.ok(mod, "installation protects existing runtime copies");
   const root = mkdtempSync(join(tmpdir(), "cam-cache-test-"));
   const current = join(root, "0.9.0"); mkdirSync(current);

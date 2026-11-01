@@ -7,7 +7,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, renameSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { firstMessage, sessionIndexOf, threadName, threadTitle } from "../../plugin/src/thread-names.ts";
+import { firstMessage, sessionIndexOf, threadName, threadTitle } from "../../plugin/src/adapters/codex/thread-names.ts";
 
 const A = "01a0d301-0000-7000-8000-0000000000a1";
 const B = "01a0d301-0000-7000-8000-0000000000b2";
