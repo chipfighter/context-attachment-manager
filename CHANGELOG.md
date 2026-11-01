@@ -29,7 +29,7 @@ Earlier images come back after compaction and resume, with the same IDs, in Code
 
 - After updating, reopen Claude sessions that were open: their image tool still runs the earlier code and numbering until then.
 - Earlier transcripts are read only up to the compaction, and their image data stays on disk until needed: for the longest real session tested (9 transcripts, 210 images), the engine uses about 60 MB more memory and the first index takes under 2 seconds.
-- Verified so far with 285 unit tests, read-only replays of real Codex and Claude sessions, a live test in Claude Desktop (a compaction, a restart of the session, and an edited earlier message that moved the session to a new transcript), and a long real session replayed turn by turn into a test session with two compactions, where the model picked the right image for all 12 questions asked after them. The model self-tests are still to run.
+- Verified so far with 289 unit tests, read-only replays of real Codex and Claude sessions, a live test in Claude Desktop (a compaction, a restart of the session, and an edited earlier message that moved the session to a new transcript), and a long real session replayed turn by turn into a test session with two compactions, where the model picked the right image for all 12 questions asked after them. The model self-tests are still to run.
 
 ## [0.9.1] - 2026-10-29
 
