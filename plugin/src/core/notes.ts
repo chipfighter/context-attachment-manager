@@ -17,7 +17,7 @@ const RATING = /^(?:评价|rated)[ \t]*[：:][ \t]*/i;
 const CORRECTION = /^(?:更正|corrected)[ \t]*[：:][ \t]*/i;
 
 // v0.10: what a placeholder shows of an image's notes: the ratings noted by its own turn. A rating noted later would
-// change a placeholder that went out before it, and the prompt cache from there on (claude-cache.ts); the model has it
+// change a placeholder that went out before it, and the prompt cache from there on (anthropic-messages/cache.ts); the model has it
 // in its own reply. After a compaction the list shows everything noted before it (claude-index.ts, compactedNotes).
 export function notesBy(notes: Notes | undefined, turn: number | null): Notes | undefined {
   if (!notes || turn === null) return notes;

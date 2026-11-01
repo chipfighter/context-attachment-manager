@@ -8,8 +8,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.ts";
-import { addCompacted, findRequestImages, rewriteMessages, summaryAt } from "../../plugin/src/claude-rewrite.ts";
-import { autoPlaceholder, claudeNote, compactedNote, compactLine, compactList, hereNote, includedLabel, plainPlaceholder } from "../../plugin/src/rewrite.ts";
+import { addCompacted, summaryAt } from "../../plugin/src/adapters/protocols/anthropic-messages/rewrite.ts";
+import { findRequestImages, rewriteMessages } from "../../plugin/src/adapters/claude/claude-rewrite.ts";
+import { autoPlaceholder, claudeNote, compactedNote, compactLine, compactList, hereNote, includedLabel, plainPlaceholder } from "../../plugin/src/core/words.ts";
 import { image, pngA, pngB, pngC, text, transcript, usualRequest, usualSession } from "./claude-fixtures.ts";
 
 const noPixels = () => null;

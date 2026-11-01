@@ -9,9 +9,11 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import test from "node:test";
 import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.ts";
-import { addCompacted, rewriteMessages } from "../../plugin/src/claude-rewrite.ts";
-import { findImages, type ImageRef } from "../../plugin/src/images.ts";
-import { addCodexCompacted, rewriteItems, type Described } from "../../plugin/src/rewrite.ts";
+import { addCompacted } from "../../plugin/src/adapters/protocols/anthropic-messages/rewrite.ts";
+import { rewriteMessages } from "../../plugin/src/adapters/claude/claude-rewrite.ts";
+import { findImages, type ImageRef } from "../../plugin/src/adapters/protocols/openai-responses/images.ts";
+import { addCodexCompacted, rewriteItems } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
+import type { Described } from "../../plugin/src/core/words.ts";
 import { image, pngA, pngB, pngC, text, transcript, usualRequest } from "./claude-fixtures.ts";
 import { png } from "./testkit.ts";
 

@@ -12,7 +12,7 @@
 // v0.1-14 — the panel reports Codex's interface language with its calls; it is remembered (language.ts), and the tool
 // list (the tab's title), results and refusals speak it (messages.ts). v0.1-20 — Codex's language setting counts too.
 // v0.3 — cam_view_image, the one tool for the model: in a thread with automatic selection on, it returns the originals
-// of images by id, each after a line naming it (rewrite.ts), so the index knows them as copies. Codex's code mode does
+// of images by id, each after a line naming it (core/words.ts), so the index knows them as copies. Codex's code mode does
 // not list plugin tools to the model; the model learns its name from the context note and looks it up.
 // v0.4 — the same service under Claude Code (CAM_HOST=claude, set by the Claude plugin's manifest): it keeps the same
 // engine running, and serves the Claude plugin's mod (its panel and its routing, hooks/register.js) and the model's
@@ -37,7 +37,7 @@ import { say } from "./messages.ts";
 import { migrateDataOnce } from "./core/migrate-data.ts";
 import { applySelection, claudeImageFor, imageFor, loadPanelState, type ClaudePanelOptions, type PanelState } from "./panel/panel-state.ts";
 import { claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./core/paths.ts";
-import { fetchedLabel, fetchWords } from "./rewrite.ts";
+import { fetchedLabel, fetchWords } from "./core/words.ts";
 import { claudeSelection, effectiveSelection, ensureAutoDefault, ensureStableIds, stableIdsSince } from "./selection.ts";
 import { connectDirectly, useEngine, usesEngine } from "./adapters/codex/setup.ts";
 import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, setPixelCache, sideChatOrigin } from "./adapters/codex/thread-index.ts";
@@ -92,7 +92,7 @@ export function toolsFor(lang: Lang) {
       inputSchema: { type: "object", properties: { ...shared, target: { type: "string" } }, required: ["target"] },
       _meta: APP_ONLY,
     },
-    // For the model (no app-only visibility); its words are text for the model, so they live in rewrite.ts.
+    // For the model (no app-only visibility); its words are text for the model, so they live in core/words.ts.
     {
       name: "cam_view_image",
       title: fetchWords(lang).title,

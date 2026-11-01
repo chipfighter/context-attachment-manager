@@ -16,13 +16,13 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
-import { findImages, type ImageRef } from "../../images.ts";
+import { findImages, type ImageRef } from "../protocols/openai-responses/images.ts";
 import { addNotes, type Notes } from "../../core/notes.ts";
 import { decodePng } from "../../core/png.ts";
 
 type Json = Record<string, any>;
 // v0.10: compacted, before Codex last compacted the thread and not in the history it kept (its tool outputs): the
-// engine puts it back after the compaction (rewrite.ts, addCodexCompacted); for Claude, before the latest compaction.
+// engine puts it back after the compaction (openai-responses/rewrite.ts, addCodexCompacted); for Claude, before the latest compaction.
 export type IndexedImage = ImageRef & { id: string; turn: number | null; bytes: number; pixelSha256: string | null; compacted?: boolean };
 // v0.3: an image the model fetched with our tool, a copy of `of` sent in its own turn only (spec: automatic selection).
 export type FetchedCopy = { key: string; of: string; turn: number | null };

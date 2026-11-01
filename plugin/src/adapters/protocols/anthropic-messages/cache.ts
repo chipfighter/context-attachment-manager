@@ -15,7 +15,7 @@
 // first image a later request will leave out. Output: the messages with the marks placed, and what to remember once
 // they are sent.
 
-import { link } from "./claude-thinking.ts";
+import { link } from "./thinking.ts";
 
 type Json = Record<string, any>;
 export type Mark = { message: number; block: number };

@@ -8,10 +8,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.ts";
-import { rewriteMessages } from "../../plugin/src/claude-rewrite.ts";
-import { findImages, type ImageRef } from "../../plugin/src/images.ts";
+import { rewriteMessages } from "../../plugin/src/adapters/claude/claude-rewrite.ts";
+import { findImages, type ImageRef } from "../../plugin/src/adapters/protocols/openai-responses/images.ts";
 import { addNotes, notesBy, sceneOf, type Notes } from "../../plugin/src/core/notes.ts";
-import { autoPlaceholder, clip, featureNote, plainPlaceholder, rewriteItems, type Described } from "../../plugin/src/rewrite.ts";
+import { autoPlaceholder, clip, featureNote, plainPlaceholder, type Described } from "../../plugin/src/core/words.ts";
+import { rewriteItems } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
 import { buildIndex, writesNotes, type Parsed } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { claudeTurnTexts, loadPanelState, panelStateOf } from "../../plugin/src/panel/panel-state.ts";
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
@@ -161,7 +162,7 @@ test("Claude: the feature line note follows the message holding the first image,
   assert.deepEqual([some.report.featureAt, some.report.noteAt], [1, 4]);
 });
 
-// v0.10: a placeholder or the list after a compaction changing later rewrote the prompt cache from there (claude-cache.ts).
+// v0.10: a placeholder or the list after a compaction changing later rewrote the prompt cache from there (anthropic-messages/cache.ts).
 test("v0.10: a placeholder shows the ratings of the image's own turn; the list after a compaction, the notes as they stood then", () => {
   assert.deepEqual(notesBy({ line: "书房｜红色方块", ratings: [{ turn: 1, text: "好" }, { turn: 3, text: "太暗" }] }, 2), { line: "书房｜红色方块", ratings: [{ turn: 1, text: "好" }] });
   assert.equal(notesBy({ line: null, ratings: [{ turn: 3, text: "太暗" }] }, 2), undefined);

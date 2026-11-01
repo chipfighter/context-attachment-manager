@@ -22,7 +22,8 @@
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { baseName, FETCHED_STATE, imageDigest, type ImageKind, type ImageRef } from "../../images.ts";
+import { baseName, FETCHED_STATE, imageDigest, type ImageKind } from "../../core/images.ts";
+import type { ImageRef } from "../protocols/openai-responses/images.ts";
 import { addNotes, copyNotes, type Notes } from "../../core/notes.ts";
 import { pixelHashOfData, type FetchedCopy, type IndexedImage, type ThreadIndex } from "../codex/thread-index.ts";
 

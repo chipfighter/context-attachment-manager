@@ -6,8 +6,9 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findImages, type ImageRef } from "../../plugin/src/images.ts";
-import { autoNote, autoPlaceholder, fetchedLabel, OMISSION_NOTE, omissionNote, rewriteItems, type Described } from "../../plugin/src/rewrite.ts";
+import { findImages, type ImageRef } from "../../plugin/src/adapters/protocols/openai-responses/images.ts";
+import { autoNote, autoPlaceholder, fetchedLabel, OMISSION_NOTE, omissionNote, type Described } from "../../plugin/src/core/words.ts";
+import { rewriteItems } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
 import { png } from "./testkit.ts";
 
 const url = (bytes: Buffer) => `data:image/png;base64,${bytes.toString("base64")}`;

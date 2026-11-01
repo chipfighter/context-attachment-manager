@@ -318,7 +318,7 @@ test("a Claude Code request is rewritten from the session's transcript and selec
 test("an account that refuses thinking after an edited history gets the rewrite without the thinking that no longer fits", async () => {
   const { usualSession, usualRequest, text } = await import("./claude-fixtures.ts");
   const { rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
-  const { newThinkingRecord, recordSent } = await import("../../plugin/src/claude-thinking.ts");
+  const { newThinkingRecord, recordSent } = await import("../../plugin/src/adapters/protocols/anthropic-messages/thinking.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
   const session = "11111111-2222-4333-8444-555555555555";

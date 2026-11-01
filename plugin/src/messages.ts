@@ -1,6 +1,6 @@
 // Purpose: v0.1-14 — the plugin's own words in Simplified Chinese and English: Codex's tool list and the panel's tab
 // title, results and refusals of the panel's calls, conflicts with the user's settings, and the command line. The
-// panel page keeps its texts in panel.html, and the text for the model is in rewrite.ts. Every key exists in both
+// panel page keeps its texts in panel.html, and the text for the model is in core/words.ts. Every key exists in both
 // languages (a unit test checks it), so changing a text means changing both.
 // Input: a language and a key, with {name} values filled in. Output: strings.
 

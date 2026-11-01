@@ -1,5 +1,7 @@
-// Purpose: P2 — replace the images the user unchecked with placeholder text in a Responses request's `input`.
-// Nothing else changes: checked images, unknown images and all other items are forwarded as they are.
+// Purpose: the text for the model (v0.11: moved here from rewrite.ts unchanged, docs/v0.11/plan.md): placeholders,
+// notes, labels, lists, and the words of the fetch tool, in Chinese and English. Every platform and request format
+// uses the same words; where a platform needs its own (Claude's notes after a message, Codex's compaction note), the
+// function says so. The history of each wording is in the comments next to it.
 // v0.1 — placeholders say the image was seen when it appeared and is left out now by the user's choice, so the model
 // keeps trusting what it said about it (user report 2026-09-25).
 // v0.1-14 — in the user's language (Codex's interface language, language.ts): the Chinese wording is the one tested on
@@ -15,21 +17,15 @@
 // lines in its replies (notes.ts); a placeholder carries them, so the model still tells the images apart after a
 // compaction. For that a feature line note goes before the turn of the first image, and every image sent says its id,
 // also the ones new in this turn. The second line of a placeholder is shorter, offsetting the added text.
-// Input: request items, a lookup into the thread index, the keys to leave out. Output: new items plus a metadata report.
+// Input: what is known of an image (Described), the language. Output: strings.
 
-import { FETCHED_STATE, findImages, type ImageKind, type ImageRef } from "./images.ts";
-import type { Lang } from "./language.ts";
-import type { Notes, Rating } from "./core/notes.ts";
+import { FETCHED_STATE, type ImageKind } from "./images.ts";
+import type { Lang } from "./lang.ts";
+import type { Notes, Rating } from "./notes.ts";
 
-type Json = Record<string, any>;
 // notes (v0.8): what the model noted about the image, shown in its placeholder. awaiting (v0.10): an image of an
 // interrupted turn sent once more for its feature line (thread-index.ts, awaitingLine); its label says so.
 export type Described = { id: string; name: string | null; label: string | null; kind: ImageKind; turn: number | null; width: number | null; height: number | null; notes?: Notes; awaiting?: boolean };
-export type Replacement = { id: string; key: string; kind: ImageKind; mode: "plain" | "duplicate"; sameAs: string | null; base64Chars: number };
-// noteAt: where the developer message explaining omitted images was inserted, if one was. copies: the ids whose copies
-// fetched in an earlier turn were left out. v0.8: featureAt, where the feature line note went; labeled, how many
-// images sent got their id; unknown, how many images of the request the index did not know (e.g. not recorded yet).
-export type RewriteReport = { images: number; replaced: Replacement[]; locked: string[]; sentContentIds: string[]; copies: string[]; noteAt?: number; featureAt?: number; labeled?: number; unknown?: number; late?: number };
 
 type FetchWords = { title: string; description: string; ids: string; missing: (id: string) => string; unavailable: (id: string) => string; off: string };
 type Words = {
@@ -42,7 +38,7 @@ type Words = {
   heading: (id: string, label: string | null, state: string, fields: string[]) => string;
   plain: (id: string) => string; duplicate: (id: string, where: string) => string; note: string;
   autoPlain: (id: string) => string; autoNote: string; copy: (id: string) => string; fetch: FetchWords;
-  // v0.4, Claude Code only (claude-rewrite.ts): what the note adds about tool results, and the short note that follows
+  // v0.4, Claude Code only (anthropic-messages/rewrite.ts): what the note adds about tool results, and the short note that follows
   // each message holding omitted images, naming them.
   toolNote: string; here: (list: string) => string; hereAuto: (list: string) => string; listItem: (id: string, name: string | null, kind: string) => string;
   // v0.5, Claude Code only: after a compaction summary, the images from before it, which of them are not sent this
@@ -315,7 +311,7 @@ export function includedLabel(image: Described, lang: Lang = "zh"): string {
 // v0.3: automatic selection.
 export const autoNote = (lang: Lang) => WORDS[lang].autoNote;
 export const fetchWords = (lang: Lang): FetchWords => WORDS[lang].fetch;
-// v0.4: the same words for a Claude Code request (claude-rewrite.ts).
+// v0.4: the same words for a Claude Code request (anthropic-messages/rewrite.ts).
 export const copyNote = (id: string, lang: Lang) => WORDS[lang].copy(id);
 export const newImageWord = (lang: Lang) => WORDS[lang].newImage;
 
@@ -330,7 +326,7 @@ export function hereNote(images: Described[], lang: Lang = "zh", auto = false): 
 
 // v0.5, Claude Code only: the note after the message holding a compaction summary, listing the images from before it
 // and naming the ones not sent this time. Their placeholders are the first in the request, so the full note comes
-// first, as it does after the first message holding placeholders (claude-rewrite.ts).
+// first, as it does after the first message holding placeholders (anthropic-messages/rewrite.ts).
 // v0.10: the images are no longer listed in the note, only counted with their ids (the ones before the latest
 // compaction are the first ids); those not sent are in the list after the summary (compactList).
 export function compactedNote(images: Described[], sent: Set<string>, lang: Lang = "zh", auto = false): string {
@@ -364,22 +360,8 @@ export function compactList(images: Listed[], lang: Lang = "zh"): string {
   return [WORDS[lang].compactHeader(images.length), ...images.map((image, at) => compactLine(image, lang, sameAs(image, at)))].join("\n");
 }
 
-// v0.10, Codex: right after its compaction item, the images that compaction did not keep (thread-index.ts,
-// compacted): a developer message with the note and the list, then the ones still sent (pinned, or checked in manual
-// mode) as originals with their labels, in a user message. The same selection gives the same items, so the cached
-// prefix holds. No compaction item in the request: nothing changes.
-export function addCodexCompacted(items: Json[], listed: Described[], resend: Array<{ image: Described; url: string }>, options: { lang?: Lang; auto?: boolean } = {}): { items: Json[]; at: number | null } {
-  const { lang = "zh", auto = false } = options;
-  let at = -1;
-  items.forEach((item, position) => { if (item?.type === "compaction") at = position; });
-  if (at < 0 || !listed.length) return { items, at: null };
-  const sent = new Set(resend.map(({ image }) => image.id));
-  const missing = listed.filter((image) => !sent.has(image.id));
-  const text = [WORDS[lang].codexCompacted(listed.length, resend.length, auto), ...(missing.length ? ["", compactList(missing, lang)] : [])].join("\n");
-  const added: Json[] = [{ type: "message", role: "developer", content: [{ type: "input_text", text }] }];
-  if (resend.length) added.push({ type: "message", role: "user", content: resend.flatMap(({ image, url }) => [{ type: "input_text", text: includedLabel(image, lang) }, { type: "input_image", image_url: url }]) });
-  return { items: [...items.slice(0, at + 1), ...added, ...items.slice(at + 1)], at };
-}
+// v0.10, Codex: the note before the images its compaction did not keep (addCodexCompacted).
+export const codexCompactedNote = (count: number, resent: number, auto: boolean, lang: Lang) => WORDS[lang].codexCompacted(count, resent, auto);
 
 export function autoPlaceholder(image: Described, lang: Lang = "zh"): string {
   const words = WORDS[lang];
@@ -393,100 +375,4 @@ export const featureNote = (lang: Lang) => WORDS[lang].featureNote;
 // images within their message and means nothing here: GPT-6 Luna once read it as the digit asked about.
 export function fetchedLabel(image: Described, lang: Lang = "zh"): string {
   return heading(WORDS[lang], { ...image, label: null }, FETCHED_STATE[lang]);
-}
-
-export type RewriteOptions = {
-  lang?: Lang;
-  // Copies the model fetched in an earlier turn (key → the id they copy): left out in either mode.
-  copies?: Map<string, string>;
-  // Automatic selection: its wording; and a placeholder points to, and a label marks, only images of earlier turns
-  // (the pinned ones), which stay sent through the turn, so a copy fetched mid-turn changes nothing before it.
-  auto?: { currentTurn: number };
-  // v0.8: the feature line note before the turn of the first image, and an id label on every image sent, also the ones
-  // new in this turn (the model notes them by id). A duplicate placeholder still points only to earlier turns' images.
-  features?: boolean;
-};
-
-export function rewriteItems(
-  items: Json[],
-  describe: (ref: ImageRef) => Described | undefined,
-  unchecked: Set<string>,
-  pixelHash: (ref: ImageRef) => string | null,
-  options: Lang | RewriteOptions = "zh",
-): { items: Json[]; report: RewriteReport } {
-  const { lang = "zh", copies = new Map<string, string>(), auto, features = false }: RewriteOptions = typeof options === "string" ? { lang: options } : options;
-  const refs = findImages(items);
-  const report: RewriteReport = { images: refs.length, replaced: [], locked: [], sentContentIds: [], copies: [] };
-  const copied = refs.filter((ref) => copies.has(ref.key) && ref.part !== null);
-  const drop = refs.filter((ref) => !copies.has(ref.key) && unchecked.has(ref.key) && ref.replaceable && describe(ref));
-  for (const ref of refs) if (unchecked.has(ref.key) && !ref.replaceable) report.locked.push(describe(ref)?.id ?? ref.key);
-  const sent = refs.filter((ref) => !drop.includes(ref) && !copied.includes(ref));
-  report.sentContentIds = sent.map((ref) => ref.contentId);
-  // A copy the model fetched this turn is known as one (the line our fetch tool writes before it), not as an image.
-  const unknown = refs.filter((ref) => !copied.includes(ref) && !ref.fetchedId && !describe(ref)).length;
-  if (unknown) report.unknown = unknown;
-  // v0.8: the first image the index knows; the feature line note goes before its turn.
-  const first = features ? refs.find((ref) => describe(ref)) : undefined;
-  if (!drop.length && !copied.length && !first) return { items, report };
-  const earlier = (ref: ImageRef) => { const turn = describe(ref)?.turn; return auto !== undefined && turn !== null && turn !== undefined && turn < auto.currentTurn; };
-  const lasting = auto ? sent.filter(earlier) : sent;
-
-  const same = (a: ImageRef, b: ImageRef) => {
-    if (a.contentId === b.contentId) return true;
-    if (a.width !== b.width || a.height !== b.height) return false;
-    const pixels = pixelHash(a);
-    return pixels !== null && pixels === pixelHash(b);
-  };
-  // Each edit puts one text part at `at`, in place of `remove` parts (none for a label).
-  const edits = new Map<number, Array<{ at: number; remove: number; text: string }>>();
-  const edit = (item: number, at: number, remove: number, text: string) => edits.set(item, [...(edits.get(item) ?? []), { at, remove, text }]);
-  let firstPlain: number | null = null;
-  for (const ref of drop) {
-    const image = describe(ref)!;
-    const copy = lasting.find((other) => same(other, ref));
-    const copyImage = copy ? describe(copy) ?? { id: WORDS[lang].newImage, name: copy.name, label: copy.label, kind: copy.kind, turn: null, width: copy.width, height: copy.height } : null;
-    const text = copyImage ? duplicatePlaceholder(image, copyImage, lang) : auto ? autoPlaceholder(image, lang) : plainPlaceholder(image, lang);
-    if (!copyImage && firstPlain === null) firstPlain = ref.item;
-    report.replaced.push({ id: image.id, key: ref.key, kind: ref.kind, mode: copyImage ? "duplicate" : "plain", sameAs: copyImage?.id ?? null, base64Chars: ref.base64Chars });
-    const at = ref.openTag ?? ref.part!;
-    edit(ref.item, at, (ref.closeTag ?? ref.part!) - at + 1, text);
-  }
-  for (const ref of copied) {
-    edit(ref.item, ref.part!, 1, WORDS[lang].copy(copies.get(ref.key)!));
-    report.copies.push(copies.get(ref.key)!);
-  }
-  // v0.1-25: a checked image sits in its old place among placeholders, so every image still sent is marked with its id.
-  // v0.8: with feature lines, this turn's new images too.
-  for (const ref of features ? sent : lasting) {
-    const image = ref.replaceable && ref.part !== null ? describe(ref) : undefined;
-    if (!image) continue;
-    edit(ref.item, ref.openTag ?? ref.part!, 0, includedLabel(image, lang));
-    report.labeled = (report.labeled ?? 0) + 1;
-  }
-  const next = items.map((item, index) => {
-    const list = edits.get(index);
-    if (!list) return item;
-    const field = item.type === "message" ? "content" : "output";
-    const parts: Json[] = [...item[field]];
-    for (const { at, remove, text } of list.sort((a, b) => b.at - a.at)) parts.splice(at, remove, { type: "input_text", text });
-    return { ...item, [field]: parts };
-  });
-  // Only plain placeholders need the note (a duplicate's content is still in view). It goes before the user message
-  // that opens that turn, so it never splits a tool call from its output. v0.8: the feature line note likewise, before
-  // the turn of the first image: at or before the other one (the first image comes no later than the first omitted).
-  const turnStart = (from: number) => {
-    let at = from;
-    while (at > 0 && !(next[at].type === "message" && next[at].role === "user")) at--;
-    return at;
-  };
-  const developer = (text: string) => ({ type: "message", role: "developer", content: [{ type: "input_text", text }] });
-  const noteAt = firstPlain !== null ? turnStart(firstPlain) : null;
-  const featureAt = first ? turnStart(first.item) : null;
-  if (noteAt !== null) next.splice(noteAt, 0, developer(auto ? WORDS[lang].autoNote : WORDS[lang].note));
-  if (featureAt !== null) {
-    next.splice(featureAt, 0, developer(WORDS[lang].featureNote));
-    report.featureAt = featureAt;
-  }
-  if (noteAt !== null) report.noteAt = noteAt + (featureAt !== null ? 1 : 0);
-  return { items: next, report };
 }

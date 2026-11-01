@@ -15,7 +15,7 @@
 
 import { readChildren } from "../children.ts";
 import { claudeHome, claudeImageData, claudeStartedAt, isPrompt, loadClaudeIndex, type ClaudeIndex, type ClaudeRecord } from "../adapters/claude/claude-index.ts";
-import type { ImageSource } from "../images.ts";
+import type { ImageSource } from "../core/images.ts";
 import { sceneOf, withoutRecords } from "../core/notes.ts";
 import { childrenDirOf, claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, requestStatsDirOf, selectionDirOf } from "../core/paths.ts";
 import { readRequestStats, type RequestStats } from "../core/request-stats.ts";
@@ -49,8 +49,8 @@ export type SendInfo = {
   // What the engine sent for that request; resent: images from before a compaction it sent again (v0.5).
   last: { at: string; bytesBefore: number; bytesAfter: number; replaced: number; resent: number; skipped: boolean } | null;
   // v0.4: "fallback": Anthropic refused the rewritten history under its thinking, so the engine sent the original
-  // (claude-rewrite.ts): what the user unchecked went out that time. "thinking": the account checks thinking, and the
-  // engine left out `count` thinking records that no longer fit the history as sent (claude-thinking.ts); the model may
+  // (anthropic-messages/rewrite.ts): what the user unchecked went out that time. "thinking": the account checks thinking, and the
+  // engine left out `count` thinking records that no longer fit the history as sent (anthropic-messages/thinking.ts); the model may
   // think again.
   notice: { kind: "skipped"; at: string; reason: SkipReason } | { kind: "websocket"; at: string } | { kind: "fallback"; at: string } | { kind: "thinking"; at: string; count: number } | null;
 };

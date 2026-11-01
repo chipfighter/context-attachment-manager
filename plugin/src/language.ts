@@ -16,7 +16,8 @@ import { dirname, join } from "node:path";
 import { codexHome } from "./adapters/codex/codexconfig.ts";
 import { dataDir } from "./core/paths.ts";
 
-export type Lang = "zh" | "en";
+import type { Lang } from "./core/lang.ts";
+export type { Lang };
 // codex: the panel got Codex's interface language; system: it only had the system's.
 export type LangSource = "codex" | "system";
 // codexLocale: Codex's language setting when the panel reported (absent in records from before v0.1-20).
