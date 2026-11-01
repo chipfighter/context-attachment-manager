@@ -71,4 +71,6 @@ Everything stays on your computer. The plugin sends nothing anywhere beyond the 
 
 We ran a short-drama keyframe chat in Codex with and without the plugin: nine keyframes, about 32 MB of images. Without the plugin, every time Codex had to send the whole chat again (after a restart, and right after compacting it), the request was 42 MB and never got through. With the plugin, the same request was 0.12 MB, and in this test the model picked the right image both before and after compacting. The method, the numbers and how to run it yourself are in [eval](eval/README.md).
 
+We also ran a longer task in Claude Code: 51 images, compacted twice, then forked. With and without the plugin the model found nearly every image (19 or 20 of 20 questions), because the images were files on disk it could read again; in a chat this short the plugin cost about 30% more. Details are in the [long-task eval](eval/long-task/README.md).
+
 <p align="center"><sub><a href="CHANGELOG.md">Changelog</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a></sub></p>

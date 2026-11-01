@@ -1,5 +1,6 @@
 // The real Claude mod handlers, with only the host's process environment and HTTP API replaced.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 let instance = 0;
@@ -170,4 +171,13 @@ test("a reloaded mod upgrades an earlier unscoped engine URL using its saved ori
   assert.equal(JSON.parse(registration.options.body).baseUrl, original.ANTHROPIC_BASE_URL);
   await m.end();
   assert.deepEqual(Object.fromEntries(m.env), original);
+});
+
+// Claude Code 2.1.309 refuses the whole module otherwise ("$.env.get takes a literal name as its first argument"), and
+// the plugin then does nothing in that session: its requests no longer go through the engine.
+test("every $.env call in the mod names its variable literally", () => {
+  const source = readFileSync(new URL("../../hooks/register.js", import.meta.url), "utf8");
+  const names = [...source.matchAll(/\$\.env\.(?:get|set)\(\s*([^,)]+)/g)].map((match) => match[1].trim());
+  assert.ok(names.length >= 10);
+  assert.deepEqual(names.filter((name) => !/^'[A-Za-z_][A-Za-z0-9_]*'$/.test(name)), []);
 });

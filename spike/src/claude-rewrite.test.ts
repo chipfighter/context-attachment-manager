@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildClaudeIndex } from "../../plugin/src/claude-index.ts";
 import { addCompacted, findRequestImages, rewriteMessages, summaryAt } from "../../plugin/src/claude-rewrite.ts";
-import { autoPlaceholder, claudeNote, compactedNote, hereNote, includedLabel, plainPlaceholder } from "../../plugin/src/rewrite.ts";
+import { autoPlaceholder, claudeNote, compactedNote, compactLine, compactList, hereNote, includedLabel, plainPlaceholder } from "../../plugin/src/rewrite.ts";
 import { image, pngA, pngB, pngC, text, transcript, usualRequest, usualSession } from "./claude-fixtures.ts";
 
 const noPixels = () => null;
@@ -28,6 +28,19 @@ test("a pasted image not in the transcript yet has no key; one matching no recor
   const index = buildClaudeIndex("s", t.records);
   const messages = [...usualRequest().slice(0, 8), { role: "user", content: [image(pngB), text("new one")] }];
   assert.equal(findRequestImages(messages, index).at(-1)!.key, null);
+});
+
+test("v0.10: unknown images after the model's latest reply are counted as late (the transcript may not have them yet)", () => {
+  const { t } = usualSession();
+  const index = buildClaudeIndex("s", t.records);
+  const fresh = { role: "user", content: [image(pngB), text("new one")] };
+  const now = rewriteMessages([...usualRequest(), fresh], index, new Set(), noPixels).report;
+  assert.equal(now.unknown, 1);
+  assert.equal(now.late, 1);
+  // Once the model has answered after it, an image the transcript still lacks is not waited for.
+  const after = rewriteMessages([...usualRequest(), fresh, { role: "assistant", content: [text("ok")] }, { role: "user", content: [text("next")] }], index, new Set(), noPixels).report;
+  assert.equal(after.unknown, 1);
+  assert.equal(after.late, undefined);
 });
 
 test("records joined into one message still match, in order", () => {
@@ -182,22 +195,23 @@ test("v0.5: after a compaction, the images from before it go back right after th
   const request = [{ role: "user", content: "summary" }, { role: "assistant", content: [text("A white rectangle.")] }, { role: "user", content: [text("And now?")] }];
   const block = (data: string) => ({ type: "image", source: { type: "base64", media_type: "image/png", data } });
   assert.equal(summaryAt(request, "summary"), 0);
-  // IMG-001 unchecked: its placeholder stands where it would be, in their order; IMG-002 goes out with its label.
+  // IMG-002 goes out with its label; IMG-001, unchecked, is a line in the list after it (v0.10: not a placeholder).
   const out = addCompacted(request, "summary", [a, c], [{ image: c, block: block(pngC) }], { lang: "en" });
   assert.deepEqual([out.at, out.inserted], [0, true]);
   assert.deepEqual(out.messages[0].content, [
     { type: "text", text: "summary" },
-    { type: "text", text: plainPlaceholder(a, "en") },
     { type: "text", text: includedLabel(c, "en") },
     block(pngC),
+    { type: "text", text: compactList([a], "en") },
   ]);
-  // The note follows as a system message: the full note first, since something is left out, then the list.
+  assert.equal(compactList([a], "en"), "[Images from before the compaction, the 1 not included as originals this time: id | name | source | turn | features and ratings]\nIMG-001 | - | upload | turn 1");
+  // The note follows as a system message: the full note first, since something is left out, then the count and ids.
   assert.deepEqual(out.messages[1], { role: "system", content: compactedNote([a, c], new Set(["IMG-002"]), "en") });
   const note = out.messages[1].content;
   assert.ok(note.startsWith(claudeNote("en")));
-  assert.match(note, /IMG-001 \(uploaded by the user\), IMG-002 \(c\.png, viewed with a tool\)/);
-  // The one not sent is named, with what was said looking at it standing, and how to get it back.
-  assert.match(note, /Not included this time: IMG-001 \(uploaded by the user\) \(the user unchecked them/);
+  assert.match(note, /the conversation before the summary had 2 images \(IMG-001 to IMG-002\)/);
+  // The ones not sent are counted, with what was said looking at them standing, and how to get one back.
+  assert.match(note, /The other 1 are not included as originals this time \(the user unchecked them/);
   assert.match(note, /remain valid; do not take them back/);
   assert.match(note, /"need IMG-xxx"/);
   assert.deepEqual(out.messages.slice(2), request.slice(1));
@@ -207,7 +221,7 @@ test("v0.5: after a compaction, the images from before it go back right after th
   const all = addCompacted(request, "summary", [a, c], [{ image: a, block: block(pngA) }, { image: c, block: block(pngC) }], { lang: "en" });
   assert.deepEqual(all.messages[0].content.map((b: any) => b.type === "image" ? "image" : b.text), ["summary", includedLabel(a, "en"), "image", includedLabel(c, "en"), "image"]);
   assert.ok(all.messages[1].content.startsWith("Context management note (from the context asset manager the user installed): "));
-  assert.doesNotMatch(all.messages[1].content, /Not included this time/);
+  assert.doesNotMatch(all.messages[1].content, /not included as originals/);
   // Without the full note, this one says where an image checked again comes back: not in the user's new message.
   assert.match(all.messages[1].content, /or one you asked for: an image the user checks again comes back there, not in the user's new message/);
   assert.doesNotMatch(note, /comes back there, not in the user's new message/);
@@ -219,12 +233,22 @@ test("v0.5: after a compaction, the images from before it go back right after th
   assert.equal(joined.inserted, false);
   assert.deepEqual(joined.messages[1], { role: "system", content: [{ type: "text", text: note }], output_config: { effort: "low" } });
   assert.equal(joined.messages.length, marked.length);
-  // Automatic selection: the placeholder and the note in its words, with the tool to fetch one.
+  // Automatic selection: the list and the note in its words, with the tool to fetch one.
   const blocks = [{ role: "user", content: [text("summary"), text("<system-reminder>x</system-reminder>")] }];
   const auto = addCompacted(blocks, "summary", [a], [], { lang: "zh", auto: true });
-  assert.deepEqual(auto.messages[0].content.map((b: any) => b.text), ["summary", autoPlaceholder(a, "zh"), "<system-reminder>x</system-reminder>"]);
+  assert.deepEqual(auto.messages[0].content.map((b: any) => b.text), ["summary", compactList([a], "zh"), "<system-reminder>x</system-reminder>"]);
+  assert.equal(compactLine(a, "zh"), "IMG-001｜-｜上传｜第 1 轮");
+  assert.equal(compactLine({ ...a, notes: { line: "书房｜红色方块", ratings: [{ turn: 3, text: "太暗" }] } }, "zh"), "IMG-001｜-｜上传｜第 1 轮｜书房｜红色方块｜评价：第 3 轮“太暗”");
+  // A rating keeps up to 30 Han characters, as a feature line does (the long test lost the second half of a rating at 15).
+  assert.equal(compactLine({ ...a, notes: { line: null, ratings: [{ turn: 9, text: "左边那格光线太平、表情也僵；右边那格手指多了一根" }] } }, "zh"), "IMG-001｜-｜上传｜第 1 轮｜评价：第 9 轮“左边那格光线太平、表情也僵；右边那格手指多了一根”");
+  // The same picture listed again (sent once more) points at the first one instead of repeating its features.
+  const again = { ...a, id: "IMG-002", name: "again.png", kind: "view" as const, turn: 4, contentId: "same", notes: { line: "书房｜红色方块", ratings: [] } };
+  assert.equal(compactList([{ ...a, contentId: "same" }, again], "zh").split("\n")[2], "IMG-002｜again.png｜查看｜第 4 轮｜同 IMG-001");
+  assert.equal(compactList([{ ...a, contentId: "same" }, again], "en").split("\n")[2], "IMG-002 | again.png | viewed | turn 4 | same as IMG-001");
   assert.ok(auto.messages[1].content.startsWith(claudeNote("zh", true)));
-  assert.match(auto.messages[1].content, /这次没有提供的是 IMG-001（用户上传）（自动选图开着/);
+  assert.match(auto.messages[1].content, /摘要之前的对话中有 1 张图片（IMG-001）/);
+  // None sent as an original: "这 1 张", not "其余".
+  assert.match(auto.messages[1].content, /这 1 张这次没有附原图（自动选图开着/);
   assert.match(auto.messages[1].content, /调用 cam_view_image 工具/);
   // No summary in the request (before the compaction, or another request): nothing changes.
   const before = [{ role: "user", content: [text("hello")] }];

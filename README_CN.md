@@ -71,4 +71,6 @@ https://github.com/user-attachments/assets/b9767a20-8ca4-4a33-86bc-5e0a16a2ed13
 
 我们在 Codex 里拿一段短剧关键帧的对话，比较了装插件和不装插件：9 张关键帧，图片一共约 32 MB。不装插件时，只要 Codex 需要把整段对话重新发一遍（重启之后、压缩对话之后），请求就有 42 MB，一次也没发出去。装了插件，同样的请求只有 0.12 MB，这次测试里压缩前后模型都找对了图。测试方法、数据和自己复现的步骤见 [eval](eval/README_CN.md)。
 
+我们还在 Claude Code 里跑了一段更长的任务：51 张图，压缩两次再分叉。装不装插件，模型都几乎找对了每张图（20 题答对 19 或 20 题），因为图都是磁盘上的文件，模型能再读一遍；在这么短的对话里，装插件多花约三成费用。详见[长任务评测](eval/long-task/README_CN.md)。
+
 <p align="center"><sub><a href="CHANGELOG.md">更新记录</a> · <a href="CONTRIBUTING.md">参与开发</a> · <a href="LICENSE">MIT 许可证</a></sub></p>

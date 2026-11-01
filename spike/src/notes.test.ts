@@ -10,7 +10,7 @@ import test from "node:test";
 import { buildClaudeIndex } from "../../plugin/src/claude-index.ts";
 import { rewriteMessages } from "../../plugin/src/claude-rewrite.ts";
 import { findImages, type ImageRef } from "../../plugin/src/images.ts";
-import { addNotes, sceneOf, type Notes } from "../../plugin/src/notes.ts";
+import { addNotes, notesBy, sceneOf, type Notes } from "../../plugin/src/notes.ts";
 import { autoPlaceholder, clip, featureNote, plainPlaceholder, rewriteItems, type Described } from "../../plugin/src/rewrite.ts";
 import { buildIndex, writesNotes, type Parsed } from "../../plugin/src/thread-index.ts";
 import { claudeTurnTexts, loadPanelState, panelStateOf } from "../../plugin/src/panel-state.ts";
@@ -49,7 +49,12 @@ test("a long feature line or rating is cut at the last punctuation mark that fit
   assert.equal(clip("深蓝雨夜｜近景，正脸", 30), "深蓝雨夜｜近景，正脸");
   assert.equal(clip("深蓝雨夜｜近景，正脸，霓虹反光，撑着一把透明的伞，背后是很长很长的街道和招牌", 30), "深蓝雨夜｜近景，正脸，霓虹反光，撑着一把透明的伞…");
   assert.equal(clip("一二三四五六七八九十一二三四五六", 15), "一二三四五六七八九十一二三四五…");
-  assert.equal(clip("rainy blue night | close-up, facing the camera", 30), "rainy blue night | close-up,…");
+  // v0.10: the cap counts width, whatever the language setting: 30 fits 30 Chinese characters or 100 Latin ones, so an
+  // English feature line in a Chinese task keeps its features (it was cut to its place before).
+  assert.equal(clip("cafe storefront morning | wide shot, girl reads chalkboard, passersby, cyclist right", 30), "cafe storefront morning | wide shot, girl reads chalkboard, passersby, cyclist right");
+  assert.equal(clip("rainy blue night | close-up, facing the camera, neon reflections on the wet street, a long row of shop signs behind", 30), "rainy blue night | close-up, facing the camera, neon reflections on the wet street, a long row of…");
+  assert.equal(clip("a".repeat(100), 30), "a".repeat(100));
+  assert.equal(clip("a".repeat(101), 30), `${"a".repeat(100)}…`);
 });
 
 const record = (type: string, payload: Record<string, any>): Parsed => ({ offset: 0, type, payload, timestamp: null });
@@ -156,6 +161,36 @@ test("Claude: the feature line note follows the message holding the first image,
   assert.deepEqual([some.report.featureAt, some.report.noteAt], [1, 4]);
 });
 
+// v0.10: a placeholder or the list after a compaction changing later rewrote the prompt cache from there (claude-cache.ts).
+test("v0.10: a placeholder shows the ratings of the image's own turn; the list after a compaction, the notes as they stood then", () => {
+  assert.deepEqual(notesBy({ line: "书房｜红色方块", ratings: [{ turn: 1, text: "好" }, { turn: 3, text: "太暗" }] }, 2), { line: "书房｜红色方块", ratings: [{ turn: 1, text: "好" }] });
+  assert.equal(notesBy({ line: null, ratings: [{ turn: 3, text: "太暗" }] }, 2), undefined);
+  const notes = { line: "x", ratings: [{ turn: null, text: "好" }] };
+  assert.equal(notesBy(notes, 1), notes);
+  const t = transcript();
+  const p1 = t.prompt([image(pngA), text("first")]);
+  t.assistant(text("[//]: # (cam IMG-001 书房｜红色方块)\n\nA red square."));
+  t.prompt("too dark");
+  t.assistant(text("[//]: # (cam IMG-001 评价：太暗)\n\nNoted."));
+  const messages = [
+    { role: "user", content: [image(pngA), text("first")] },
+    { role: "assistant", content: [text("A red square.")] },
+    { role: "user", content: [text("too dark")] },
+    { role: "assistant", content: [text("Noted.")] },
+    { role: "user", content: [text("next")] },
+  ];
+  const placeholder = rewriteMessages(messages, buildClaudeIndex("s", t.records), new Set([`${p1}#0`]), () => null, { features: true, auto: { currentTurn: 3 } }).messages[0].content[0].text;
+  assert.match(placeholder, /书房｜红色方块/);
+  assert.doesNotMatch(placeholder, /太暗/);
+  t.boundary();
+  t.summary();
+  t.prompt("after");
+  t.assistant(text("[//]: # (cam IMG-001 评价：又好了)\n\nOk."));
+  const index = buildClaudeIndex("s", t.records);
+  assert.deepEqual(index.compactedNotes.get("IMG-001")?.ratings.map((rating) => rating.text), ["太暗"]);
+  assert.deepEqual(index.notes.get("IMG-001")?.ratings.map((rating) => rating.text), ["太暗", "又好了"]);
+});
+
 // 2026-10-19: right after a tool result, Haiku 5.5 took the note for part of what the tool returned and refused it.
 test("Claude: when the first image came from a tool, the feature line note follows the user's message of that turn", () => {
   const t = transcript();
@@ -227,4 +262,21 @@ test("the panel's data: each image's scene and noted words, and per turn what wa
   assert.deepEqual(claudeTurnTexts(index.chain), { "1": "看这张 {\"file_path\":\"C:\\\\work\\\\b.png\"} A white room.", "2": "Too bright" });
   const claude = panelStateOf("s", index, new Set(), null, null, true, [], true, claudeTurnTexts(index.chain));
   assert.deepEqual([claude.images[0].scene, claude.images[0].search], ["white room", "white room | wide shot"]);
+});
+
+test("v0.10: a correction replaces the feature line; a line under another numbering is translated or dropped", () => {
+  const notes = new Map<string, Notes>();
+  addNotes(notes, "[//]: # (cam IMG-005 角色｜正面近景，右眉有疤)\n\nok", 2);
+  addNotes(notes, "[//]: # (cam IMG-005 角色｜正面近景，另一种写法)", 3);
+  assert.equal(notes.get("IMG-005")?.line, "角色｜正面近景，右眉有疤");
+  addNotes(notes, "[//]: # (cam IMG-005 更正：角色｜正面近景，左眉有疤)\n[//]: # (cam IMG-006 corrected: street | wide shot)", 4);
+  assert.equal(notes.get("IMG-005")?.line, "角色｜正面近景，左眉有疤");
+  assert.equal(notes.get("IMG-006")?.line, "street | wide shot");
+  // An empty correction changes nothing.
+  addNotes(notes, "[//]: # (cam IMG-005 更正：)", 5);
+  assert.equal(notes.get("IMG-005")?.line, "角色｜正面近景，左眉有疤");
+  const mapped = new Map<string, Notes>();
+  addNotes(mapped, "[//]: # (cam IMG-001 书房｜窗边)\n[//]: # (cam IMG-002 评价：太暗)\n[//]: # (cam IMG-003 门口｜白天)", 7, (id) => ({ "IMG-001": "IMG-095", "IMG-002": "IMG-096" } as Record<string, string>)[id] ?? null);
+  assert.deepEqual([...mapped.keys()], ["IMG-095", "IMG-096"]);
+  assert.deepEqual(mapped.get("IMG-096")?.ratings, [{ turn: 7, text: "太暗" }]);
 });

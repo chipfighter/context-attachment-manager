@@ -246,6 +246,39 @@ test("the panel's last request is the session's conversation, not Claude Desktop
   assert.equal(claudeConversationRequest(describeBody("/backend-api/codex/responses", { input: [] })), false);
 });
 
+test("v0.10: once the engine changes the history, a cache mark moves to where the request sent before had one", async () => {
+  const { usualSession, usualRequest } = await import("./claude-fixtures.ts");
+  const { rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
+  const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
+  const session = "11111111-2222-4333-8444-555555555556";
+  const { t } = usualSession();
+  mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+  writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  const mark = { type: "ephemeral", ttl: "1h" };
+  // As Claude Code sends them: two marks in the system prompt, two at the end of the messages.
+  const request = (marked: number) => {
+    const messages = usualRequest();
+    const last = messages[marked].content.at(-1);
+    messages[marked] = { ...messages[marked], content: [...messages[marked].content.slice(0, -1), { ...last, cache_control: mark }] };
+    return Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", tools: [{ name: "Read" }], system: [{ type: "text", text: "a", cache_control: mark }, { type: "text", text: "b", cache_control: mark }], messages }));
+  };
+  // The request before, when the Read call was the last assistant message: sent with nothing left out.
+  const before = rewriteClaudeBody(request(3), undefined, session, dir, home, {});
+  assert.ok(before.attempts[0].prefix);
+  writeSelection({ threadId: session, unchecked: { "tool:toolu_1#0": { id: "IMG-003", at: "2026-10-10T00:00:00Z" } } }, dir);
+  const out = rewriteClaudeBody(request(7), undefined, session, dir, home, {}, null, [before.attempts[0].prefix!]);
+  const sent = JSON.parse(out.body.toString("utf8")).messages;
+  const at = sent.findIndex((message: any) => message.content?.[0]?.type === "tool_use");
+  assert.deepEqual(out.report.cacheMarks.read, { message: at, block: 0 });
+  assert.deepEqual(sent[at].content[0].cache_control, mark);
+  // Moved from the last assistant message, which comes after the change; the end keeps its mark.
+  assert.equal(sent.filter((message: any) => message.content?.some?.((block: any) => block.cache_control)).length, 2);
+  assert.ok(sent.at(-1).content.at(-1).cache_control);
+  // Without the request before, Claude Code's marks are left as they are.
+  assert.equal(rewriteClaudeBody(request(7), undefined, session, dir, home, {}).report.cacheMarks, undefined);
+});
+
 test("a Claude Code request is rewritten from the session's transcript and selection, with images also with nothing unchecked", async () => {
   const { usualSession, usualRequest } = await import("./claude-fixtures.ts");
   const { claudeNeedsRewrite, rewriteClaudeBody, claudeImageSizes } = await import("../../plugin/src/proxy.ts");
@@ -382,21 +415,22 @@ test("v0.5: after a compaction, the images from before it go back after the summ
   const sent = (out: any) => JSON.parse(out.body.toString("utf8")).messages;
   const partsOf = (message: any) => message.content.map((block: any) =>
     block.type === "image" ? `image:${block.source.data === pngA ? "A" : block.source.data === pngB ? "B" : "C"}`
+      : /^\[压缩之前的图片/.test(block.text) ? `list:${[...block.text.matchAll(/^(IMG-\d+)｜/gm)].map((match: any) => match[1]).join(",")}`
       : /^\[图片 (IMG-\d+) 已提供/.exec(block.text)?.[1] ?? /^\[图片 (IMG-\d+) 已省略/.exec(block.text)?.[1].replace(/^/, "omitted:") ?? block.text);
   // Nothing unchecked: every image from before the compaction goes out again, and a short note follows.
   const all = rewriteClaudeBody(request, undefined, session, dir, home, {});
   assert.deepEqual(all.report.compacted, { at: 0, listed: 2, resent: ["IMG-001", "IMG-002"] });
   assert.deepEqual(partsOf(sent(all)[0]), ["summary", "IMG-001", "image:A", "IMG-002", "image:C"]);
   assert.equal(sent(all)[1].role, "system");
-  assert.match(sent(all)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：上面这条消息里，摘要之前的对话中有这些图片/);
+  assert.match(sent(all)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：上面这条消息里，摘要之前的对话中有 2 张图片（IMG-001 到 IMG-002）/);
   assert.equal(all.report.noteAt, undefined);
-  // An unchecked one stays out: its placeholder after the summary, and the full note naming it.
+  // An unchecked one stays out: a line in the list after the summary (v0.10), and the full note counting it.
   writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" } } }, dir);
   const some = rewriteClaudeBody(request, undefined, session, dir, home, {});
   assert.deepEqual(some.report.compacted.resent, ["IMG-002"]);
-  assert.deepEqual(partsOf(sent(some)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
+  assert.deepEqual(partsOf(sent(some)[0]), ["summary", "IMG-002", "image:C", "list:IMG-001"]);
   assert.match(sent(some)[1].content, /^上下文管理说明（来自用户安装的上下文素材管理工具）：为了节省上下文/);
-  assert.match(sent(some)[1].content, /这次没有提供的是 IMG-001/);
+  assert.match(sent(some)[1].content, /其余 1 张这次没有附原图/);
   assert.equal(some.report.noteAt, 1);
   // One unchecked after the compaction too: its message gets only the short note, the full one being after the summary.
   writeSelection({ threadId: session, unchecked: { [`${p1}#0`]: { id: "IMG-001", at: "2026-10-12T00:00:00Z" }, [`${p3}#0`]: { id: "IMG-003", at: "2026-10-12T00:00:00Z" } } }, dir);
@@ -406,12 +440,12 @@ test("v0.5: after a compaction, the images from before it go back after the summ
   // v0.8: IMG-003 is also the request's own first image, so the feature line note joins its short note, first.
   assert.deepEqual(both[4].content.map((block: any) => block.text.slice(0, 5)), ["特征行说明", "上下文管理"]);
   assert.match(both[4].content[1].text, /^上下文管理说明：上面这条消息里的 IMG-003/);
-  // Automatic selection: only the pinned ones go out again; the others are placeholders in its words.
+  // Automatic selection: only the pinned ones go out again; the others are lines, and the note says how to fetch one.
   writeSelection({ threadId: session, unchecked: {}, auto: true, autoSince: "2026-10-12T00:00:00Z", pinned: { "tool:toolu_1#0": { id: "IMG-002", at: "2026-10-12T00:00:00Z" } } } as any, dir);
   const auto = rewriteClaudeBody(request, undefined, session, dir, home, {});
   assert.deepEqual(auto.report.compacted.resent, ["IMG-002"]);
-  assert.deepEqual(partsOf(sent(auto)[0]), ["summary", "omitted:IMG-001", "IMG-002", "image:C"]);
-  assert.match(sent(auto)[0].content[1].text, /cam_view_image/);
+  assert.deepEqual(partsOf(sent(auto)[0]), ["summary", "IMG-002", "image:C", "list:IMG-001"]);
+  assert.match(sent(auto)[1].content, /cam_view_image/);
 });
 
 test("v0.5: the request writing a second summary is rewritten as usual; after it, the images from before both go back", async () => {

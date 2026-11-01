@@ -1,0 +1,347 @@
+[
+  {
+    "run": "v0.10-haiku",
+    "arm": "v0.10",
+    "model": "claude-haiku-5-5",
+    "effort": "low",
+    "images": 51,
+    "startedAt": "2026-11-01T09:32:34.017Z",
+    "finishedAt": "2026-11-01T09:36:48.012Z",
+    "turnsDone": 16,
+    "turnsFailed": 0,
+    "questions": {
+      "mid": {
+        "asked": 4,
+        "right": 3,
+        "wrong": 1,
+        "ambiguous": 0,
+        "none": 0
+      },
+      "end": {
+        "asked": 14,
+        "right": 14,
+        "wrong": 0,
+        "ambiguous": 0,
+        "none": 0
+      },
+      "fork": {
+        "asked": 2,
+        "right": 2,
+        "wrong": 0,
+        "ambiguous": 0,
+        "none": 0
+      },
+      "all": {
+        "asked": 20,
+        "right": 19,
+        "wrong": 1,
+        "ambiguous": 0,
+        "none": 0
+      }
+    },
+    "fetches": {
+      "calls": 6,
+      "images": 4,
+      "reads": 0
+    },
+    "featureLines": 51,
+    "session": {
+      "input": 30130,
+      "cacheRead": 958904,
+      "cacheWrite": 111336,
+      "output": 24508,
+      "fromCache": 87.1,
+      "costUsd": 0.0471
+    },
+    "requests": {
+      "count": 56,
+      "onlySystem": 1,
+      "largest": 25940
+    },
+    "turnReads": [
+      2,
+      3,
+      3,
+      0,
+      2,
+      3,
+      2,
+      3,
+      8,
+      4,
+      0,
+      2,
+      3,
+      6,
+      5,
+      2
+    ],
+    "afterCompaction": [
+      {
+        "compaction": "compact-mid",
+        "tokens": 15182,
+        "listed": 33,
+        "listTokens": 1563,
+        "listShare": 10.3
+      },
+      {
+        "compaction": "compact-end",
+        "tokens": 17909,
+        "listed": 51,
+        "listTokens": 2357,
+        "listShare": 13.2
+      }
+    ],
+    "takesBack": [],
+    "answers": [
+      {
+        "q": "M1",
+        "verdict": "wrong",
+        "said": "s04_v2.png",
+        "expected": "s02_v1.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "s04_v2.png"
+      },
+      {
+        "q": "M2",
+        "verdict": "right",
+        "said": "s06_v1.png",
+        "expected": "s06_v1.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "s06_v1.png"
+      },
+      {
+        "q": "M3",
+        "verdict": "right",
+        "said": "93",
+        "expected": "93",
+        "needsOriginal": true,
+        "how": "fetched",
+        "fetched": [
+          "s02_v3.png"
+        ],
+        "reads": 0,
+        "seconds": 14,
+        "reply": "93"
+      },
+      {
+        "q": "M4",
+        "verdict": "right",
+        "said": "28",
+        "expected": "28",
+        "needsOriginal": true,
+        "how": "from notes",
+        "fetched": [],
+        "reads": 0,
+        "seconds": 2,
+        "reply": "28"
+      },
+      {
+        "q": "Q1",
+        "verdict": "right",
+        "said": "s04_v2.png",
+        "expected": "s04_v2.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "s04_v2.png"
+      },
+      {
+        "q": "Q2",
+        "verdict": "right",
+        "said": "s03_v1.png",
+        "expected": "s03_v1.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [
+          "s03_v1.png"
+        ],
+        "reads": 0,
+        "seconds": 7,
+        "reply": "s03_v1.png"
+      },
+      {
+        "q": "Q3",
+        "verdict": "right",
+        "said": "s03_v3.png",
+        "expected": "s03_v3.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "s03_v3.png"
+      },
+      {
+        "q": "Q4",
+        "verdict": "right",
+        "said": "s06_v3.png",
+        "expected": "s06_v3.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 2,
+        "reply": "s06_v3.png"
+      },
+      {
+        "q": "Q5",
+        "verdict": "right",
+        "said": "s09_v1.png",
+        "expected": "s09_v1.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 2,
+        "reply": "s09_v1.png"
+      },
+      {
+        "q": "Q6",
+        "verdict": "right",
+        "said": "s05_v3.png",
+        "expected": "s05_v3.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 2,
+        "reply": "s05_v3.png"
+      },
+      {
+        "q": "Q7",
+        "verdict": "right",
+        "said": "90",
+        "expected": "90",
+        "needsOriginal": true,
+        "how": "fetched",
+        "fetched": [
+          "s01_v1.png"
+        ],
+        "reads": 0,
+        "seconds": 5,
+        "reply": "90"
+      },
+      {
+        "q": "Q8",
+        "verdict": "right",
+        "said": "clip1_06.png",
+        "expected": "clip1_06.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 2,
+        "reply": "clip1_06.png"
+      },
+      {
+        "q": "Q9",
+        "verdict": "right",
+        "said": "clip2_04.png",
+        "expected": "clip2_04.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "clip2_04.png"
+      },
+      {
+        "q": "Q10",
+        "verdict": "right",
+        "said": "set_1105_4.png",
+        "expected": "set_1105_4.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "set_1105_4.png"
+      },
+      {
+        "q": "Q11",
+        "verdict": "right",
+        "said": "坐",
+        "expected": "坐",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "坐姿"
+      },
+      {
+        "q": "Q12",
+        "verdict": "right",
+        "said": "s05_v2.png",
+        "expected": "s05_v2.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "s05_v2.png"
+      },
+      {
+        "q": "Q13",
+        "verdict": "right",
+        "said": "sheet_03.png",
+        "expected": "sheet_03.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 2,
+        "reply": "sheet_03.png"
+      },
+      {
+        "q": "Q14",
+        "verdict": "right",
+        "said": "3",
+        "expected": "3",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 3,
+        "reply": "3"
+      },
+      {
+        "q": "K1",
+        "verdict": "right",
+        "said": "s08_v2.png",
+        "expected": "s08_v2.png",
+        "needsOriginal": false,
+        "how": null,
+        "fetched": [],
+        "reads": 0,
+        "seconds": 8,
+        "reply": "s08_v2.png"
+      },
+      {
+        "q": "K2",
+        "verdict": "right",
+        "said": "49",
+        "expected": "49",
+        "needsOriginal": true,
+        "how": "fetched",
+        "fetched": [
+          "s05_v2.png"
+        ],
+        "reads": 0,
+        "seconds": 5,
+        "reply": "49"
+      }
+    ]
+  }
+]
