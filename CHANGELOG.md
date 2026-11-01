@@ -2,7 +2,7 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [0.10.0] - Unreleased
+## [0.10.0] - 2026-11-01
 
 Earlier images come back after compaction and resume, with the same IDs, in Codex and Claude Code.
 
