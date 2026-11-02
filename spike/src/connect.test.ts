@@ -11,6 +11,10 @@ import { geminiCli } from "../../plugin/src/adapters/gemini-cli/platform.ts";
 import { opencode } from "../../plugin/src/adapters/opencode/platform.ts";
 import { pi } from "../../plugin/src/adapters/pi/platform.ts";
 import { workbuddy } from "../../plugin/src/adapters/workbuddy/platform.ts";
+import { cline } from "../../plugin/src/adapters/cline/platform.ts";
+import { goose } from "../../plugin/src/adapters/goose/platform.ts";
+import { kiloCode } from "../../plugin/src/adapters/kilo-code/platform.ts";
+import { qwenCode } from "../../plugin/src/adapters/qwen-code/platform.ts";
 import { applyEdits, undoEdits } from "../../plugin/src/core/config-edit.ts";
 import { detectPlatform } from "../../plugin/src/platforms.ts";
 
@@ -32,7 +36,7 @@ test("which platform a shell command runs in, from the variables each one sets",
   assert.deepEqual(detectPlatform({ CLAUDECODE: "1", CODEX_THREAD_ID: "t" }).platform, null, "one agent started from another's shell: ask");
 });
 
-test("connect writes JSON values, list items and env lines with a backup; disconnect puts back what was there", () => {
+test("connect writes JSON values, list items and env lines and records what was there; disconnect puts it back", () => {
   const dir = temp();
   const data = temp();
   const settings = join(dir, "settings.json");
@@ -49,7 +53,7 @@ test("connect writes JSON values, list items and env lines with a backup; discon
   applyEdits("workbuddy", edits, data);
   assert.deepEqual(json(settings), { keep: true, env: { BASE: info.url }, extensions: ["mine.ts", "/x/extension.ts"], mcpServers: { cam: { command: "node" } } });
   assert.equal(readFileSync(env, "utf8"), `KEY=secret\r\nBASE=${info.url}\r\nNEW=1\r\n`, "line endings kept, the key untouched");
-  assert.equal(readdirSync(join(data, "config-backup", "workbuddy")).length, 2);
+  assert.equal(existsSync(join(data, "config-backup")), false, "no file is copied: settings and .env files may hold API keys");
   applyEdits("workbuddy", edits, data); // a second connect remembers what was there before the first
   undoEdits("workbuddy", data);
   assert.deepEqual(json(settings), { keep: true, env: { BASE: "https://relay.example" }, extensions: ["mine.ts"], mcpServers: {} });
@@ -97,4 +101,49 @@ test("each platform reads where its requests go now and what to write", () => {
   assert.throws(() => pi.setup!({ home, env: {}, provider: null }), /name the provider/);
   const p = pi.setup!({ home, env: { PI_PROVIDER: "anthropic" }, provider: null });
   assert.equal(p.fallback, "https://api.anthropic.com", "the provider pi uses now, from its shell");
+});
+
+test("v0.11, more platforms: Qwen Code, Cline, Kilo Code and goose are told apart by their own variables", () => {
+  assert.equal(detectPlatform({ QWEN_CODE: "1" }).platform, "qwen-code");
+  assert.equal(detectPlatform({ CLINE_ACTIVE: "true" }).platform, "cline");
+  assert.equal(detectPlatform({ KILO: "1" }).platform, "kilo-code");
+  assert.equal(detectPlatform({ GOOSE_TERMINAL: "1" }).platform, "goose");
+  assert.equal(detectPlatform({ OPENCODE: "1", KILO: "1" }).platform, null, "both: ask");
+});
+
+test("v0.11, more platforms: what Qwen Code, Cline, Kilo Code and goose read and write", () => {
+  const home = temp();
+  mkdirSync(join(home, ".qwen"));
+  writeFileSync(join(home, ".qwen", "settings.json"), JSON.stringify({ security: { auth: { selectedType: "openai" } }, model: { name: "b" }, modelProviders: { openai: [{ id: "a", baseUrl: "https://a.example/v1" }, { id: "b", baseUrl: "https://b.example/v1", envKey: "KEY" }] }, env: { KEY: "sk-secret" } }));
+  const qwen = qwenCode.setup!({ home, env: {}, provider: null });
+  assert.equal(qwen.current, "https://b.example/v1", "the model in use");
+  const data = temp();
+  applyEdits("qwen-code", qwen.edits(info), data);
+  const written = json(join(home, ".qwen", "settings.json"));
+  assert.equal(written.modelProviders.openai[1].baseUrl, info.url);
+  assert.equal(written.modelProviders.openai[0].baseUrl, "https://a.example/v1", "the other model stays");
+  assert.equal(written.env.KEY, "sk-secret", "the key stays where it was");
+  undoEdits("qwen-code", data);
+  assert.equal(json(join(home, ".qwen", "settings.json")).modelProviders.openai[1].baseUrl, "https://b.example/v1");
+  writeFileSync(join(home, ".qwen", "settings.json"), JSON.stringify({ security: { auth: { selectedType: "qwen-oauth" } } }));
+  assert.throws(() => qwenCode.setup!({ home, env: {}, provider: null }), /qwen-oauth/);
+
+  mkdirSync(join(home, ".cline", "data", "settings"), { recursive: true });
+  writeFileSync(join(home, ".cline", "data", "settings", "providers.json"), JSON.stringify({ version: 1, lastUsedProvider: "anthropic", providers: { anthropic: { settings: { provider: "anthropic", apiKey: "sk-ant" } } } }));
+  const c = cline.setup!({ home, env: {}, provider: null });
+  assert.equal(c.fallback, "https://api.anthropic.com/v1");
+  assert.deepEqual((c.edits(info)[0] as { json: string[] }).json, ["providers", "anthropic", "settings", "baseUrl"]);
+  assert.throws(() => cline.setup!({ home, env: {}, provider: "cline" }), /own account/);
+
+  mkdirSync(join(home, ".config", "kilo"), { recursive: true });
+  writeFileSync(join(home, ".config", "kilo", "kilo.json"), JSON.stringify({ model: "google/gemini-x" }));
+  assert.equal(kiloCode.setup!({ home, env: {}, provider: null }).fallback, "https://generativelanguage.googleapis.com/v1beta");
+
+  const appdata = temp();
+  const yaml = process.platform === "win32" ? join(appdata, "Block", "goose", "config") : join(home, ".config", "goose");
+  mkdirSync(yaml, { recursive: true });
+  writeFileSync(join(yaml, "config.yaml"), "GOOSE_PROVIDER: openai\nOPENAI_HOST: \"https://relay.example\"\n");
+  const g = goose.setup!({ home, env: { APPDATA: appdata }, provider: null });
+  assert.equal(g.current, "https://relay.example", "the address set in config.yaml");
+  assert.ok(g.manual, "YAML is not written: the steps are printed");
 });
