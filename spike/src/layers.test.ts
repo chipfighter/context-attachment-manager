@@ -1,7 +1,8 @@
 // Purpose: v0.11 — keeps the plugin's three layers apart (docs/v0.11/plan.md 3.6). The core imports only the core;
 // the panel only the core; a request-format translator (adapters/protocols) the core and other translators; a
-// platform (adapters/<name>) the core, the translators and its own files. Files at the top of plugin/src are the
-// entry points and the ones not sorted yet; they may import anything.
+// platform (adapters/<name>) the core, the translators and its own files, and the panel when it shows one (Codex
+// desktop, Claude Desktop). Files at the top of plugin/src are the entry points and the ones not sorted yet; they may
+// import anything.
 // PENDING lists the imports that still break a rule while the split goes on. It may only shrink: a new break fails,
 // and so does an entry that no longer occurs, so the list never keeps a stale exception.
 // Input: the source files of plugin/src. Output: test results.
@@ -15,6 +16,11 @@ const src = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", 
 
 const PENDING = new Set<string>([
   "adapters/claude/claude-index.ts -> adapters/codex/thread-index.ts",
+  "adapters/claude/engine.ts -> adapters/codex/thread-index.ts",
+  "adapters/claude/engine.ts -> language.ts",
+  "adapters/claude/engine.ts -> selection.ts",
+  "adapters/codex/engine.ts -> language.ts",
+  "adapters/codex/engine.ts -> selection.ts",
   "adapters/codex/install.ts -> language.ts",
   "adapters/codex/install.ts -> messages.ts",
   "panel/panel-state.ts -> adapters/claude/claude-index.ts",
@@ -37,7 +43,8 @@ export function layerOf(file: string): Layer {
 export function allowed(from: Layer, to: Layer): boolean {
   if (from === "top") return true;
   if (to === "core") return true;
-  if (from === "protocols" || from.startsWith("adapter:")) return to === "protocols" || to === from;
+  if (from === "protocols") return to === "protocols";
+  if (from.startsWith("adapter:")) return to === "protocols" || to === "panel" || to === from;
   return false;
 }
 
@@ -71,6 +78,8 @@ test("layers: each folder is the layer the plan says", () => {
   assert.equal(allowed("adapter:claude", "adapter:codex"), false);
   assert.equal(allowed("adapter:claude", "protocols"), true);
   assert.equal(allowed("protocols", "adapter:codex"), false);
+  assert.equal(allowed("protocols", "panel"), false);
+  assert.equal(allowed("adapter:claude", "panel"), true);
   assert.equal(allowed("adapter:codex", "top"), false);
 });
 

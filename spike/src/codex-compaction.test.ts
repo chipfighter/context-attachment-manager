@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import zlib from "node:zlib";
-import { rewriteBody } from "../../plugin/src/proxy.ts";
+import { rewriteBody } from "../../plugin/src/adapters/codex/engine.ts";
 import { addCodexCompacted } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
 import { compactList } from "../../plugin/src/core/words.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";

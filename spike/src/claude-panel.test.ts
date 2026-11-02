@@ -11,7 +11,9 @@ import { join } from "node:path";
 import test from "node:test";
 import { claudeSelectionDirOf } from "../../plugin/src/core/paths.ts";
 import { callClaudeTool, claudeToolsFor } from "../../plugin/src/plugin-server.ts";
-import { claudeNeedsRewrite, claudePanelApi, claudePanelPage, ownRequest, rewriteClaudeBody } from "../../plugin/src/proxy.ts";
+import { claudeNeedsRewrite, rewriteClaudeBody } from "../../plugin/src/adapters/claude/engine.ts";
+import { claudePanelApi, claudePanelPage } from "../../plugin/src/adapters/claude/panel-web.ts";
+import { ownRequest } from "../../plugin/src/core/engine/transport.ts";
 import { ensureAutoDefault } from "../../plugin/src/selection.ts";
 import { pngC, usualRequest, usualSession } from "./claude-fixtures.ts";
 
