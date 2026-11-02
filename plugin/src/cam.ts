@@ -14,9 +14,9 @@
 // printed: it may hold credentials), the plugin cache (through Codex's command line), the selection files, and a
 // summary on stdout. Rollouts are only read.
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { findCodexCli, runCodex } from "./adapters/codex/codexcli.ts";
 import { codexHome, MCP_BEGIN, noProxyStatus, proxyStatus } from "./adapters/codex/codexconfig.ts";
@@ -32,8 +32,9 @@ import type { PanelState } from "./panel/panel-state.ts";
 import { dataDir, selectionDirOf } from "./core/paths.ts";
 import { preservingPluginCache } from "./adapters/codex/plugin-cache.ts";
 import { backupConfig, connectDirectly, planEngine, readConfig, readEnv, useEngine } from "./adapters/codex/setup.ts";
-import { registerRoute, routeBaseUrl, validateBaseUrl } from "./core/routes.ts";
-import { CORE_PLATFORMS, corePlatformOf } from "./platforms.ts";
+import { readRoute, registerRoute, routeBaseUrl, validateBaseUrl } from "./core/routes.ts";
+import { applyEdits, undoEdits } from "./core/config-edit.ts";
+import { CORE_PLATFORMS, corePlatformOf, detectPlatform } from "./platforms.ts";
 
 type Json = Record<string, any>;
 const lang = systemLang();
@@ -125,6 +126,16 @@ export function selfTest(dir: string, timeoutMs = 20_000): Promise<{ ok: boolean
     send({ id: 2, method: "tools/list" });
     send({ id: 3, method: "resources/read", params: { uri: "ui://codex-attachment-manager/panel.html" } });
   });
+}
+
+// v0.11: the Node a platform's MCP service is started with: the one on PATH when it is 24 or later (it stays where it is),
+// else this one (the cam script may run Codex's own Node, whose folder changes with each Codex update).
+function stableNode(): string {
+  try {
+    const found = execFileSync("node", ["-p", "Number(process.versions.node.split('.')[0]) >= 24 ? process.execPath : ''"], { encoding: "utf8", windowsHide: true, timeout: 5000 }).trim();
+    if (found) return found;
+  } catch { /* no node on PATH */ }
+  return process.execPath;
 }
 
 // Selections made before P5 lived in the repository's local/ folder; they move along once, never overwriting.
@@ -219,22 +230,51 @@ async function main(): Promise<void> {
     }, null, 2));
     return;
   }
+  // v0.11 (user 2026-11-02: an AI reading this repository installs for the platform it runs in, and never the wrong
+  // one): which platform this shell runs in (platforms.ts), and what to run next.
+  if (command === "detect") {
+    const found = detectPlatform();
+    const next = !found.platform ? (found.matches.includes("codebuddy") ? `CodeBuddy's agent, without WorkBuddy's marks. In WorkBuddy: node "${join(import.meta.dirname, "cam.ts")}" connect workbuddy --apply. The CodeBuddy CLI on its own has no adapter yet; ask the user which it is.` : "Not sure which agent this is: ask the user, then follow that agent's section of INSTALL.md.")
+      : found.platform === "codex" ? "Follow the Codex section of INSTALL.md."
+      : found.platform === "claude" ? "Follow the Claude Desktop section of INSTALL.md."
+      : found.platform === "dsh" ? `dsh plugin --profile ${process.env.DSH_PROFILE || "<your profile>"} add "${join(import.meta.dirname, "adapters", "dsh")}"`
+      : `node "${join(import.meta.dirname, "cam.ts")}" connect ${found.platform} --apply`;
+    console.log(JSON.stringify({ command, platform: found.platform, matches: found.matches, next }, null, 2));
+    return;
+  }
   // v0.11: a platform using the core alone (platforms.ts, ADAPTERS.md): registers the route from the engine to where its
-  // requests go, and says what to set in the platform. Changes no file of the platform's.
-  if (command === "connect") {
+  // requests go now, and prints what to set in the platform; with --apply, sets it (backed up, recorded for
+  // `disconnect`). --base-url names that address; --provider the provider, for a platform with one per provider.
+  if (command === "connect" || command === "disconnect") {
     const platform = corePlatformOf(threadId);
-    if (!platform) throw new Error(`usage: cam.ts connect <${CORE_PLATFORMS.map((one) => one.name).join("|")}> [--base-url URL]`);
-    const baseUrl = process.argv.includes("--base-url") ? process.argv[process.argv.indexOf("--base-url") + 1] : platform.upstream;
+    if (!platform) throw new Error(`usage: cam.ts ${command} <${CORE_PLATFORMS.map((one) => one.name).join("|")}> [--apply] [--provider NAME] [--base-url URL]`);
+    if (command === "disconnect") {
+      const undone = undoEdits(platform.name, dataDir());
+      console.log([`${platform.title}: settings put back in ${undone.files.length ? undone.files.join(", ") : "no file (nothing was applied)"}.`, ...undone.kept.map((setting) => `Left as you changed it: ${setting}`), `Restart ${platform.title}.`].join("\n"));
+      return;
+    }
+    const flag = (name: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] ?? null : null);
+    const apply = process.argv.includes("--apply");
+    const plan = apply || platform.setup ? platform.setup?.({ home: homedir(), env: process.env, provider: flag("--provider") }) ?? null : null;
+    // Connected before: the address stays where that route goes.
+    const ours = plan?.current ? /^http:\/\/(?:127\.0\.0\.1|localhost):\d+\/__cam\/routes\/([a-f0-9]{32})/.exec(plan.current) : null;
+    const baseUrl = flag("--base-url") ?? (ours ? readRoute(ours[1])?.baseUrl ?? null : plan?.current) ?? plan?.fallback ?? platform.upstream;
     if (!baseUrl) throw new Error(`${platform.title}: give the address its requests go to now, with --base-url (e.g. https://api.anthropic.com/v1)`);
     try { validateBaseUrl(baseUrl, port); } catch (error) { throw localized(error); }
     const route = registerRoute({ platform: platform.name, baseUrl });
     const url = routeBaseUrl(port, route.id).replace("localhost", "127.0.0.1");
-    const mcp = { command: process.execPath, args: [join(import.meta.dirname, "plugin-server.ts")], env: { CAM_HOST: platform.name } };
+    const mcp = { command: stableNode(), args: [join(import.meta.dirname, "plugin-server.ts")], env: { CAM_HOST: platform.name } };
+    if (apply) {
+      if (!plan) throw new Error(`${platform.title}: its settings cannot be written yet; set them by hand: cam connect ${platform.name}`);
+      const files = applyEdits(platform.name, plan.edits({ url, mcp }), dataDir());
+      console.log([`${platform.title}: requests go through the engine to ${baseUrl}.`, `Changed (backed up first): ${files.join(", ")}`, ...(plan.note ? [plan.note] : []), `Restart ${platform.title}. To undo: cam disconnect ${platform.name}`].join("\n"));
+      return;
+    }
     // Plain lines, to copy from: inside JSON the paths' backslashes would be escaped twice.
     console.log([`${platform.title}: ${url} -> ${baseUrl}`, ...platform.connect({ url, mcp }).map((step, at) => `${at + 1}. ${step}`)].join("\n"));
     return;
   }
-  if (!command || !threadId) throw new Error("usage: cam.ts install [--port N] | setup [--port N] | uninstall | status | connect <platform> [--base-url URL] | list|uncheck|check|check-all <thread id> [IMG-…]");
+  if (!command || !threadId) throw new Error("usage: cam.ts install [--port N] | setup [--port N] | uninstall | status | detect | connect|disconnect <platform> [--apply] [--provider NAME] [--base-url URL] | list|uncheck|check|check-all <thread id> [IMG-…]");
   const options = { sessionsDir: join(codexHome(), "sessions") };
   if (command === "list") console.log(table(loadPanelState(threadId, options)));
   else if (command === "uncheck") console.log(table(applySelection(threadId, { uncheck: ids }, options)));

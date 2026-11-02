@@ -62,13 +62,13 @@ https://github.com/user-attachments/assets/b9767a20-8ca4-4a33-86bc-5e0a16a2ed13
 
 ## 安装
 
-把这句话发给 Codex，或者 Claude 桌面版 Code 标签页里的 Claude：
+把这句话发给你的 Agent（Codex、Claude 桌面版的 Code 标签页，或者[支持的平台](#支持的平台)里的任何一个）。它会先认出自己在哪个平台，再装对应的那一份：
 
 ```text
 帮我安装 Context Attachment Manager 插件，按这里的说明来：https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
 ```
 
-装好后重启 Codex，或者在 Claude 里新建一个会话。想自己动手安装或卸载，看 [INSTALL.md](INSTALL.md)（英文）。用的是别的 Agent？见页面底部的[支持的平台](#支持的平台)。
+装好后重启这个 Agent（Claude 桌面版是新建一个会话）。想自己动手安装或卸载，看 [INSTALL.md](INSTALL.md)（英文）。
 
 ## 隐私
 
@@ -95,6 +95,6 @@ https://github.com/user-attachments/assets/b9767a20-8ca4-4a33-86bc-5e0a16a2ed13
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek 的智能体框架，一切皆插件 | 自动选图（dsh 插件），新接入，欢迎反馈 |
 | **你的 Agent** | 写一层薄薄的接入，核心一行不用改 | 提个 PR，把你的平台加到这里：[接入说明](ADAPTERS.md)（英文） |
 
-新接入的平台怎么接上，见 [ADAPTERS.md](ADAPTERS.md)：一条 `cam connect <平台>` 命令给出要改的设置。用下来有问题，欢迎[提 issue](https://github.com/chipfighter/context-attachment-manager/issues)。
+在哪个平台上装，就把[安装](#安装)里那句话发给那个平台的 Agent；各平台具体改了什么，见 [INSTALL.md](INSTALL.md#other-agents)（英文）。用下来有问题，欢迎[提 issue](https://github.com/chipfighter/context-attachment-manager/issues)。
 
 <p align="center"><sub><a href="CHANGELOG.md">更新记录</a> · <a href="CONTRIBUTING.md">参与开发</a> · <a href="LICENSE">MIT 许可证</a></sub></p>

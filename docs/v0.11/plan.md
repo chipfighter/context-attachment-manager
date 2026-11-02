@@ -1,6 +1,6 @@
 # v0.11 方案：拆成接入层、核心层、面板层，接入其他 Agent 平台
 
-> 状态：用户 2026-11-02 确认方案（第 7 节）。第 1–8 步已做完，在本机 main 上，没有推送；剩 Claude 桌面版实测和发布。规格以 [spec.md](../spec.md) 为准，实现见 [design.md](../design.md)，对外的接入说明是 [ADAPTERS.md](../../ADAPTERS.md)。本机的摸底记录和参考项目的笔记只在 `local/`，不进仓库。
+> 状态：用户 2026-11-02 确认方案（第 7 节）。第 1–8 步已做完，在本机 main 上，没有推送；剩 Claude 桌面版实测和发布，之后改 README、定仓库名字、简介、标签，做视频和图片（第 7 节）。规格以 [spec.md](../spec.md) 为准，实现见 [design.md](../design.md)，对外的接入说明是 [ADAPTERS.md](../../ADAPTERS.md)。本机的摸底记录和参考项目的笔记只在 `local/`，不进仓库。
 
 ## 1. 背景与目标
 
@@ -43,7 +43,7 @@ plugin/src/
     protocols/              请求格式的翻译器：openai-responses、anthropic-messages、openai-chat、gemini；any.ts 给只接核心的平台用
     codex/、claude/         带面板的两个平台，各自读本地记录、改配置、开面板
     workbuddy/、opencode/、gemini-cli/、pi/   只接核心的平台，每个一个 platform.ts（pi 另有扩展）
-    dsh/                    DeepSeek Harness 的 dsh 插件
+    dsh/                    DeepSeek Harness 的 dsh 插件包（index.js、offload.js、package.json、cordis.patch.yml）
 ```
 
 - 宿主规定位置的文件（`.codex-plugin/`、`.claude-plugin/`、`hooks/`、`.mcp.json`、启动脚本）留在原处，只改它们指向的入口。
@@ -62,10 +62,11 @@ plugin/src/
 - **带面板的平台**（Codex、Claude Code）：接入层读平台自己的本地记录（任务记录、会话记录），认会话、轮次、子代理和旁聊、压缩，改平台的配置，打开面板，还有平台特有的处理（Codex 的 WebSocket 降级、API key 线路；Claude 的思考签名重试、提示缓存）。这两份接入是厚的，因为面板要用这些信息。
 - **只接核心的平台**（其余所有平台）：接入层只填一个条目（`core/platform.ts` 的 `CorePlatform`）：
   1. **名字**；
-  2. **原地址**：它的模型请求本来发去哪（按服务商填地址的平台，由用户在 `cam connect` 时给出）；
+  2. **原地址**：它的模型请求本来发去哪（按服务商填地址的平台，从它的设置里读，或用户在 `cam connect` 时给出）；
   3. **认会话**（可选）：哪个请求头是会话编号；
   4. **旁路请求**（可选）：哪些请求不改（起标题、润色提示之类）；
-  5. **接法**：用户要改哪些设置，`cam connect` 打出来。
+  5. **认平台**：平台给它跑的命令设的环境变量（`cam detect` 用）；
+  6. **装法**：要改哪些设置文件、改成什么（`cam connect --apply` 照着写），以及给人看的步骤。
 
   平台加一行进 `platforms.ts` 就接上了。请求格式、哪几张图、省略哪些，都由核心和翻译器从请求本身算出来（第 3.8 节）。
 
@@ -92,7 +93,8 @@ plugin/src/
 ### 3.7 发布
 
 - 仍是一个版本、一份内容。全机只有一个引擎，所有平台共用；各平台装不同版本时，引擎会互相请对方退役，Codex 和 Claude 两份副本之间已经出现过（design 第 5 节）。所以不按平台拆成不同的包。
-- 每个平台按它自己的方式装：Codex、Claude 照旧走各自的插件市场和安装命令；只接核心的平台在仓库里运行 `cam connect <平台>`，它登记线路、打出要改的设置，不替用户改平台的文件（没实测过，不自动改别人的配置）。
+- 每个平台按它自己的方式装：Codex、Claude 照旧走各自的插件市场和安装命令；只接核心的平台把仓库克隆到一个固定的文件夹，`cam detect` 认出平台，`cam connect <平台> --apply` 登记线路并改好平台的设置，`cam disconnect` 撤回；DeepSeek Harness 用 `dsh plugin add` 装 dsh 包。
+- 用户 2026-11-02 定：用户把一句话发给自己的 Agent，Agent 看仓库就能在对应的平台上装好，而且不会装错（例如 WorkBuddy 里的 DeepSeek 模型要装 WorkBuddy 的那一份）。所以平台由各平台给命令设的环境变量来认，不靠模型自己猜；改设置由命令来做，不让模型手改：先备份，记下改了什么、原来是什么，`cam disconnect` 只撤回还保持原样的设置。带注释的 JSON 不改，只打出步骤。
 - 面板文件随包一起发，只有 Codex 桌面版和 Claude 桌面版的接入打开它。
 - 拆的过程中插件版本号不动，免得 Codex 中途从工作区自动重装；全部做完再升到 0.11.0 发布。
 
@@ -110,10 +112,11 @@ plugin/src/
 
 ### 3.9 DeepSeek Harness（用户 2026-11-02 定：在接入层里顶替它官方的插件）
 
-DSH 的请求可能用 DeepSeek 的文件模式发图（请求里是文件引用，不是图片数据），走引擎改不了，所以做成 dsh 插件（`adapters/dsh/plugin.ts`），在 `cordis.yml` 里顶替官方的 `@deepseek-ai/dsh-compaction-image-offload`：
+DSH 的请求可能用 DeepSeek 的文件模式发图（请求里是文件引用，不是图片数据），走引擎改不了，所以做成 dsh 插件包（`adapters/dsh/`），用 `dsh plugin --profile <配置档> add` 装。包里的补丁按 `id` 把官方底包的 `image-offload` 行停掉（两者注册同一个消息投影，只能留一个），再插上我们的（用户 2026-11-02 问能不能直接停掉官方的：能，装包时自动停）：
 
 - 保留官方插件做的事：服务因图片超预算拒绝请求时，标记最旧的几张卸载，然后重试。
 - 加上自动选图：新一轮开始时（`agent/pre-step` 里轮次变了），把之前各轮还留着的图全部标记卸载。
+- 官方的超预算卸载留在我们的插件里当兜底：一轮里就可能超预算（一步一张截图地控制浏览器），没有它请求会报错、这一轮结束。
 - 卸载是 DSH 自己的机制：写进会话日志、永不撤回，模型看到的是写着附件名和只读路径的文字，需要时自己读回原图。所以不需要我们的取图工具，提示缓存的前缀也只往前走。
 
 ## 4. WorkBuddy 摸底（2026-11-02，本机 5.9.3，只看代码，没跑对话）
@@ -137,14 +140,14 @@ DSH 的请求可能用 DeepSeek 的文件模式发图（请求里是文件引用
 5. 拆面板：`panel-state.ts` 只读核心接口；插件服务里的面板工具和取图工具分开。
 6. 拆安装：Codex 的配置和命令行、Claude 的 Mod 进各自的接入。
 7. 写 `ADAPTERS.md`（英文，对外）和契约测试；在 Codex 和 Claude 里跑一遍模型自测（gpt-6-sol，中英文）。
-8. 接其他平台：平台登记表（自动选图的规则收进核心、会话编号不限 UUID、引擎认所有平台的探活）；openai-chat、gemini 两个翻译器；核心从请求建清单；WorkBuddy、OpenCode、Gemini CLI、pi 的条目，pi 的扩展，DSH 的插件；`cam connect`；README 底部的平台表。不带面板，不实跑（第 7 节）。
+8. 接其他平台：平台登记表（自动选图的规则收进核心、会话编号不限 UUID、引擎认所有平台的探活）；openai-chat、gemini 两个翻译器；核心从请求建清单；WorkBuddy、OpenCode、Gemini CLI、pi 的条目，pi 的扩展，DSH 的插件包；`cam detect`、`cam connect --apply`、`cam disconnect`；INSTALL.md 按平台写；Codex 在 cc-switch 切换后自动接回；README 底部的平台表。不带面板，不实跑（第 7 节）。
 9. Claude 桌面版实跑一轮，然后推送、发 0.11.0。
 
 ## 6. 风险
 
 - 第 2、3 步动的是每个请求都经过的代码，最容易出回归。靠逐字节对照测试兜底。
 - 只接核心的五个平台都没实跑过，只有合成请求的测试。README 的平台表写明“新接入，欢迎反馈”，和实测过的 Codex、Claude 分开。
-- cc-switch（切换 Claude Code、Codex 等的服务地址）每次切 Codex 的服务商，会删掉顶层的 `openai_base_url`、重写 `[model_providers.custom]`，把插件对 Codex 的接管抹掉，之后 Codex 直连，直到在面板里重新启用或重跑 `cam install`。Claude Code 不受影响：插件每个会话开始时重新读地址。
+- cc-switch（切换 Claude Code、Codex 等的服务地址）每次切 Codex 的服务商，会删掉顶层的 `openai_base_url`、重写 `[model_providers.custom]`，把插件对 Codex 的接管抹掉。用户 2026-11-02 定：用户要能随便换模型，插件也照样起作用。所以引擎盯着 config.toml，一被改写就重新接上，线路指向用户刚选的服务商，切换照样生效（`adapters/codex/setup.ts` 的 `keepRouted`）。只在用户想用引擎（启用过、没停用，记在数据目录，不看 config.toml）且插件还在时做；十分钟里被改回三次就停手，免得和别的工具来回改。Codex 关着时切换的，下次启动先直连一次，再下次才经过引擎。Claude Code 不受影响：插件每个会话开始时重新读地址。没和真的 cc-switch 一起跑过。
 - 文件搬家后，已安装的副本要靠 `cam install` 更新；启动脚本里的入口路径要一起改，不能让已安装的配置指向不存在的文件。
 
 ## 7. 用户的决定（2026-11-02）
@@ -157,3 +160,7 @@ DSH 的请求可能用 DeepSeek 的文件模式发图（请求里是文件引用
 6. WorkBuddy 不再测；其余平台也不在本机实跑，按代码和文档写接入，对外展示，等别人提 issue 和 PR。
 7. 接入的平台：WorkBuddy、OpenCode、Gemini CLI、pi 写进接入层；DeepSeek Harness 在接入层里顶替它官方的插件，接不进就先不要；Antigravity 不写。
 8. README：删掉“为什么做这个”；开头改成多模态税的口径（多模态上下文的自动管理工具，装上就不用管），场景写短；最底下放平台表（各平台的简介和接入情况），不挡上面的展示内容，用来和其他平台双向引流。
+9. 用户换模型（cc-switch 等）后插件要照样起作用（第 6 节）。
+10. 安装：Agent 看仓库就能在所在平台装对，平台靠环境变量认，设置由命令改（第 3.7 节）。
+11. DeepSeek Harness 直接停掉官方的图片卸载，用我们的（第 3.9 节）。
+12. 这几个平台接完以后，再改 README、定新的仓库名字、简介、标签，做新的视频和图片，调整宣传口径。

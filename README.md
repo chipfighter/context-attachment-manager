@@ -62,13 +62,13 @@ Using a gateway? Compatible Codex and Claude Code endpoints can use image manage
 
 ## Install
 
-Paste this to Codex, or to Claude in Claude Desktop's Code tab:
+Paste this to your agent (Codex, Claude Desktop's Code tab, or any agent in [Works with](#works-with)). It finds out which agent it runs in and installs for that one:
 
 ```text
 Install the Context Attachment Manager plugin for me, following https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
 ```
 
-Then restart Codex, or start a new session in Claude. To install or uninstall it yourself, see [INSTALL.md](INSTALL.md). Using another agent? See [Works with](#works-with) at the bottom.
+Then restart the agent (in Claude Desktop, start a new session). To install or uninstall it yourself, see [INSTALL.md](INSTALL.md).
 
 ## Privacy
 
@@ -95,6 +95,6 @@ The plugin's core knows no platform; each one gets a thin adapter. The panel is 
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek's agent harness where everything is a plugin | Auto-select (dsh plugin), new, feedback welcome |
 | **Your agent** | A thin adapter; the core stays as it is | Send a PR and add your agent here: [ADAPTERS.md](ADAPTERS.md) |
 
-To connect one of the new ones, see [ADAPTERS.md](ADAPTERS.md): `cam connect <agent>` prints the settings to change. Something off? [Open an issue](https://github.com/chipfighter/context-attachment-manager/issues).
+To install on any of them, paste the sentence in [Install](#install) to that agent; how each one is connected is in [INSTALL.md](INSTALL.md#other-agents). Something off? [Open an issue](https://github.com/chipfighter/context-attachment-manager/issues).
 
 <p align="center"><sub><a href="CHANGELOG.md">Changelog</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a></sub></p>
