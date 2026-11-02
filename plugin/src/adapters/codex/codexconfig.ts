@@ -285,6 +285,23 @@ export function proxyStatus(text: string): { enabled: boolean; url: string | nul
   };
 }
 
+// v0.11: whether Codex's requests reach the engine: the managed block is there, and every endpoint setting points at
+// the engine (its legacy path or a registered route). A tool that switches providers (cc-switch) rewrites the provider
+// table and drops openai_base_url, which leaves the block's remains but sends Codex straight to the new provider.
+export function routedThroughEngine(text: string): boolean {
+  const { body, eol } = parts(text);
+  const lines = body.split(eol);
+  if (!lines.some((line) => line.trim() === BEGIN)) return false;
+  const endpoints = upstreamSettings(lines);
+  const engine = (value: string) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && (url.pathname.startsWith("/__cam/routes/") || url.pathname.startsWith("/backend-api/"));
+    } catch { return false; }
+  };
+  return endpoints.some((setting) => setting.topLevel) && endpoints.every((setting) => engine(setting.line.value));
+}
+
 const LOOPBACK = ["localhost", "127.0.0.1", "::1"];
 const NO_PROXY_LINE = /^\s*(export\s+)?no_proxy\s*=/i;
 

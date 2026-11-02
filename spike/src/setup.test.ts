@@ -148,3 +148,27 @@ test("engine preflight rejects unsafe configuration without creating route data"
     assert.deepEqual(readdirSync(data), []);
   }
 });
+
+// v0.11 (user 2026-11-02): a provider switcher (cc-switch) may rewrite config.toml; the engine routes Codex again,
+// to the provider the switch picked, as long as the user wants the engine.
+test("v0.11: after a provider switch rewrote config.toml, Codex goes through the engine again, to the new provider", (t) => {
+  const { home } = tempHome(t);
+  mkdirSync(join(home, "plugins", "cache", "codex-attachment-manager", "codex-attachment-manager", "0.11.0"), { recursive: true });
+  writeFileSync(join(home, "config.toml"), CONFIG);
+  useEngine(17891);
+  assert.equal(setup.wantsEngine(), true);
+  const recent: number[] = [];
+  assert.deepEqual(setup.keepRouted(17891, recent), { rerouted: false }, "nothing to do while routed");
+  // The switch: our lines gone, its provider in.
+  const switched = readFileSync(join(home, "config.toml"), "utf8").split("\n").filter((line) => !line.startsWith("# >>>") && !line.startsWith("openai_base_url")).join("\n")
+    + '\nmodel_provider = "custom"\n[model_providers.custom]\nname = "custom"\nbase_url = "https://picked.example/v1"\n';
+  writeFileSync(join(home, "config.toml"), switched);
+  assert.equal(setup.keepRouted(17891, recent).rerouted, true);
+  const now = readFileSync(join(home, "config.toml"), "utf8");
+  assert.match(now, /base_url = "http:\/\/localhost:17892\/__cam\/routes\/[0-9a-f]{32}"/);
+  assert.ok(now.includes("https://picked.example/v1"), "the picked provider is kept as the route's destination");
+  connectDirectly();
+  assert.equal(setup.wantsEngine(), false);
+  writeFileSync(join(home, "config.toml"), switched);
+  assert.equal(setup.keepRouted(17891, recent).rerouted, false, "disabled by the user: left alone");
+});

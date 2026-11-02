@@ -7,7 +7,7 @@
 
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { codexHome, persistedEnv, proxyStatus } from "./codexconfig.ts";
+import { codexHome, persistedEnv, proxyStatus, routedThroughEngine } from "./codexconfig.ts";
 import { MARKETPLACE, PLUGIN, planInstall, planUninstall, pluginStatus, type Plan, type UserProxyEnv } from "./install.ts";
 import { dataDir } from "../../core/paths.ts";
 import { registerRoute, routeBaseUrl, validateBaseUrl } from "../../core/routes.ts";
@@ -63,10 +63,21 @@ export function planEngine(port: number, persistRoutes = false): Plan {
   });
 }
 
+// v0.11: whether the user wants Codex to go through the engine (enabled in the panel or by cam install, and not disabled
+// since), kept apart from config.toml, which a provider switcher may rewrite (keepRouted).
+const intentFile = () => join(dataDir(), "codex-engine.json");
+export function wantsEngine(): boolean | null {
+  try { const on = JSON.parse(readFileSync(intentFile(), "utf8")).on; return typeof on === "boolean" ? on : null; } catch { return null; }
+}
+function rememberWish(on: boolean): void {
+  try { mkdirSync(dataDir(), { recursive: true }); writeFileSync(intentFile(), JSON.stringify({ on, at: new Date().toISOString() })); } catch { /* the next enable writes it again */ }
+}
+
 // Codex goes through the engine from its next start. Throws, changing nothing, when the user's own settings conflict.
 export function useEngine(port: number): Plan {
   const plan = planEngine(port, true);
   applyPlan(plan);
+  rememberWish(true);
   return plan;
 }
 
@@ -74,10 +85,28 @@ export function useEngine(port: number): Plan {
 export function connectDirectly(): Plan {
   const plan = planUninstall({ configText: readConfig(), envText: readEnv() });
   applyPlan(plan);
+  rememberWish(false);
   return plan;
 }
 
 export const usesEngine = (): boolean => proxyStatus(readConfig()).enabled;
+
+// v0.11 (user 2026-11-02: switching models with a tool such as cc-switch must keep working, and so must the plugin): a
+// switcher writes the new provider's address over ours. Codex is then pointed at the engine again, with a route to the
+// provider the user just picked, so the switch stands and its requests still go through the engine. Only where the user
+// wants the engine and the plugin is still there; a config that keeps changing back stops it (`recent`, the times it was
+// done here lately: three in ten minutes).
+export function shouldReroute(state: { wants: boolean | null; gone: string | null; routed: boolean; recent: number[] }, now = Date.now()): boolean {
+  if (state.wants !== true || state.gone || state.routed) return false;
+  return state.recent.filter((at) => now - at < 10 * 60_000).length < 3;
+}
+export function keepRouted(port: number, recent: number[]): { rerouted: boolean; error?: string } {
+  // An install from before v0.11 has no wish written: one routed now counts as wanted.
+  if (wantsEngine() === null && usesEngine()) rememberWish(true);
+  if (!shouldReroute({ wants: wantsEngine(), gone: pluginGone(), routed: routedThroughEngine(readConfig()), recent })) return { rerouted: false };
+  recent.push(Date.now());
+  try { useEngine(port); return { rerouted: true }; } catch (error) { return { rerouted: false, error: String(error) }; }
+}
 
 // Whether Codex no longer runs the plugin, judged only from clear signs: its folder in Codex's cache is gone
 // (uninstalled), or config.toml turns it off. An entry Codex may some day write differently is not taken as a removal.

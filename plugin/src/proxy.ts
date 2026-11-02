@@ -22,7 +22,7 @@
 
 import http, { type IncomingHttpHeaders } from "node:http";
 import type net from "node:net";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -32,7 +32,7 @@ import { CLAUDE_HOST, claudeConversationRequest, claudeIdentity, claudeImageSize
 import { claudePanelApi, claudePanelPage, PANEL_PAGE_CSP } from "./adapters/claude/panel-web.ts";
 import { codexHome } from "./adapters/codex/codexconfig.ts";
 import { CODEX_BASE, imageSizesOf, needsRewrite, OPENAI_API_HOST, requestIdentity, rewriteBody, UPSTREAM_HOST, type RequestIdentity } from "./adapters/codex/engine.ts";
-import { connectDirectly, pluginGone, usesEngine } from "./adapters/codex/setup.ts";
+import { connectDirectly, keepRouted, pluginGone, usesEngine } from "./adapters/codex/setup.ts";
 import { setPixelCache } from "./core/pixels.ts";
 import { REMEMBERED, type SentPrefix } from "./adapters/protocols/anthropic-messages/cache.ts";
 import { readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./adapters/protocols/anthropic-messages/thinking.ts";
@@ -215,7 +215,27 @@ async function main(): Promise<void> {
         log({ at: new Date().toISOString(), event: "plugin-check-failed", pid: process.pid, error: String(error) });
       }
     };
-    setInterval(() => checkPlugin(false), 15_000).unref();
+    // v0.11: a provider switcher (cc-switch) wrote its provider over the engine's address: Codex is pointed at the engine
+    // again, with a route to the provider the user picked (adapters/codex/setup.ts, keepRouted). Checked as soon as
+    // config.toml changes, at start, and with the plugin check.
+    const rerouted: number[] = [];
+    let lastRerouteError = "";
+    const reroute = (why: string) => {
+      const result = keepRouted(port, rerouted);
+      if (result.rerouted) log({ at: new Date().toISOString(), event: "codex-reroute", pid: process.pid, why });
+      if (result.error && result.error !== lastRerouteError) log({ at: new Date().toISOString(), event: "codex-reroute-failed", pid: process.pid, why, error: result.error });
+      lastRerouteError = result.error ?? "";
+    };
+    reroute("start");
+    let settling: NodeJS.Timeout | null = null;
+    try {
+      watch(codexHome(), (_event, name) => {
+        if (name !== "config.toml") return;
+        if (settling) clearTimeout(settling);
+        settling = setTimeout(() => { settling = null; reroute("config changed"); }, 1000);
+      }).unref();
+    } catch { /* no folder to watch yet: the periodic check still runs */ }
+    setInterval(() => { checkPlugin(false); reroute("check"); }, 15_000).unref();
     watchForClients(() => {
       checkPlugin(true);
       log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: "no Codex or Claude Code process left, and no plugin service checked in" });
