@@ -24,7 +24,8 @@ import { codexUiLocale, currentLang, storedLang, systemLang } from "./language.t
 import { say, type MessageKey } from "./messages.ts";
 import { migrateDataOnce } from "./core/migrate-data.ts";
 import { MARKETPLACE, PLUGIN, PLUGIN_ID, pluginStatus } from "./adapters/codex/install.ts";
-import { applySelection, loadPanelState, type PanelState } from "./panel/panel-state.ts";
+import { applySelection, loadPanelState } from "./adapters/codex/panel.ts";
+import type { PanelState } from "./panel/panel-state.ts";
 import { dataDir, selectionDirOf } from "./core/paths.ts";
 import { preservingPluginCache } from "./adapters/codex/plugin-cache.ts";
 import { backupConfig, connectDirectly, planEngine, readConfig, readEnv, useEngine } from "./adapters/codex/setup.ts";

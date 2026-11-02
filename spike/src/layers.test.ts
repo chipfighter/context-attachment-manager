@@ -19,12 +19,6 @@ const PENDING = new Set<string>([
   "adapters/codex/engine.ts -> language.ts",
   "adapters/codex/install.ts -> language.ts",
   "adapters/codex/install.ts -> messages.ts",
-  "panel/panel-state.ts -> adapters/claude/claude-index.ts",
-  "panel/panel-state.ts -> adapters/claude/selection.ts",
-  "panel/panel-state.ts -> adapters/codex/children.ts",
-  "panel/panel-state.ts -> adapters/codex/selection.ts",
-  "panel/panel-state.ts -> adapters/codex/thread-index.ts",
-  "panel/panel-state.ts -> adapters/codex/thread-names.ts",
 ]);
 
 type Layer = "core" | "panel" | "protocols" | `adapter:${string}` | "top";

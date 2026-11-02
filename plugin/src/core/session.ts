@@ -14,6 +14,8 @@ type Json = Record<string, any>;
 export type IndexedImage = ImageDigest & {
   key: string; kind: ImageKind; name: string | null; label: string | null; source: ImageSource; replaceable: boolean;
   id: string; turn: number | null; bytes: number; pixelSha256: string | null; compacted?: boolean;
+  // v0.2: a PDF comment screenshot's page and file (Codex desktop), for the panel.
+  pdfPage?: number | null; pdfName?: string | null;
 };
 // v0.3: an image the model fetched with our tool, a copy of `of` sent in its own turn only (spec: automatic selection).
 export type FetchedCopy = { key: string; of: string; turn: number | null };

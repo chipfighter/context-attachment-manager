@@ -10,24 +10,17 @@
 // automatic selection; the task's switch for them is gone.
 // v0.8 — what the panel searches and groups by, and never shows (docs/v0.8/plan.md): each image's scene (its feature
 // line's first part) and the feature line and ratings the model noted; and per turn, what was said in it.
-// Input: thread id, the sessions directory (rollouts are only read) and the tool's data directory.
-// Output: PanelState as plain JSON; selection changes are written to <data dir>/selection/.
+// v0.11: platform-free (docs/v0.11/plan.md): what the panel shows is computed here from the core's index, selection
+// and statistics; reading a platform's records is its adapter's (adapters/<platform>/panel.ts).
+// Input: a session's index, selection and statistics. Output: PanelState as plain JSON, selection changes.
 
-import { readChildren } from "../adapters/codex/children.ts";
-import { claudeHome, claudeImageData, claudeStartedAt, isPrompt, loadClaudeIndex, type ClaudeIndex, type ClaudeRecord } from "../adapters/claude/claude-index.ts";
 import type { ImageSource } from "../core/images.ts";
 import { sceneOf, withoutRecords } from "../core/notes.ts";
-import { childrenDirOf, claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, requestStatsDirOf, selectionDirOf } from "../core/paths.ts";
-import { readRequestStats, type RequestStats } from "../core/request-stats.ts";
-import { claudeSelection } from "../adapters/claude/selection.ts";
-import { effectiveSelection } from "../adapters/codex/selection.ts";
-import { stableIdsSince, writeSelection, type Mark, type Selection } from "../core/selection.ts";
-import { buildIndex, imageData, readThreadHistory, sessionMetaOf, type IndexedImage, type ThreadIndex } from "../adapters/codex/thread-index.ts";
-import { threadTitle } from "../adapters/codex/thread-names.ts";
+import type { RequestStats } from "../core/request-stats.ts";
+import type { Mark, Selection } from "../core/selection.ts";
+import type { IndexedImage, SessionIndex } from "../core/session.ts";
 import { pngThumbnail } from "../core/thumbnail.ts";
 
-type Json = Record<string, any>;
-type Record_ = { type: string; payload: Json };
 export type PanelImage = {
   id: string; kind: string; name: string | null; label: string | null; turn: number | null;
   // v0.2 — what the panel filters by; a PDF comment screenshot also says its page and the PDF's name when known.
@@ -106,7 +99,6 @@ export function sendInfo(stats: RequestStats | null): SendInfo {
     notice,
   };
 }
-export type PanelOptions = { sessionsDir: string; dataRoot?: string };
 
 // "需要 IMG-004" or a list right after it ("需要 IMG-004、IMG-002 和 IMG-007"); a full stop ends the list. The English
 // wording (v0.1-14) asks for "need IMG-004", which the model may quote.
@@ -135,23 +127,7 @@ export function askedIn(text: string): string[] {
   return [...ids];
 }
 
-// Ids the model asked for ("需要 IMG-003") in its latest reply; a turn still running falls back to the one before.
-export function requestedIds(history: Record_[]): string[] {
-  let current: string[] = [];
-  let previous: string[] = [];
-  for (const record of history) {
-    if (record.type === "event_msg" && record.payload.type === "task_started") {
-      if (current.length) previous = current;
-      current = [];
-    }
-    if (record.type === "response_item" && record.payload.type === "message" && record.payload.role === "assistant") {
-      for (const part of record.payload.content ?? []) if (typeof part?.text === "string") current.push(part.text);
-    }
-  }
-  return [...new Set((current.length ? current : previous).flatMap(askedIn))];
-}
-
-export function sameContent(index: ThreadIndex, image: IndexedImage): string[] {
+export function sameContent(index: SessionIndex, image: IndexedImage): string[] {
   return index.images
     .filter((other) => other !== image && (other.contentId === image.contentId || (image.pixelSha256 !== null && other.pixelSha256 === image.pixelSha256)))
     .map((other) => other.id);
@@ -162,57 +138,18 @@ export function sameContent(index: ThreadIndex, image: IndexedImage): string[] {
 // so a long task does not make every read of the panel large. The turns are numbered as in the index.
 const PIECE = 200;
 const TURN_TEXT = 600;
-const joinTurns = (texts: Map<number, string[]>): Record<string, string> =>
+export const joinTurns = (texts: Map<number, string[]>): Record<string, string> =>
   Object.fromEntries([...texts].map(([turn, pieces]) => [String(turn), pieces.join(" ").slice(0, TURN_TEXT)]));
-const piece = (texts: Map<number, string[]>, turn: number, text: unknown) => {
+export const piece = (texts: Map<number, string[]>, turn: number, text: unknown) => {
   // Text the client adds (instructions, the environment, an image's tag) starts with a tag or the AGENTS.md heading.
   if (typeof text !== "string" || /^\s*(?:<|# AGENTS\.md)/.test(text)) return;
   const said = withoutRecords(text).replace(/\s+/g, " ").trim().slice(0, PIECE);
   if (said) texts.set(turn, [...(texts.get(turn) ?? []), said]);
 };
-export function codexTurnTexts(history: Record_[]): Record<string, string> {
-  const numbers = new Map<string, number>();
-  const texts = new Map<number, string[]>();
-  let turn: number | null = null;
-  for (const record of history) {
-    if (record.type === "event_msg" && record.payload.type === "task_started" && record.payload.turn_id) {
-      if (!numbers.has(record.payload.turn_id)) numbers.set(record.payload.turn_id, numbers.size + 1);
-      turn = numbers.get(record.payload.turn_id)!;
-    }
-    if (turn === null || record.type !== "response_item") continue;
-    const item = record.payload;
-    if (item.type === "message" && (item.role === "user" || item.role === "assistant") && Array.isArray(item.content)) for (const part of item.content) piece(texts, turn, part?.text);
-    else if (item.type === "function_call") piece(texts, turn, item.arguments);
-    else if (item.type === "custom_tool_call") piece(texts, turn, item.input);
-    else if (item.type === "image_generation_call") piece(texts, turn, item.revised_prompt);
-  }
-  return joinTurns(texts);
-}
-export function claudeTurnTexts(chain: ClaudeRecord[]): Record<string, string> {
-  const texts = new Map<number, string[]>();
-  let turn = 0;
-  for (const record of chain) {
-    if (record.type === "user" && isPrompt(record)) turn++;
-    const content = record.message?.content;
-    if (!turn || (record.type !== "user" && record.type !== "assistant") || record.isMeta || record.isCompactSummary) continue;
-    if (typeof content === "string") { piece(texts, turn, content); continue; }
-    if (!Array.isArray(content)) continue;
-    for (const block of content) {
-      if (block?.type === "text") piece(texts, turn, block.text);
-      else if (block?.type === "tool_use" && record.type === "assistant") piece(texts, turn, JSON.stringify(block.input ?? {}));
-    }
-  }
-  return joinTurns(texts);
-}
-
-// `unchecked`: the keys whose box is not ticked (v0.3: with automatic selection on, every image not pinned).
-export function panelState(threadId: string, history: Record_[], index: ThreadIndex, unchecked: Set<string>, stats: RequestStats | null, title: string | null = null, auto = false): PanelState {
-  return panelStateOf(threadId, index, unchecked, stats, title, auto, requestedIds(history), history.length > 0, codexTurnTexts(history));
-}
 
 // v0.4: the same for any index: Codex's (from a rollout) or Claude Code's (claude-index.ts), with the ids the model's
 // latest reply asked for and whether the conversation has started.
-export function panelStateOf(threadId: string, index: ThreadIndex, unchecked: Set<string>, stats: RequestStats | null, title: string | null, auto: boolean, requested: string[], started: boolean, turnTexts: Record<string, string> = {}): PanelState {
+export function panelStateOf(threadId: string, index: SessionIndex, unchecked: Set<string>, stats: RequestStats | null, title: string | null, auto: boolean, requested: string[], started: boolean, turnTexts: Record<string, string> = {}): PanelState {
   const fetched = [...new Set([...index.copies.values()].filter((copy) => copy.turn !== null && copy.turn === index.turns).map((copy) => copy.of))];
   const carried: Record<string, number> | null = stats?.lastHttp?.imageSizes ?? null;
   // Images after the last one that request carried, or from a later turn, were added since and go out next time.
@@ -253,66 +190,20 @@ export function panelStateOf(threadId: string, index: ThreadIndex, unchecked: Se
   };
 }
 
-// v0.7: oldest first, as the engine first saw each one.
-function childrenOf(taskId: string, options: PanelOptions): ChildInfo[] {
-  const root = options.dataRoot ?? dataDir();
-  return Object.entries(readChildren(taskId, childrenDirOf(root)))
-    .sort(([, a], [, b]) => a.at.localeCompare(b.at))
-    .map(([threadId, child]): ChildInfo => {
-      const stats = readRequestStats(threadId, requestStatsDirOf(root));
-      const spawn = child.kind === "subagent" ? sessionMetaOf(options.sessionsDir, threadId)?.source?.subagent?.thread_spawn : null;
-      const images = stats?.lastHttp?.images;
-      return { threadId, kind: child.kind, name: spawn?.agent_nickname ?? spawn?.agent_path?.split("/").pop() ?? null, startedAt: child.at, images: typeof images === "number" ? images : null, last: sendInfo(stats).last };
-    });
-}
-
-// A thread with no rollout yet (new, or the panel opened outside a thread) simply has no images. An earlier part of
-// the history that is gone for good is left out and reported.
-function historyOf(threadId: string, sessionsDir: string): { history: Record_[]; missing: string[] } {
-  const missing: string[] = [];
-  try {
-    return { history: readThreadHistory(sessionsDir, threadId, missing), missing };
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("no rollout found")) return { history: [], missing };
-    throw error;
-  }
-}
-
-function load(threadId: string, options: PanelOptions) {
-  const root = options.dataRoot ?? dataDir();
-  const { history, missing } = historyOf(threadId, options.sessionsDir);
-  const index = buildIndex(threadId, history);
-  const selection = effectiveSelection(threadId, options.sessionsDir, selectionDirOf(root));
-  const stats = readRequestStats(threadId, requestStatsDirOf(root));
-  const title = threadTitle(options.sessionsDir, threadId, history);
-  return { root, history, index, selection, stats, title, historyMissing: missing.length > 0 };
-}
-
 // The keys whose box is not ticked: the unchecked ones; v0.3: with automatic selection on, every image that can be left
 // out and is not pinned.
-function offKeys(index: ThreadIndex, selection: Selection): Set<string> {
+export function offKeys(index: SessionIndex, selection: Selection): Set<string> {
   if (!selection.auto) return new Set(Object.keys(selection.unchecked));
   const pinned = selection.pinned ?? {};
   return new Set(index.images.filter((image) => image.replaceable && !pinned[image.key]).map((image) => image.key));
 }
 
-export function loadPanelState(threadId: string, options: PanelOptions): PanelState {
-  const { history, index, selection, stats, title, historyMissing } = load(threadId, options);
-  return { ...panelState(threadId, history, index, offKeys(index, selection), stats, title, !!selection.auto), historyMissing, children: childrenOf(threadId, options) };
-}
-
 // v0.3: `auto` switches automatic selection; with `mode: "auto"` a tick pins an image instead of sending it, each kept
 // in its own record, so switching back finds the manual checks as they were.
 export type SelectionChange = { uncheck?: string[]; check?: string[]; checkAll?: boolean; auto?: boolean; mode?: "manual" | "auto" };
-export function applySelection(threadId: string, change: SelectionChange, options: PanelOptions): PanelState {
-  const { root, history, index, selection, stats, title, historyMissing } = load(threadId, options);
-  const next = changedSelection(threadId, index, selection, change);
-  writeSelection(next, selectionDirOf(root));
-  return { ...panelState(threadId, history, index, offKeys(index, next), stats, title, !!next.auto), historyMissing, children: childrenOf(threadId, options) };
-}
 
 // The selection after a change; nothing is written.
-export function changedSelection(threadId: string, index: ThreadIndex, selection: Selection, change: SelectionChange): Selection {
+export function changedSelection(threadId: string, index: SessionIndex, selection: Selection, change: SelectionChange): Selection {
   const now = new Date().toISOString();
   let next: Selection = { ...selection, threadId };
   // Switched on for the first time, the thread is marked: from then on its history may hold copies the model fetched.
@@ -338,55 +229,11 @@ export function changedSelection(threadId: string, index: ThreadIndex, selection
 }
 
 // One image for the panel: a PNG larger than maxSide is scaled down; smaller PNGs and other formats (which the
-// browser scales itself) are passed through as they are.
-export function imageFor(threadId: string, id: string, maxSide: number, options: PanelOptions): { id: string; dataUrl: string | null } {
-  const { history } = historyOf(threadId, options.sessionsDir);
-  const index = buildIndex(threadId, history);
-  const image = index.images.find((candidate) => candidate.id === id);
-  if (!image) throw new Error(`${id} is not an image of this thread`);
-  const items = history.filter((record) => record.type === "response_item").map((record) => record.payload);
-  const data = imageData(items, image);
-  if (!data || !image.mime?.startsWith("image/")) return { id, dataUrl: null };
+// browser scales itself) are passed through as they are. A PNG our decoder cannot read (e.g. interlaced) is still
+// shown, just not scaled down first.
+export function imageUrl(image: Pick<IndexedImage, "mime" | "width" | "height">, data: string | null, maxSide: number): string | null {
+  if (!data || !image.mime?.startsWith("image/")) return null;
   const original = `data:${image.mime};base64,${data}`;
   const large = image.mime === "image/png" && Math.max(image.width ?? 0, image.height ?? 0) > maxSide;
-  // A PNG our decoder cannot read (e.g. interlaced) is still shown, just not scaled down first.
-  return { id, dataUrl: large ? pngThumbnail(data, maxSide) ?? original : original };
-}
-
-// v0.4: the same for a Claude Code session, from its transcript (claude-index.ts) and the selection and statistics
-// kept for Claude sessions (paths.ts).
-export type ClaudePanelOptions = { dataRoot?: string; home?: string };
-
-function loadClaude(sessionId: string, options: ClaudePanelOptions) {
-  const root = options.dataRoot ?? dataDir();
-  const index = loadClaudeIndex(sessionId, options.home ?? claudeHome(), stableIdsSince(claudeSelectionDirOf(root)));
-  const selection = claudeSelection(sessionId, claudeSelectionDirOf(root), claudeStartedAt(index), index.previous);
-  const stats = readRequestStats(sessionId, claudeRequestStatsDirOf(root));
-  return { root, index, selection, stats };
-}
-
-const claudeState = (sessionId: string, index: ClaudeIndex, selection: Selection, stats: RequestStats | null): PanelState =>
-  panelStateOf(sessionId, index, offKeys(index, selection), stats, index.title, !!selection.auto, [...new Set(index.replies.flatMap(askedIn))], index.chain.length > 0, claudeTurnTexts(index.chain));
-
-export function loadClaudePanelState(sessionId: string, options: ClaudePanelOptions = {}): PanelState {
-  const { index, selection, stats } = loadClaude(sessionId, options);
-  return claudeState(sessionId, index, selection, stats);
-}
-
-export function applyClaudeSelection(sessionId: string, change: SelectionChange, options: ClaudePanelOptions = {}): PanelState {
-  const { root, index, selection, stats } = loadClaude(sessionId, options);
-  const next = changedSelection(sessionId, index, selection, change);
-  writeSelection(next, claudeSelectionDirOf(root));
-  return claudeState(sessionId, index, next, stats);
-}
-
-export function claudeImageFor(sessionId: string, id: string, maxSide: number, options: ClaudePanelOptions = {}): { id: string; dataUrl: string | null } {
-  const index = loadClaudeIndex(sessionId, options.home ?? claudeHome(), stableIdsSince(claudeSelectionDirOf(options.dataRoot ?? dataDir())));
-  const image = index.images.find((candidate) => candidate.id === id);
-  if (!image) throw new Error(`${id} is not an image of this session`);
-  const data = claudeImageData(index, image);
-  if (!data || !image.mime?.startsWith("image/")) return { id, dataUrl: null };
-  const original = `data:${image.mime};base64,${data}`;
-  const large = image.mime === "image/png" && Math.max(image.width ?? 0, image.height ?? 0) > maxSide;
-  return { id, dataUrl: large ? pngThumbnail(data, maxSide) ?? original : original };
+  return large ? pngThumbnail(data, maxSide) ?? original : original;
 }

@@ -6,7 +6,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import { ownRequest } from "../../core/engine/transport.ts";
 import { webPanelPage } from "../../panel/page.ts";
 import { claudePanelLanguage } from "../../panel/panel-language.ts";
-import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type ClaudePanelOptions } from "../../panel/panel-state.ts";
+import { applyClaudeSelection, claudeImageFor, loadClaudePanelState, type ClaudePanelOptions } from "./panel.ts";
 
 type Json = Record<string, any>;
 
