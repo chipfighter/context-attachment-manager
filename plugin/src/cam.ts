@@ -7,7 +7,9 @@
 // v0.1-5: setup, run from the copy Codex installed (the install scripts do this after Codex's own command line added
 // the plugin), points Codex at the engine and starts it. The settings themselves are switched in setup.ts.
 // v0.1-14: it speaks the system language (messages.ts); status shows the language the panel reported.
-// Input: install [--port N] | setup [--port N] | uninstall | status | list|uncheck|check|check-all <thread id> [IMG-…].
+// v0.11: connect <platform> [--base-url URL], for a platform using the core alone (ADAPTERS.md).
+// Input: install [--port N] | setup [--port N] | uninstall | status | connect <platform> [--base-url URL] |
+// list|uncheck|check|check-all <thread id> [IMG-…].
 // Output: config.toml (copied to <data dir>/config-backup/ before every change), ~/.codex/.env (never copied or
 // printed: it may hold credentials), the plugin cache (through Codex's command line), the selection files, and a
 // summary on stdout. Rollouts are only read.
@@ -30,6 +32,8 @@ import type { PanelState } from "./panel/panel-state.ts";
 import { dataDir, selectionDirOf } from "./core/paths.ts";
 import { preservingPluginCache } from "./adapters/codex/plugin-cache.ts";
 import { backupConfig, connectDirectly, planEngine, readConfig, readEnv, useEngine } from "./adapters/codex/setup.ts";
+import { registerRoute, routeBaseUrl, validateBaseUrl } from "./core/routes.ts";
+import { CORE_PLATFORMS, corePlatformOf } from "./platforms.ts";
 
 type Json = Record<string, any>;
 const lang = systemLang();
@@ -215,7 +219,21 @@ async function main(): Promise<void> {
     }, null, 2));
     return;
   }
-  if (!command || !threadId) throw new Error("usage: cam.ts install [--port N] | setup [--port N] | uninstall | status | list|uncheck|check|check-all <thread id> [IMG-…]");
+  // v0.11: a platform using the core alone (platforms.ts, ADAPTERS.md): registers the route from the engine to where its
+  // requests go, and says what to set in the platform. Changes no file of the platform's.
+  if (command === "connect") {
+    const platform = corePlatformOf(threadId);
+    if (!platform) throw new Error(`usage: cam.ts connect <${CORE_PLATFORMS.map((one) => one.name).join("|")}> [--base-url URL]`);
+    const baseUrl = process.argv.includes("--base-url") ? process.argv[process.argv.indexOf("--base-url") + 1] : platform.upstream;
+    if (!baseUrl) throw new Error(`${platform.title}: give the address its requests go to now, with --base-url (e.g. https://api.anthropic.com/v1)`);
+    try { validateBaseUrl(baseUrl, port); } catch (error) { throw localized(error); }
+    const route = registerRoute({ platform: platform.name, baseUrl });
+    const url = routeBaseUrl(port, route.id).replace("localhost", "127.0.0.1");
+    const mcp = { command: process.execPath, args: [join(import.meta.dirname, "plugin-server.ts")], env: { CAM_HOST: platform.name } };
+    console.log(JSON.stringify({ command, platform: platform.name, upstream: baseUrl, url, steps: platform.connect({ url, mcp }) }, null, 2));
+    return;
+  }
+  if (!command || !threadId) throw new Error("usage: cam.ts install [--port N] | setup [--port N] | uninstall | status | connect <platform> [--base-url URL] | list|uncheck|check|check-all <thread id> [IMG-…]");
   const options = { sessionsDir: join(codexHome(), "sessions") };
   if (command === "list") console.log(table(loadPanelState(threadId, options)));
   else if (command === "uncheck") console.log(table(applySelection(threadId, { uncheck: ids }, options)));

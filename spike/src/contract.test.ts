@@ -8,6 +8,8 @@ import test from "node:test";
 import { imageBlocks, rewriteBlocks, type RequestImage } from "../../plugin/src/adapters/protocols/anthropic-messages/rewrite.ts";
 import { findImages, type ImageRef } from "../../plugin/src/adapters/protocols/openai-responses/images.ts";
 import { rewriteItems } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
+import { chatImages, rewriteChat } from "../../plugin/src/adapters/protocols/openai-chat/rewrite.ts";
+import { geminiImages, rewriteGemini } from "../../plugin/src/adapters/protocols/gemini/rewrite.ts";
 import type { RewriteReport } from "../../plugin/src/core/plan.ts";
 import { featureNote, type Described } from "../../plugin/src/core/words.ts";
 import { image, pngA, pngB, text, usualRequest } from "./claude-fixtures.ts";
@@ -66,6 +68,39 @@ const TRANSLATORS: Translator[] = [
     },
     images: (body) => count(body, (node) => node.type === "image"),
   },
+  {
+    name: "openai-chat",
+    sample: () => [
+      { role: "system", content: "instructions" },
+      { role: "user", content: [{ type: "text", text: "两张图" }, { type: "image_url", image_url: { url: url(red), detail: "high" } }, { type: "image_url", image_url: { url: url(blue) } }] },
+      { role: "assistant", content: "收到", tool_calls: [{ id: "c1", type: "function", function: { name: "look", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "c1", content: [{ type: "text", text: "done" }, { type: "image_url", image_url: { url: url(png(4, 4, () => [9, 9, 9])) } }] },
+    ],
+    keys: (body) => chatImages(body).images.map((image) => image.key),
+    rewrite: (body, leaveOut, { lang, features }) => {
+      const { images } = chatImages(body);
+      const describe = describedBy(images.map((image) => image.key), (key) => { const image = images.find((one) => one.key === key)!; return { name: null, label: null, kind: image.kind, width: image.width, height: image.height }; });
+      const out = rewriteChat(body, images, (image) => describe(image.key), leaveOut, () => null, { lang, features });
+      return { body: out.messages, report: out.report };
+    },
+    images: (body) => count(body, (node) => node.type === "image_url"),
+  },
+  {
+    name: "gemini",
+    sample: () => [
+      { role: "user", parts: [{ text: "两张图" }, { inlineData: { mimeType: "image/png", data: red.toString("base64") } }, { inlineData: { mimeType: "image/png", data: blue.toString("base64") } }] },
+      { role: "model", parts: [{ text: "收到" }, { functionCall: { name: "look", args: {} } }] },
+      { role: "user", parts: [{ functionResponse: { name: "look", response: { output: "done" } } }, { inlineData: { mimeType: "image/png", data: png(4, 4, () => [9, 9, 9]).toString("base64") } }] },
+    ],
+    keys: (body) => geminiImages(body).images.map((image) => image.key),
+    rewrite: (body, leaveOut, { lang, features }) => {
+      const { images } = geminiImages(body);
+      const describe = describedBy(images.map((image) => image.key), (key) => { const image = images.find((one) => one.key === key)!; return { name: null, label: null, kind: image.kind, width: image.width, height: image.height }; });
+      const out = rewriteGemini(body, images, (image) => describe(image.key), leaveOut, () => null, { lang, features });
+      return { body: out.contents, report: out.report };
+    },
+    images: (body) => count(body, (node) => !!node.inlineData),
+  },
 ];
 
 for (const translator of TRANSLATORS) {
@@ -94,7 +129,7 @@ for (const translator of TRANSLATORS) {
     const { body: out } = translator.rewrite(marked(), all(marked()), { lang: "en", features: true });
     const original = marked();
     for (const entry of original) {
-      const same = out.find((candidate) => JSON.stringify({ ...candidate, content: null, output: null }) === JSON.stringify({ ...entry, content: null, output: null }));
+      const same = out.find((candidate) => JSON.stringify({ ...candidate, content: null, output: null, parts: null }) === JSON.stringify({ ...entry, content: null, output: null, parts: null }));
       assert.ok(same, "every entry is still there with its other fields");
     }
   });
