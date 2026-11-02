@@ -117,6 +117,18 @@ Configure your gateway in the client first, as you would without this plugin. It
 
 The engine listens only on loopback: port 17891 serves the panel and existing official connections; port 17892 serves registered provider routes. Both belong to the same engine process. With a custom engine port, provider routes use the next port. Keep both ports available. An older plugin copy cannot serve the registered routes; update both platform plugins for normal operation.
 
+
+### Troubleshooting
+
+If a custom endpoint does not work with the plugin, collect the details below before opening an issue:
+
+1. **Identify the setup.** Include the Context Attachment Manager version and the installed plugin version for the affected platform, the client version, your OS and version, and whether this is the Codex desktop app or a local Code session in Claude Desktop.
+2. **Test the endpoint in the client first.** Configure and verify the gateway in Codex or Claude Code without relying on the plugin. The endpoint must accept the client's native API format: **Responses** for Codex or **Anthropic Messages** for Claude Code. It must also support image inputs and tool calls. The plugin forwards requests; it does not translate API formats.
+3. **Check both local engine ports.** The engine uses loopback port `17891` for the panel and existing official connections, and port `17892` for registered provider routes. Both ports must be available to the local engine. If you configured a custom engine port, the provider-routes port is the next port number. See [Custom endpoints](#custom-endpoints) for the routing details.
+4. **Apply endpoint changes in a fresh client session.** In Codex, after a tool changes provider addresses, enable the plugin again (or rerun the install command), then restart Codex. In Claude Desktop, start a new session in the Code tab after changing the endpoint. If you updated the plugin, follow [Update](#update) and make sure both platform plugin copies are current.
+
+When reporting a failure, include the steps that reproduce it, the expected and actual result, the endpoint provider and non-secret endpoint shape (for example, whether it is a hosted gateway or a local URL, without private path or token details), the client and plugin versions, OS version, relevant error text, and whether the endpoint works directly in the client. Do not include API keys, authorization headers, private endpoint tokens, or conversation content. Remove them from logs and screenshots before attaching anything.
+
 ## Open the panel
 
 - **Codex**: open a task, click **Toggle side panel** at the top right, open a new tab with **+**, and choose **Context Assets** under **Plugins and MCPs**. If it isn't there, restart Codex once.
