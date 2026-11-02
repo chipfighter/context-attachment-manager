@@ -93,6 +93,11 @@ The plugin's core knows no platform; each one gets a thin adapter. The panel is 
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google's open-source terminal agent | Auto-select, new, feedback welcome |
 | [pi](https://github.com/earendil-works/pi) | Minimal, extensible terminal coding agent | Auto-select (pi extension), new, feedback welcome |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek's agent harness where everything is a plugin | Auto-select (dsh plugin), new, feedback welcome |
+| [Qwen Code](https://github.com/QwenLM/qwen-code) | Qwen's open-source terminal agent | Auto-select, new, feedback welcome |
+| [Cline](https://github.com/cline/cline) | Open-source coding agent for VS Code, JetBrains and the terminal | Auto-select, new, feedback welcome |
+| [Kilo Code](https://github.com/Kilo-Org/kilocode) | Open-source coding agent for VS Code, JetBrains and the terminal | Auto-select, new, feedback welcome |
+| [goose](https://github.com/aaif-goose/goose) | Open-source agent for desktop and terminal, extended with MCP | Auto-select, new, feedback welcome |
+| [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | Open-source desktop chat client for many models | Auto-select, new, feedback welcome |
 | **Your agent** | A thin adapter; the core stays as it is | Send a PR and add your agent here: [ADAPTERS.md](ADAPTERS.md) |
 
 To install on any of them, paste the sentence in [Install](#install) to that agent; how each one is connected is in [INSTALL.md](INSTALL.md#other-agents). Something off? [Open an issue](https://github.com/chipfighter/context-attachment-manager/issues).

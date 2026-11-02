@@ -31,9 +31,9 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
 | Claude 会话索引和改写（v0.4） | `adapters/claude/claude-index.ts`、`adapters/claude/claude-rewrite.ts`、`adapters/protocols/anthropic-messages/rewrite.ts` | 从 Claude Code 的会话记录找图、编号，把请求里的图对上记录；把决定落进 Anthropic Messages 请求 |
 | Claude 思考记录和提示缓存（v0.4、v0.10） | `adapters/protocols/anthropic-messages/thinking.ts`、`adapters/protocols/anthropic-messages/cache.ts` | 账号校验思考记录时，去掉和实际发出的历史对不上的思考；改过历史后，让提示缓存仍能读到 |
 | 面板页（v0.4） | `panel/panel-web.js`、`panel/panel-language.ts`、`adapters/claude/panel-web.ts` | 引擎把 `panel.html` 作为网页提供时，代替 MCP 应用的宿主 |
-| 只接核心的平台（v0.11） | `platforms.ts`、`core/platform.ts`、`core/request-index.ts`、`adapters/protocols/any.ts`、`adapters/protocols/openai-chat/rewrite.ts`、`adapters/protocols/gemini/rewrite.ts`、`adapters/{workbuddy,opencode,gemini-cli,pi}/platform.ts`、`adapters/pi/extension.ts` | 平台登记表和每个平台的条目；按路径认格式，从请求本身认图、按内容编号、存原图，自动选图一直开着；`cam connect` 登记线路；pi 的扩展加会话头、注册取图服务 |
+| 只接核心的平台（v0.11） | `platforms.ts`、`core/platform.ts`、`core/request-index.ts`、`adapters/protocols/any.ts`、`adapters/protocols/openai-chat/rewrite.ts`、`adapters/protocols/gemini/rewrite.ts`、`adapters/{workbuddy,opencode,gemini-cli,pi,qwen-code,cline,kilo-code,goose,cherry-studio}/platform.ts`、`adapters/pi/extension.ts` | 平台登记表和每个平台的条目；按路径认格式，从请求本身认图、按内容编号、存原图，自动选图一直开着；`cam connect` 登记线路；pi 的扩展加会话头、注册取图服务 |
 | DeepSeek Harness（v0.11） | `adapters/dsh/index.js`、`adapters/dsh/offload.js`、`adapters/dsh/package.json`、`adapters/dsh/cordis.patch.yml` | dsh 插件包：装上时停掉官方的图片卸载行，新一轮开始时卸载之前各轮的图，图片超预算时照旧卸载最旧的 |
-| 安装到其他平台（v0.11） | `platforms.ts`（`detectPlatform`）、`core/config-edit.ts`、各平台条目的 `detect` 和 `setup`、`cam.ts`（`detect`、`connect --apply`、`disconnect`） | 按环境变量认平台；改平台的设置文件，先备份、记下改动，撤回时只动还保持原样的设置 |
+| 安装到其他平台（v0.11） | `platforms.ts`（`detectPlatform`）、`core/config-edit.ts`、各平台条目的 `detect` 和 `setup`、`cam.ts`（`detect`、`connect --apply`、`disconnect`） | 按环境变量认平台；改平台的设置文件，记下改了哪几项和原来的值（不复制文件，里面可能有 API key），撤回时只动还保持原样的设置 |
 | 换模型后接回 Codex（v0.11） | `adapters/codex/setup.ts`（`wantsEngine`、`keepRouted`）、`adapters/codex/codexconfig.ts`（`routedThroughEngine`）、`proxy.ts` | config.toml 被 cc-switch 之类改写后，引擎重新接上，线路指向用户新选的服务商 |
 
 引擎和插件服务之间只通过数据目录里的文件共享状态，任何一方不在，另一方都照常工作。

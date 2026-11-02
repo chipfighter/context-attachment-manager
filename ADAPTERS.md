@@ -10,12 +10,12 @@ The panel (pick images, pin, search) is only in Codex and Claude Desktop. Every 
 
 ## Agents you can connect now
 
-WorkBuddy, OpenCode, Gemini CLI, pi and DeepSeek Harness. These adapters were written from each agent's code and docs and are **not tested live yet**. If one does not work for you, please [open an issue](https://github.com/chipfighter/context-attachment-manager/issues) with what you saw.
+WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose and Cherry Studio. These adapters were written from each agent's code and docs and are **not tested live yet**. If one does not work for you, please [open an issue](https://github.com/chipfighter/context-attachment-manager/issues) with what you saw.
 
 How to install, step by step (also for an AI doing it for you): [INSTALL.md, Other agents](INSTALL.md#other-agents). In short, from a clone of this repository:
 
 - `cam detect` tells which agent a shell runs in, from the variables each agent sets for its commands, and prints the next command.
-- `cam connect <agent> --apply` registers a route in the local engine, from a local address to where the agent's requests go now, and writes the agent's settings: that address, and the MCP server for `cam_view_image`. Files are backed up first, and what was written is recorded.
+- `cam connect <agent> --apply` registers a route in the local engine, from a local address to where the agent's requests go now, and writes the agent's settings: that address, and the MCP server for `cam_view_image`. What each setting held before is recorded (the files are never copied: they may hold API keys).
 - `cam disconnect <agent>` puts back what was there, except settings changed since.
 - `cam connect <agent>` without `--apply` only prints the steps.
 

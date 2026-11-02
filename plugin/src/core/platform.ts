@@ -18,7 +18,8 @@ export type ConnectInfo = {
 // edits: what to write (core/config-edit.ts). provider: for a platform with one address per model provider, the one
 // the user named (or the platform's shell said).
 export type SetupContext = { home: string; env: NodeJS.ProcessEnv; provider: string | null };
-export type SetupPlan = { current: string | null; fallback: string | null; edits: (info: ConnectInfo) => ConfigEdit[]; note?: string };
+// manual: why the settings are only printed, not written (a format this tool does not write, such as YAML).
+export type SetupPlan = { current: string | null; fallback: string | null; edits: (info: ConnectInfo) => ConfigEdit[]; note?: string; manual?: string };
 
 // The name of the plugin's MCP server in a platform's settings.
 export const MCP_NAME = "context-attachment-manager";
