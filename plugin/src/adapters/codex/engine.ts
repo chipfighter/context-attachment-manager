@@ -16,7 +16,7 @@ import { selectionDir } from "../../core/selection.ts";
 import { findImages, type ImageRef } from "../protocols/openai-responses/images.ts";
 import { addCodexCompacted, rewriteItems } from "../protocols/openai-responses/rewrite.ts";
 import { codexHome } from "./codexconfig.ts";
-import { awaitingLine } from "../../core/session.ts";
+import { autoChoice, earlierCopies } from "../../core/session.ts";
 import { imageData, loadThreadIndex, pixelHashOf, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
@@ -83,8 +83,15 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
   let index: ThreadIndex;
   try { index = loadThreadIndex(sessionsDir, origin ?? threadId); } catch (error) { return { body: original, report: { skipped: `thread index: ${String(error)}` } }; }
   const selection = side ?? effectiveSelection(threadId, sessionsDir, dir);
-  // v0.10: images sent once more for their feature line (awaitingLine), marked in their labels.
-  const awaiting = new Set<string>();
+  // v0.8: feature lines in a task's own requests, not a side chat's or a subagent's.
+  const features = !origin && writesNotes(sessionsDir, threadId);
+  const current = side ? index.turns + 1 : currentTurnOf(index, turnId);
+  const copies = earlierCopies(index, current);
+  // v0.3: automatic selection (core/session.ts); v0.10: images sent once more for their feature line, marked in their
+  // labels.
+  const chosen = selection.auto ? autoChoice(index, current, selection.pinned ?? {}, features) : null;
+  const leaveOut = chosen?.leaveOut ?? new Set(Object.keys(selection.unchecked));
+  const awaiting = chosen?.awaiting ?? new Set<string>();
   const describe = (ref: ImageRef): Described | undefined => {
     const known = index.byKey.get(ref.key);
     // v0.8: with what the model noted about it, for its placeholder.
@@ -94,16 +101,6 @@ export function rewriteBody(original: Buffer, encoding: string | undefined, thre
     return stored ? { id: stored.id, name: ref.name, label: ref.label, kind: ref.kind, turn: null, width: ref.width, height: ref.height } : undefined;
   };
   const pixels = (ref: ImageRef) => index.byKey.get(ref.key)?.pixelSha256 ?? pixelHashOf(json.input, ref);
-  const current = side ? index.turns + 1 : currentTurnOf(index, turnId);
-  const copies = new Map([...index.copies.values()].filter((copy) => copy.turn === null || copy.turn < current).map((copy) => [copy.key, copy.of]));
-  let leaveOut = new Set(Object.keys(selection.unchecked));
-  // v0.8: feature lines in a task's own requests, not a side chat's or a subagent's.
-  const features = !origin && writesNotes(sessionsDir, threadId);
-  if (selection.auto) {
-    const pinned = selection.pinned ?? {};
-    for (const image of index.images) if (features && awaitingLine(index, image, current)) awaiting.add(image.key);
-    leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key] && !awaiting.has(image.key)).map((image) => image.key));
-  }
   const rewritten = rewriteItems(json.input, describe, leaveOut, pixels, { lang: currentLang(), copies, features, ...(selection.auto ? { auto: { currentTurn: current } } : {}) });
   const { report } = rewritten;
   let items = rewritten.items;

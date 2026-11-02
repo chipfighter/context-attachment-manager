@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { buildOf, compareVersions, countClaudeInPs, countClaudeProcesses, countCodexInPs, countCodexProcesses, engineHealth, ensureEngine, isEngineHealth, shouldReplace, watchForCodex, type Health } from "../../plugin/src/engine.ts";
+import { buildOf, compareVersions, countClaudeInPs, countClaudeProcesses, countCodexInPs, countCodexProcesses, engineHealth, ensureEngine, isEngineHealth, shouldReplace, watchForClients, type Health } from "../../plugin/src/engine.ts";
 import { selectionDirOf } from "../../plugin/src/core/paths.ts";
 import { readRequestStats, recordRequest } from "../../plugin/src/core/request-stats.ts";
 import { autoDefaultSince, writeSelection } from "../../plugin/src/core/selection.ts";
@@ -46,12 +46,21 @@ test("on macOS and Linux, Codex processes are counted from ps by executable name
 test("the engine gives up only after consecutive checks without Codex", async () => {
   const run = (counts: number[]) => new Promise<number>((resolve) => {
     let calls = 0;
-    const stop = watchForCodex(() => resolve(calls), { intervalMs: 5, misses: 2, count: async () => counts[Math.min(calls++, counts.length - 1)] });
+    const stop = watchForClients(() => resolve(calls), { intervalMs: 5, misses: 2, count: async () => counts[Math.min(calls++, counts.length - 1)] });
     setTimeout(() => { stop(); resolve(-1); }, 500);
   });
   assert.equal(await run([1, 0, 0]), 3);
   assert.equal(await run([0, 1, 0, 1, 0, 0]), 6, "a Codex restart in between resets the count");
   assert.equal(await run([1]), -1, "never exits while Codex runs");
+});
+
+test("v0.11: a plugin service of another platform checking in keeps the engine without any Codex process", async () => {
+  const run = (lastClient: () => number) => new Promise<string>((resolve) => {
+    const stop = watchForClients(() => resolve("exited"), { intervalMs: 5, misses: 2, count: async () => 0, lastClient });
+    setTimeout(() => { stop(); resolve("stayed"); }, 200);
+  });
+  assert.equal(await run(() => Date.now()), "stayed");
+  assert.equal(await run(() => Date.now() - 10 * 60_000), "exited", "a check-in long ago does not count");
 });
 
 test("ensure starts one engine; a second start on the same port leaves it alone", async (t) => {

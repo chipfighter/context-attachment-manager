@@ -12,7 +12,7 @@ import type { Lang } from "../../core/lang.ts";
 import { currentLang } from "../../core/language.ts";
 import { claudeSelection } from "./selection.ts";
 import { stableIdsSince } from "../../core/selection.ts";
-import { awaitingLine } from "../../core/session.ts";
+import { autoChoice, earlierCopies } from "../../core/session.ts";
 import { pixelHashOfData } from "../../core/pixels.ts";
 import { keepCacheRead, marksOutside, sentPrefixOf, type SentPrefix } from "../protocols/anthropic-messages/cache.ts";
 import { addCompacted, summaryAt, type RequestImage, type Resend } from "../protocols/anthropic-messages/rewrite.ts";
@@ -96,14 +96,12 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   try { index = loadClaudeIndex(sessionId, home, stableIdsSince(dir)); } catch (error) { return asIs({ skipped: `thread index: ${String(error)}` }); }
   const selection = claudeSelection(sessionId, dir, claudeStartedAt(index), index.previous);
   const current = index.turns;
-  const copies = new Map([...index.copies.values()].filter((copy) => copy.turn === null || copy.turn < current).map((copy) => [copy.key, copy.of]));
-  let leaveOut = new Set(Object.keys(selection.unchecked));
-  // v0.10: images of an interrupted turn without a feature line yet are sent once more (awaitingLine).
-  const awaiting = new Set(selection.auto ? index.images.filter((image) => awaitingLine(index, image, current)).map((image) => image.key) : []);
-  if (selection.auto) {
-    const pinned = selection.pinned ?? {};
-    leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key] && !awaiting.has(image.key)).map((image) => image.key));
-  }
+  const copies = earlierCopies(index, current);
+  // v0.3: automatic selection (core/session.ts); v0.10: images of an interrupted turn without a feature line yet are
+  // sent once more.
+  const chosen = selection.auto ? autoChoice(index, current, selection.pinned ?? {}, true) : null;
+  const leaveOut = chosen?.leaveOut ?? new Set(Object.keys(selection.unchecked));
+  const awaiting = chosen?.awaiting ?? new Set<string>();
   const pixels = (ref: RequestImage) => (ref.key ? index.byKey.get(ref.key)?.pixelSha256 : undefined) ?? pixelHashOfData(ref, ref.block.source.data);
   // v0.5: after a compaction, the images from before it go back right after the summary (anthropic-messages/rewrite.ts): the ones
   // the user keeps sending (checked, or pinned with automatic selection) read from the transcript, the others as
