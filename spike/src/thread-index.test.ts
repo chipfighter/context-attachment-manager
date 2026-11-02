@@ -12,7 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { zstdCompressSync } from "node:zlib";
-import { buildIndex, forkOrigin, hasRollout, loadThreadIndex, readThreadHistory, setPixelCache, spawnParent, threadStartedAt, threadsStartedSince } from "../../plugin/src/adapters/codex/thread-index.ts";
+import { buildIndex, forkOrigin, hasRollout, loadThreadIndex, readThreadHistory, spawnParent, threadStartedAt, threadsStartedSince } from "../../plugin/src/adapters/codex/thread-index.ts";
+import { setPixelCache } from "../../plugin/src/core/pixels.ts";
 import { startThread, todayFolder } from "./testfixtures.ts";
 import { png } from "./testkit.ts";
 

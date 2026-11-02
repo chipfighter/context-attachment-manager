@@ -23,8 +23,8 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
 | 引擎 | `proxy.ts`（入口）、`core/engine/transport.ts`、`adapters/codex/engine.ts`、`adapters/claude/engine.ts`、`engine.ts`、`core/routes.ts` | 本机代理：按绑定线路转发、改写请求、记录每个任务最近一次请求的统计；全机只有一个 |
 | 插件服务 | `plugin-server.ts` | Codex 为每个会话启动的 MCP 服务：拉起并看守引擎，给面板提供数据；v0.3 起还给模型提供取图工具 |
 | 面板 | `panel/panel.html`、`panel/page.ts`、`panel/panel-state.ts` | 侧边面板里的 MCP 应用，以及它要显示的数据 |
-| 任务索引 | `adapters/codex/thread-index.ts`、`adapters/protocols/openai-responses/images.ts`、`core/images.ts`、`core/thumbnail.ts`、`core/png.ts`、`adapters/codex/thread-names.ts` | 从 Codex 的任务记录里只读地找出图片和它的来源、编号、生成缩略图、读任务名 |
-| 改写 | `core/plan.ts`、`core/words.ts`、`adapters/protocols/openai-responses/rewrite.ts`、`selection.ts`、`core/request-stats.ts`、`core/notes.ts` | 每张图发不发、换成什么字（两个平台共用）；发给模型的全部文字；把决定落进 Responses 请求；勾选状态；请求统计；特征行 |
+| 任务索引 | `adapters/codex/thread-index.ts`、`adapters/codex/children.ts`、`adapters/protocols/openai-responses/images.ts`、`core/images.ts`、`core/session.ts`、`core/pixels.ts`、`core/thumbnail.ts`、`core/png.ts`、`adapters/codex/thread-names.ts` | 从 Codex 的任务记录里只读地找出图片和它的来源、编号、生成缩略图、读任务名 |
+| 改写 | `core/plan.ts`、`core/words.ts`、`adapters/protocols/openai-responses/rewrite.ts`、`core/selection.ts`、`adapters/codex/selection.ts`、`adapters/claude/selection.ts`、`core/request-stats.ts`、`core/notes.ts` | 每张图发不发、换成什么字（两个平台共用）；发给模型的全部文字；把决定落进 Responses 请求；勾选状态；请求统计；特征行 |
 | 接入和安装 | `adapters/codex/`：`codexconfig.ts`、`setup.ts`、`install.ts`、`codexcli.ts`、`plugin-cache.ts`、`binding.ts`；`cam.ts` | 管理 Codex 配置里带标记的块；用 Codex 的命令行装卸插件；保护升级中的旧运行文件；新任务绑定；`cam` 命令行 |
 | 其他 | `language.ts`、`messages.ts`、`core/paths.ts`、`core/migrate-data.ts`、`core/entry.ts` | 语言、文字表、数据目录、旧数据迁移 |
 | Claude 接入（v0.4） | `hooks/register.js`（Mod，不在 `plugin/src`） | 把会话的请求地址指向引擎；`/cam` 打开面板（v0.6 起有图时自动打开）；取图工具免确认 |
@@ -109,8 +109,8 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
   - “重复”占位符只指向之前各轮仍在发送的图，也就是勾成每轮都发的；“已提供”标签也只加在这些图前面。这一轮的新图和取回的副本都不算：它们是这一轮中途才出现的，算进去的话，前面的占位符会在取图前后变样，缓存就断了。这样取图前后，这一轮前面的历史逐字节不变（有单元测试）。
   - 副本只在取回的那一轮发送；之后换成一句说明（“IMG-xxx 的原图：模型当时用 cam_view_image 取回，只在那一轮提供，现在已省略”）。关掉自动以后也这样，因为面板不单列副本，用户没法取消它。
   - 关着时，传给改写的参数和 v0.2 一样，输出逐字节相同：对照 v0.2 的改写代码，所有勾选组合（中英文、像素相同与否）都比过。
-  - v0.6 起新任务默认开着（`selection.ts`）：引擎和插件服务启动时，在勾选目录里写下这个版本第一次运行的时间（`auto-default.json`，只写一次，Codex 和 Claude 各一份）。任务没有自己的开关时，开始时间（会话记录第一条 `session_meta` 的时间，分叉的按来源任务算，`threadStartedAt`）不早于它，就当作开着，从开始时算起；还没有会话记录的算新的。默认值不写进勾选文件，面板里一改就写下来。读勾选的地方都经过它：改写、是否需要改写（所以新任务从一开始就走 HTTP）、面板、取图工具。
-- **子代理和旁聊**（v0.7，`proxy.ts`、`selection.ts`、`thread-index.ts`、`children.ts`；Codex 的做法见第 11 节）：
+  - v0.6 起新任务默认开着（`core/selection.ts`）：引擎和插件服务启动时，在勾选目录里写下这个版本第一次运行的时间（`auto-default.json`，只写一次，Codex 和 Claude 各一份）。任务没有自己的开关时，开始时间（会话记录第一条 `session_meta` 的时间，分叉的按来源任务算，`threadStartedAt`）不早于它，就当作开着，从开始时算起；还没有会话记录的算新的。默认值不写进勾选文件，面板里一改就写下来。读勾选的地方都经过它：改写、是否需要改写（所以新任务从一开始就走 HTTP）、面板、取图工具。
+- **子代理和旁聊**（v0.7，`proxy.ts`、`adapters/codex/selection.ts`、`thread-index.ts`、`adapters/codex/children.ts`；Codex 的做法见第 11 节）：
   - 认出来源：`x-codex-turn-metadata` 里除了 `thread_id`、`turn_id`，还读 `forked_from_thread_id`、`parent_thread_id`（没有时看请求头 `x-codex-parent-thread-id`）、`subagent_kind`，一起记进日志。
   - 开关：v0.7 是主任务勾选文件里的 `childrenAuto`；v0.8 起没有开关，一律按自动选图管，0.7 写下的 `childrenAuto` 不再读。
   - 旁聊：请求所属的任务没有会话记录、请求里又有 `forked_from_thread_id`，就是旁聊（`sideChatOrigin`；用户自己分叉的任务有记录，照旧按分叉规则）。用原任务的索引改写：原任务的各轮都算之前的轮次，所以带过来的图都换成自动版占位符，原任务里每轮都发的照发（`sideChatSelection`）。
@@ -295,7 +295,7 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
   - 保留消息的压缩（v0.10，`claude-index.ts` 的 `relinked`）：Claude Code 2.1.304 起压缩记录带 `compactMetadata.preservedSegment`（`headUuid`、`anchorUuid` 即摘要、`tailUuid`）或 `preservedMessages`（`anchorUuid`、`uuids`），原样保留最后几条消息。它读记录时（2.1.309 程序里的函数）对最后一个压缩点：保留的消息接在摘要后面；原来接在摘要上的记录，以及接在被它删掉的记录（压缩点之前、没被保留的）上的消息，接到最后一条保留消息后面；然后删掉那些记录。文件里存的是改接之前的样子：新消息接在保留消息上时，按文件连对话链会绕过压缩点。插件照同样的规则改接（只改 `activeChain` 用的父节点，不改记录），但不删历史：压缩点往前接到第一条保留消息原来的前一条，压缩前的图照旧标 `compacted`。
   - 续接后的记录（v0.10，`withHistory`、`originalOf`、`readHistoryTranscript`）：在桌面版里改一条之前的消息再发送（回退）时，桌面版从那里分叉出新会话，新记录文件只有改接后剩下的记录，从最近一个压缩点开始；只是重启进程的，还写原来的记录文件。插件找到压缩发生的那个记录文件：先看摘要里 Claude Code 写的“read the full transcript at: …”（取最后一处，只认 `<home>/projects` 下、含同一个压缩点且压缩点前面还有记录的文件），找不到再在同一个项目文件夹里、压缩之后改动过的记录里按压缩点的 uuid 找；它也可能是续接来的，逐层往回。旧记录只取压缩点之前、带 uuid 的记录，图片只留指纹，原始数据用到时再按位置从文件读（`onDisk`）；文件不变就不重读。这样编号和续接前一样，压缩前的图照样能放回、能取回。
   - 换算老记录行（v0.10，`translator`、`oldNumbering`、`familyOf`）：修复之前，续接后的文件从自己的起点编号，那段时间写下的记录行和取回副本前面那行字用的是这套编号。同一项目文件夹里，第一条对话记录是会话起点或某个压缩点的记录文件，就是这个会话的全部记录文件，各自的创建时间是开头第一条带时间的记录；一条记录行是写它时最近开的那个文件的进程写的。那个文件从压缩点开始的，就按“从那里数起”的旧编号找到图（key），再换成恢复后的编号；会话起点开始的不用换。只换算 `claude/selection/stable-ids.json` 记下的这个版本第一次运行之前写的（和 v0.6 的 auto-default.json 一样，引擎和插件服务启动时写一次）。文件里还记着编号规则的版本（`rules`，2 是补上不在链上的并行调用）：规则变了，第一次运行的时间就重新记。有 `offChain` 记录时，会话起点开始的文件也要换：旧编号跳过这些记录，再经图片换成现在的编号。旧编号只数到那个时刻，算一次就缓存。真实会话回放：两组会话，分别 6 个和 3 个记录文件，同一张图编号一致；挂错的特征行都回到对的图（`local/` 里的评估报告）。
-  - 勾选沿用（v0.10，`selection.ts` 的 `claudeOwnSelection`、`ClaudeIndex.previous`）：会话还没有自己的勾选文件时，按 `previous`（分叉时复制来的记录里留着的原会话 id 在前，然后是同一会话里更早开的记录文件，近的在前）找第一个有勾选文件的，沿用续接那一刻之前的标记和开关，写成自己的文件。
+  - 勾选沿用（v0.10，`adapters/claude/selection.ts` 的 `claudeOwnSelection`、`ClaudeIndex.previous`）：会话还没有自己的勾选文件时，按 `previous`（分叉时复制来的记录里留着的原会话 id 在前，然后是同一会话里更早开的记录文件，近的在前）找第一个有勾选文件的，沿用续接那一刻之前的标记和开关，写成自己的文件。
   - 代价（v0.10，用户要先看再定）：最长的真实会话（9 个记录文件、210 张图）堆内存 83 → 145 MB，第一次建索引约 1.8 秒；之后记录有变化时重建约 10 毫秒，同一请求里其余几次读取用缓存（按当前记录数组、记录数和 `since` 判断）。
   - 先算好要补哪些，再跑 v0.4 的改写，最后补图；面板统计里 `compacted` 记下补了哪几张（`resent`），面板的“上一次请求”写“补回压缩前的图 N 张”。
   - 面板里压缩前的图照常可勾，标“压缩前”；请求预估把勾着的算作这次加上的。

@@ -12,7 +12,7 @@ import { claudeIdentity } from "../../plugin/src/adapters/claude/engine.ts";
 import { describeBody, forwardHeaders, routeOf } from "../../plugin/src/proxy.ts";
 import { hasUnsafeInteger, macProxy, outboundProxy, redactImages } from "../../plugin/src/core/engine/transport.ts";
 import { imageSizesOf, needsRewrite, rewriteBody, requestIdentity } from "../../plugin/src/adapters/codex/engine.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
+import { writeSelection } from "../../plugin/src/core/selection.ts";
 import { png } from "./testkit.ts";
 
 // These tests check the Chinese wording: the language is fixed, so neither the system's language nor one a panel

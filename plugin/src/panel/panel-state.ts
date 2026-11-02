@@ -13,13 +13,15 @@
 // Input: thread id, the sessions directory (rollouts are only read) and the tool's data directory.
 // Output: PanelState as plain JSON; selection changes are written to <data dir>/selection/.
 
-import { readChildren } from "../children.ts";
+import { readChildren } from "../adapters/codex/children.ts";
 import { claudeHome, claudeImageData, claudeStartedAt, isPrompt, loadClaudeIndex, type ClaudeIndex, type ClaudeRecord } from "../adapters/claude/claude-index.ts";
 import type { ImageSource } from "../core/images.ts";
 import { sceneOf, withoutRecords } from "../core/notes.ts";
 import { childrenDirOf, claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, requestStatsDirOf, selectionDirOf } from "../core/paths.ts";
 import { readRequestStats, type RequestStats } from "../core/request-stats.ts";
-import { claudeSelection, effectiveSelection, stableIdsSince, writeSelection, type Mark, type Selection } from "../selection.ts";
+import { claudeSelection } from "../adapters/claude/selection.ts";
+import { effectiveSelection } from "../adapters/codex/selection.ts";
+import { stableIdsSince, writeSelection, type Mark, type Selection } from "../core/selection.ts";
 import { buildIndex, imageData, readThreadHistory, sessionMetaOf, type IndexedImage, type ThreadIndex } from "../adapters/codex/thread-index.ts";
 import { threadTitle } from "../adapters/codex/thread-names.ts";
 import { pngThumbnail } from "../core/thumbnail.ts";

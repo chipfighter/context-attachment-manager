@@ -14,7 +14,7 @@ import { callClaudeTool, claudeToolsFor } from "../../plugin/src/plugin-server.t
 import { claudeNeedsRewrite, rewriteClaudeBody } from "../../plugin/src/adapters/claude/engine.ts";
 import { claudePanelApi, claudePanelPage } from "../../plugin/src/adapters/claude/panel-web.ts";
 import { ownRequest } from "../../plugin/src/core/engine/transport.ts";
-import { ensureAutoDefault } from "../../plugin/src/selection.ts";
+import { ensureAutoDefault } from "../../plugin/src/core/selection.ts";
 import { pngC, usualRequest, usualSession } from "./claude-fixtures.ts";
 
 process.env.CAM_LANG = "zh";

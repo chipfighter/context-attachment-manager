@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { buildOf, compareVersions, countClaudeInPs, countClaudeProcesses, countCodexInPs, countCodexProcesses, engineHealth, ensureEngine, isEngineHealth, shouldReplace, watchForCodex, type Health } from "../../plugin/src/engine.ts";
 import { selectionDirOf } from "../../plugin/src/core/paths.ts";
 import { readRequestStats, recordRequest } from "../../plugin/src/core/request-stats.ts";
-import { autoDefaultSince, writeSelection } from "../../plugin/src/selection.ts";
+import { autoDefaultSince, writeSelection } from "../../plugin/src/core/selection.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };

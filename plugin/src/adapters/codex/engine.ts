@@ -11,11 +11,13 @@ import { join } from "node:path";
 import { decodeBody, encodeBody, hasUnsafeInteger } from "../../core/engine/transport.ts";
 import type { Described } from "../../core/words.ts";
 import { currentLang } from "../../language.ts";
-import { effectiveSelection, selectionDir, sideChatSelection } from "../../selection.ts";
+import { effectiveSelection, sideChatSelection } from "./selection.ts";
+import { selectionDir } from "../../core/selection.ts";
 import { findImages, type ImageRef } from "../protocols/openai-responses/images.ts";
 import { addCodexCompacted, rewriteItems } from "../protocols/openai-responses/rewrite.ts";
 import { codexHome } from "./codexconfig.ts";
-import { awaitingLine, imageData, loadThreadIndex, pixelHashOf, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
+import { awaitingLine } from "../../core/session.ts";
+import { imageData, loadThreadIndex, pixelHashOf, sideChatOrigin, writesNotes, type ThreadIndex } from "./thread-index.ts";
 
 type Json = Record<string, any>;
 export const UPSTREAM_HOST = "chatgpt.com";

@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { needsRewrite } from "../../plugin/src/adapters/codex/engine.ts";
-import { autoDefaultSince, effectiveSelection, ensureAutoDefault, ensureStableIds, mainTaskOf, readSelection, sideChatSelection, stableIdsSince, writeSelection } from "../../plugin/src/selection.ts";
+import { autoDefaultSince, ensureAutoDefault, ensureStableIds, readSelection, stableIdsSince, writeSelection } from "../../plugin/src/core/selection.ts";
+import { effectiveSelection, mainTaskOf, sideChatSelection } from "../../plugin/src/adapters/codex/selection.ts";
 import { startThread } from "./testfixtures.ts";
 
 const PARENT = "01a0d301-0000-7000-8000-0000000000f0";

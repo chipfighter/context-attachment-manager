@@ -10,7 +10,7 @@ import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
 import { assistant, line, red, turn, upload, THREAD } from "./testfixtures.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
+import { writeSelection } from "../../plugin/src/core/selection.ts";
 import { engineTestPort } from "./proxy-test-ports.ts";
 
 async function bounded<T>(value: Promise<T>, ms = 8000): Promise<T> {

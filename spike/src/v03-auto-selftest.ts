@@ -27,7 +27,7 @@ import { engineHealth } from "../../plugin/src/engine.ts";
 import { languageFileOf, rememberLang, type Lang } from "../../plugin/src/language.ts";
 import { requestStatsDirOf, selectionDirOf } from "../../plugin/src/core/paths.ts";
 import { readRequestStats } from "../../plugin/src/core/request-stats.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
+import { writeSelection } from "../../plugin/src/core/selection.ts";
 import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { archiveThreads, CORNER_IMAGES, runTurn, says, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 

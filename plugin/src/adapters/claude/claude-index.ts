@@ -25,20 +25,22 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { baseName, FETCHED_STATE, imageDigest, type ImageKind } from "../../core/images.ts";
 import type { ImageRef } from "../protocols/openai-responses/images.ts";
 import { addNotes, copyNotes, type Notes } from "../../core/notes.ts";
-import { pixelHashOfData, type FetchedCopy, type IndexedImage, type ThreadIndex } from "../codex/thread-index.ts";
+import { pixelHashOfData } from "../../core/pixels.ts";
+import type { FetchedCopy } from "../../core/session.ts";
+import type { IndexedImage as SessionImage, SessionIndex } from "../../core/session.ts";
 
 type Json = Record<string, any>;
 export type ClaudeRecord = Json & { type: string; uuid?: string; parentUuid?: string | null; logicalParentUuid?: string | null };
 // Where an image sits: the record (its position in the conversation) and block, and for a tool result the image's
 // position within that result's content.
-export type ClaudeImage = IndexedImage & { recordUuid: string; toolUseId: string | null; sub: number | null; compacted: boolean };
+export type ClaudeImage = ImageRef & SessionImage & { recordUuid: string; toolUseId: string | null; sub: number | null; compacted: boolean };
 // The records with pasted images, in conversation order, with the digests of their images: what a request's user
 // messages are matched against. compacted: before the latest compaction, so no longer in requests.
 export type UploadRecord = { uuid: string; contentIds: string[]; compacted: boolean };
 // v0.10: the session's transcripts (this one, the ones it was resumed or forked from), each with the record it starts
 // at and when it was started, oldest first.
 export type FamilyFile = { sessionId: string; start: string; created: string; forkedFrom: string | null };
-export type ClaudeIndex = ThreadIndex & {
+export type ClaudeIndex = SessionIndex<ClaudeImage> & {
   images: ClaudeImage[];
   byKey: Map<string, ClaudeImage>;
   uploads: UploadRecord[];
