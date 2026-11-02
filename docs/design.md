@@ -16,7 +16,7 @@
 
 另一条路线是在新任务里重建历史（阶段 0 验证过，技术上可行）。没有采用，因为用户要在同一个任务里看到连续的对话，见 [history/v0.1/phase0-report.md](history/v0.1/phase0-report.md)。
 
-v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不认识任何平台的核心，`panel/` 是面板，`adapters/<平台>/` 是各平台的接入；`plugin/src` 顶层放入口（`plugin-server.ts`、`proxy.ts`、`cam.ts`）和还没拆完的文件。分层规则由 `spike/src/layers.test.ts` 检查。
+v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不认识任何平台的核心，`panel/` 是面板，`adapters/<平台>/` 是各平台的接入；`plugin/src` 顶层只放入口（`plugin-server.ts`、`proxy.ts`、`cam.ts`）和引擎的生命周期（`engine.ts`）。分层规则由 `spike/src/layers.test.ts` 检查。
 
 | 部分 | 代码（`plugin/src`） | 作用 |
 |---|---|---|
@@ -26,7 +26,7 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
 | 任务索引 | `adapters/codex/thread-index.ts`、`adapters/codex/children.ts`、`adapters/protocols/openai-responses/images.ts`、`core/images.ts`、`core/session.ts`、`core/pixels.ts`、`core/thumbnail.ts`、`core/png.ts`、`adapters/codex/thread-names.ts` | 从 Codex 的任务记录里只读地找出图片和它的来源、编号、生成缩略图、读任务名 |
 | 改写 | `core/plan.ts`、`core/words.ts`、`adapters/protocols/openai-responses/rewrite.ts`、`core/selection.ts`、`adapters/codex/selection.ts`、`adapters/claude/selection.ts`、`core/request-stats.ts`、`core/notes.ts` | 每张图发不发、换成什么字（两个平台共用）；发给模型的全部文字；把决定落进 Responses 请求；勾选状态；请求统计；特征行 |
 | 接入和安装 | `adapters/codex/`：`codexconfig.ts`、`setup.ts`、`install.ts`、`codexcli.ts`、`plugin-cache.ts`、`binding.ts`；`cam.ts` | 管理 Codex 配置里带标记的块；用 Codex 的命令行装卸插件；保护升级中的旧运行文件；新任务绑定；`cam` 命令行 |
-| 其他 | `language.ts`、`messages.ts`、`core/paths.ts`、`core/migrate-data.ts`、`core/entry.ts` | 语言、文字表、数据目录、旧数据迁移 |
+| 其他 | `core/language.ts`、`adapters/codex/language.ts`、`core/messages.ts`、`core/paths.ts`、`core/migrate-data.ts`、`core/entry.ts` | 语言、文字表、数据目录、旧数据迁移 |
 | Claude 接入（v0.4） | `hooks/register.js`（Mod，不在 `plugin/src`） | 把会话的请求地址指向引擎；`/cam` 打开面板（v0.6 起有图时自动打开）；取图工具免确认 |
 | Claude 会话索引和改写（v0.4） | `adapters/claude/claude-index.ts`、`adapters/claude/claude-rewrite.ts`、`adapters/protocols/anthropic-messages/rewrite.ts` | 从 Claude Code 的会话记录找图、编号，把请求里的图对上记录；把决定落进 Anthropic Messages 请求 |
 | Claude 思考记录和提示缓存（v0.4、v0.10） | `adapters/protocols/anthropic-messages/thinking.ts`、`adapters/protocols/anthropic-messages/cache.ts` | 账号校验思考记录时，去掉和实际发出的历史对不上的思考；改过历史后，让提示缓存仍能读到 |

@@ -8,7 +8,8 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { decodeBody, encodeBody, hasUnsafeInteger } from "../../core/engine/transport.ts";
 import { claudeSelectionDirOf } from "../../core/paths.ts";
-import { currentLang } from "../../language.ts";
+import type { Lang } from "../../core/lang.ts";
+import { currentLang } from "../../core/language.ts";
 import { claudeSelection } from "./selection.ts";
 import { stableIdsSince } from "../../core/selection.ts";
 import { awaitingLine } from "../../core/session.ts";
@@ -81,7 +82,8 @@ export const LATE_STEP_MS = 100;
 // turn is the transcript's latest prompt: Claude Code writes it before it sends the request.
 // CAM_EXPERIMENT_BLOCK_BINDING (experiments only, docs/v0.4/tasks.md T04-01): asks Anthropic to check thinking with
 // that prefix_mismatch_behavior, as for an account created from 2026-08-31; the report names the beta header to add.
-export function rewriteClaudeBody(original: Buffer, encoding: string | undefined, sessionId: string, dir = claudeSelectionDirOf(), home = claudeHome(), env = process.env, thinking: ThinkingRecord | null = null, previous: SentPrefix[] = []): { body: Buffer; report: Json; attempts: ClaudeAttempt[]; prefix?: SentPrefix } {
+// v0.11: lang, the language of the text for the model; the engine passes the one the core and Codex's setting choose.
+export function rewriteClaudeBody(original: Buffer, encoding: string | undefined, sessionId: string, dir = claudeSelectionDirOf(), home = claudeHome(), env = process.env, thinking: ThinkingRecord | null = null, previous: SentPrefix[] = [], lang: Lang = currentLang()): { body: Buffer; report: Json; attempts: ClaudeAttempt[]; prefix?: SentPrefix } {
   const asIs = (report: Json) => ({ body: original, report, attempts: [] });
   const decoded = decodeBody(original, encoding);
   if (!decoded) return asIs({ skipped: "undecodable body" });
@@ -103,7 +105,6 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
     leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key] && !awaiting.has(image.key)).map((image) => image.key));
   }
   const pixels = (ref: RequestImage) => (ref.key ? index.byKey.get(ref.key)?.pixelSha256 : undefined) ?? pixelHashOfData(ref, ref.block.source.data);
-  const lang = currentLang();
   // v0.5: after a compaction, the images from before it go back right after the summary (anthropic-messages/rewrite.ts): the ones
   // the user keeps sending (checked, or pinned with automatic selection) read from the transcript, the others as
   // placeholders. With any of those, the full note follows the summary, and later messages get only their short notes.
