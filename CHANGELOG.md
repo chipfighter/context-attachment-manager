@@ -2,22 +2,43 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [Unreleased]
+## [0.11.0] - 2026-11-02
 
-Images Codex opens get their file names more often, and never someone else's.
+The plugin now works beyond Codex and Claude. Ten more agents leave earlier images out of each message and fetch back the one they need, your agent can install the plugin by itself, and switching models in Codex with a tool such as cc-switch no longer turns it off.
+
+### What's new
+
+- **Ten more agents.** WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose and Cherry Studio. Images from earlier turns stay out of your messages, and the model pulls back the one it needs by its number. There is no panel on these agents: it works on its own. They are new and were not tested on the agents themselves yet, so please [tell us](https://github.com/chipfighter/context-attachment-manager/issues) how it goes.
+- **Your agent installs it for you.** Paste the sentence from the README to the agent you use. It finds out which agent it is running in from that agent's own signs, not from which model it is, sets the plugin up for that one, and keeps a record so it can be undone.
+- **Switch models freely in Codex.** When a tool such as cc-switch points Codex at another provider, the plugin connects again within a moment, to the provider you picked, so your images keep being managed. Turn the plugin off in the panel to stop this.
 
 ### Fixed
 
 - **File names for images Codex opens.** When Codex opened an image through a path it built in code (a folder plus the file name, for example), the image got no name in the panel or in the list after a compaction, so you could not refer to it by its file name. It now gets its name whenever the file name is written in the code.
 - **No more names on the wrong image.** When Codex opened several images in one step and the name of one could not be told, the next one's name could land on it, and images the model fetched back in the same step could take a name too. A name now goes only to the image it belongs to; when that is unclear, the image gets none.
 
+### After updating
+
+- Restart Codex, and reopen Claude sessions that were open, so they use the new version.
+- On another agent, paste the install sentence from the README to it, or follow [INSTALL.md](https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md#other-agents).
+
 ### How we tested
 
-- Unit tests, and the image names in this machine's 163 Codex tasks read with the old and the new version: 20 images got their name, none got a different one, and the 10 that lost theirs had a wrong one (mostly a folder name).
+- Unit tests (338), including every request format the new agents use and what installing writes to each agent's settings and puts back.
+- Model tests in Codex: Auto-select passed all 20 checks in Chinese and in English, and the feature notes all 18. In the compaction test the model opened two images in a loop, and their file names were not known; 0.10.0 misses them the same way.
+- A live test in Claude Desktop: earlier images were left out, and the model fetched one back by its number.
+- The image names in this machine's 163 Codex tasks, read with the old and the new version: 20 images got their name, none got a different one, and the 10 that lost theirs had a wrong one (mostly a folder name).
+- The ten new agents were not run: their adapters follow each agent's code and docs.
 
 <details>
 <summary>Technical details</summary>
 
+- The code is now in three layers (docs/v0.11/plan.md): a core that knows no platform, the panel (Codex desktop and Claude Desktop only), and a thin adapter per platform. A layer test keeps them apart; 668 rewrite cases stay byte for byte what they were; one contract test checks each request-format translator: OpenAI Responses, OpenAI Chat Completions (new), Anthropic Messages and Gemini (new).
+- On the new agents the engine reads the images from the requests themselves, gives them ids by content, and keeps them in the data folder for `cam_view_image`. Automatic selection is always on; feature lines are off (a terminal would show them). A session is the one the agent's header names, else `x-cam-session` from our pi extension, else the first prompt.
+- `cam detect` reads the variables each agent sets for its shell commands (`CODEX_THREAD_ID`, `CLAUDECODE`, `CODEBUDDY`, `OPENCODE`, `GEMINI_CLI`, `PI_SESSION_ID`, `DSH_SHELL`, `QWEN_CODE`, `CLINE_ACTIVE`, `KILO`, `GOOSE_TERMINAL`); `cam connect <agent> --apply` writes the base URL and the MCP server into the agent's settings and records each changed value for `cam disconnect`. It never copies a settings file, since those often hold API keys. goose (YAML) and Cherry Studio (settings in the app) get printed steps.
+- DeepSeek Harness gets a dsh bundle that turns dsh's own `image-offload` row off and offloads earlier turns' images at each new turn, keeping dsh's over-budget offload as a fallback.
+- The engine stays running while a plugin service of any agent checks in, not only while Codex or Claude runs. Session ids no longer have to be UUIDs.
+- Codex: when config.toml no longer routes through the engine but the user enabled it, the engine routes it again to the provider now set (watched file, and a check every 15 s; three times in ten minutes stops it).
 - The engine reads the `path` of each `view_image` call in code-mode source without running it, and takes its last string when that is an image file name: `p + "a.png"`, `` `${dir}/a.png` `` and `join(dir, "a.png")` give `a.png`; `p + name`, a bare `".png"`, `?:` and `||` give none.
 - Images that `cam_view_image` returned in the same code are copies, known by the line before them, and take no name; the other images follow the calls in order only when their count matches the number of calls.
 
