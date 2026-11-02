@@ -47,13 +47,13 @@
 
 ## インストール
 
-次の文を Codex、または Claude Desktop の **Code** タブにいる Claude に送ってください。
+次の文をお使いのエージェント（Codex、Claude Desktop の **Code** タブ、または[対応エージェント](#対応エージェント)のいずれか）に送ってください。エージェントは自分がどれかを確かめてから、それに合わせてインストールします。
 
 ```text
 次の手順に従って、Context Attachment Manager プラグインをインストールしてください：https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
 ```
 
-インストール後は Codex を再起動してください。Claude Desktop では **Code** タブで新しいセッションを始めてください。手動でのインストール、更新、アンインストールの手順は、共通の [INSTALL.md](INSTALL.md)（英語）にあります。ほかのエージェントをお使いの場合は、ページ下部の[対応エージェント](#対応エージェント)をご覧ください。
+インストール後はエージェントを再起動してください（Claude Desktop では **Code** タブで新しいセッションを始めてください）。手動でのインストール、更新、アンインストールの手順は、共通の [INSTALL.md](INSTALL.md)（英語）にあります。
 
 ## パネルを開く
 
@@ -97,6 +97,6 @@ Codex で短編ドラマのキーフレーム 9 枚、合計約 32 MB の画像�
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | すべてがプラグインの DeepSeek のエージェント基盤 | 自動選択（dsh プラグイン）、新規対応、フィードバック歓迎 |
 | **あなたのエージェント** | 薄い接続層を書くだけで、コアは変更不要 | PR を送って、ここに追加してください：[ADAPTERS.md](ADAPTERS.md)（英語） |
 
-新しく対応したエージェントの接続方法は [ADAPTERS.md](ADAPTERS.md)（英語）にあります。`cam connect <エージェント>` で変更する設定が表示されます。問題があれば [issue](https://github.com/chipfighter/context-attachment-manager/issues) でお知らせください。
+どのエージェントでも、[インストール](#インストール)の文をそのエージェントに送ればインストールできます。各エージェントで何を変更するかは [INSTALL.md](INSTALL.md#other-agents)（英語）にあります。問題があれば [issue](https://github.com/chipfighter/context-attachment-manager/issues) でお知らせください。
 
 <p align="center"><sub><a href="CHANGELOG.md">変更履歴（英語）</a> · <a href="CONTRIBUTING.md">開発への参加（英語）</a> · <a href="LICENSE">MIT ライセンス</a></sub></p>

@@ -4,7 +4,8 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coversLoopback, disableMcpServer, disableProxy, enableMcpServer, enableNoProxy, enableProxy, noProxyStatus, noProxyValue, proxyStatus } from "../../plugin/src/adapters/codex/codexconfig.ts";
+import { coversLoopback, disableMcpServer, disableProxy, enableMcpServer, enableNoProxy, enableProxy, noProxyStatus, noProxyValue, proxyStatus, routedThroughEngine, BEGIN } from "../../plugin/src/adapters/codex/codexconfig.ts";
+import { shouldReroute } from "../../plugin/src/adapters/codex/setup.ts";
 
 const URL = "http://localhost:17891/backend-api/codex";
 const withFeatures = 'model = "gpt-6-sol"\n\n[features]\nview_image = true\n\n[mcp_servers.demo]\ncommand = "node"\n';
@@ -238,4 +239,37 @@ test("unsupported endpoint syntax fails before enabling or registering any provi
     assert.deepEqual(targets, []);
     assert.equal(proxyStatus(original).enabled, false);
   }
+});
+
+// v0.11: cc-switch, on switching Codex's provider, deletes the top-level openai_base_url and writes its own
+// [model_providers.custom] table whole (cc-switch live/project/codex.rs); the block's remains stay.
+test("v0.11: a provider switcher's rewrite is seen as not routed; routing again keeps the provider it picked", () => {
+  const route = (target: string) => `http://localhost:17892/__cam/routes/${target.includes("second") ? "b".repeat(32) : "a".repeat(32)}`;
+  const user = 'model = "gpt-6"\nmodel_provider = "custom"\n\n[model_providers.custom]\nname = "custom"\nbase_url = "https://first.example/v1"\nexperimental_bearer_token = "sk-x"\n';
+  const installed = enableProxy(user, URL, route).text;
+  assert.equal(routedThroughEngine(installed), true);
+  assert.equal(routedThroughEngine(user), false, "never installed");
+  // What the switch leaves: our top line gone with openai_base_url, the provider table replaced.
+  const switched = installed
+    .split("\n").filter((line) => !line.startsWith("openai_base_url") && line !== BEGIN).join("\n")
+    .replace(/\[model_providers\.custom\][^]*$/, '[model_providers.custom]\nname = "custom"\nbase_url = "https://second.example/v1"\nexperimental_bearer_token = "sk-y"\n');
+  assert.equal(routedThroughEngine(switched), false);
+  const again = enableProxy(switched, URL, route).text;
+  assert.equal(routedThroughEngine(again), true);
+  assert.ok(again.includes("https://second.example/v1"), "the provider the user picked is kept beside its route");
+  assert.ok(again.includes(route("second")), "and requests go to it through the engine");
+  assert.ok(again.includes('experimental_bearer_token = "sk-y"'), "its key stays where the switcher put it");
+  assert.equal(routedThroughEngine(again.replace(`base_url = "${route("second")}"`, `base_url = "https://elsewhere.example/v1"`)), false, "one endpoint not through the engine is enough");
+});
+
+test("v0.11: Codex is routed again only when the user wants it, the plugin is there, and the config does not keep changing back", () => {
+  const now = Date.now();
+  const base = { wants: true as boolean | null, gone: null as string | null, routed: false, recent: [] as number[] };
+  assert.equal(shouldReroute(base, now), true);
+  assert.equal(shouldReroute({ ...base, routed: true }, now), false);
+  assert.equal(shouldReroute({ ...base, wants: false }, now), false, "disabled in the panel");
+  assert.equal(shouldReroute({ ...base, wants: null }, now), false, "never enabled");
+  assert.equal(shouldReroute({ ...base, gone: "removed" }, now), false);
+  assert.equal(shouldReroute({ ...base, recent: [now - 1000, now - 2000, now - 3000] }, now), false, "three times in ten minutes: something keeps changing it back");
+  assert.equal(shouldReroute({ ...base, recent: [now - 11 * 60_000, now - 12 * 60_000, now - 13 * 60_000] }, now), true);
 });

@@ -1,6 +1,6 @@
 # Install
 
-The easy way: paste this to Codex, or to Claude in Claude Desktop's Code tab, and let it do the steps below for you.
+The easy way: paste this to your agent (Codex, Claude Desktop's Code tab, WorkBuddy, OpenCode, Gemini CLI, pi or DeepSeek Harness) and let it do the steps below for you.
 
 ```text
 Install the Context Attachment Manager plugin for me, following https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
@@ -8,9 +8,23 @@ Install the Context Attachment Manager plugin for me, following https://github.c
 
 ## For AI assistants
 
-- Install for the app the user is talking to you in: the Codex desktop app, or Claude Desktop's Code tab. Install for both only if the user asks.
-- Follow that app's section below and run the commands yourself.
-- When you are done, tell the user the one step left for them: restart Codex, or start a new session in Claude Desktop's Code tab. Then tell them how to open the panel (see [Open the panel](#open-the-panel)).
+Install for the agent the user is talking to you in, and only that one. Which agent that is does not depend on the model you are: a DeepSeek model running in WorkBuddy installs for WorkBuddy.
+
+1. **Find the agent.** Run `env` (`Get-ChildItem Env:` in PowerShell) and look for these variables, which each agent sets for the commands you run:
+
+   | Variable | Agent | Section |
+   |---|---|---|
+   | `CODEX_THREAD_ID` | Codex | [Codex](#codex) |
+   | `CLAUDECODE=1` | Claude Code | [Claude Desktop](#claude-desktop) |
+   | `CODEBUDDY=1` | WorkBuddy (CodeBuddy's agent) | [Other agents](#other-agents) |
+   | `OPENCODE=1` | OpenCode | [Other agents](#other-agents) |
+   | `GEMINI_CLI=1` | Gemini CLI | [Other agents](#other-agents) |
+   | `PI_SESSION_ID` | pi | [Other agents](#other-agents) |
+   | `DSH_SHELL=1` | DeepSeek Harness | [Other agents](#other-agents) |
+
+   If none matches, or more than one, ask the user which agent this is. For the other agents, `cam detect` (below) checks the same variables and prints the exact command to run next.
+2. **Follow that section only**, and run the commands yourself. Do not edit the agent's settings by hand: the commands back them up and record what they wrote, so they can be undone.
+3. **When you are done**, tell the user the one step left for them: restart the agent (in Claude Desktop, start a new session in the Code tab). For Codex and Claude Desktop, also tell them how to open the panel (see [Open the panel](#open-the-panel)); the other agents have no panel, and there is nothing to open.
 
 ## Codex
 
@@ -59,11 +73,37 @@ Instead of the second command, you can also install it in the Code tab: click **
 
 Then start a new session in the Code tab. There is nothing to set up: the plugin doesn't edit any settings, and only points that session's own Claude Code process at the engine while it runs.
 
+## Other agents
+
+WorkBuddy, OpenCode, Gemini CLI, pi and DeepSeek Harness get auto-select without a panel: earlier turns' images go out as short placeholders, and the model pulls back the one it needs by its id. These adapters are new and were not tested on the agents themselves yet; please [open an issue](https://github.com/chipfighter/context-attachment-manager/issues) if one does not work for you.
+
+They need [Node.js 24 or later](https://nodejs.org) (`node --version`) and the plugin's code in a folder where it can stay (the agent runs it from there):
+
+```bash
+git clone --depth 1 https://github.com/chipfighter/context-attachment-manager.git "$HOME/context-attachment-manager"
+```
+
+Then let it find the agent and print the command to run:
+
+```bash
+node "$HOME/context-attachment-manager/plugin/src/cam.ts" detect
+```
+
+Run the command it prints under `next`, then restart the agent. What that command does for each agent:
+
+- **WorkBuddy**: `cam connect workbuddy --apply` sets `CODEBUDDY_BASE_URL` under `env` in `~/.workbuddy/settings.json` and adds the plugin's MCP server to `~/.workbuddy/.mcp.json`. A relay address set there before stays the destination.
+- **OpenCode**: `cam connect opencode --apply` sets `options.baseURL` of the provider your `model` uses (or `--provider <id>`) in `~/.config/opencode/opencode.json`, and adds the MCP server under `mcp`. A config file with comments is not changed; the command says so, and `cam connect opencode` without `--apply` prints the steps instead.
+- **Gemini CLI**: `cam connect gemini-cli --apply` sets `GOOGLE_GEMINI_BASE_URL` (API key sign-in) or `CODE_ASSIST_ENDPOINT` (Google sign-in) in `~/.gemini/.env`, and adds the MCP server to `~/.gemini/settings.json`. A `.env` in your project folder that sets the same variable wins over it. Vertex AI is not supported.
+- **pi**: `cam connect pi --apply` sets `baseUrl` of the provider pi uses now (or `--provider <name>`) in `~/.pi/agent/models.json`, and lists the plugin's pi extension under `extensions` in `~/.pi/agent/settings.json`. The extension adds the MCP server.
+- **DeepSeek Harness**: `dsh plugin --profile <profile> add "<folder>/plugin/src/adapters/dsh"` installs the plugin as a dsh bundle. It turns dsh's own image offload off and does what it did, and also offloads earlier turns' images when a new turn starts. The model reads an offloaded image back from the path its placeholder names.
+
+Each `cam connect --apply` backs the files up first (in the data folder, see [Your data](#your-data)), and keeps the address the agent used before as the destination: requests go there through the engine. Run it again after an update; it keeps what it found the first time.
+
 ## Custom endpoints
 
 Configure your gateway in the client first, as you would without this plugin. It must support image inputs, tool calls and the client's native API: Responses for Codex, or Anthropic Messages for Claude Code. The plugin manages images and forwards requests to that same endpoint; it does not convert between API formats. Claude support applies to the desktop app's **Code** tab.
 
-- **Codex:** supports single-line `openai_base_url` and `model_providers.<name>.base_url` settings in your user `config.toml`, including normal provider tables and dotted keys. Unsupported endpoint syntax stops setup without changing the configuration. External profile files and environment overrides are not automatically rewritten. After a switching tool changes provider addresses, enable the plugin again (or run the install command again), then restart Codex.
+- **Codex:** supports single-line `openai_base_url` and `model_providers.<name>.base_url` settings in your user `config.toml`, including normal provider tables and dotted keys. Unsupported endpoint syntax stops setup without changing the configuration. External profile files and environment overrides are not automatically rewritten. When a switching tool such as cc-switch writes another provider's address, the engine notices within a moment and points Codex at it through the engine again, so you can keep switching models; restart Codex as the switching tool asks. If Codex was closed during the switch, the first start after it connects directly, and the next one goes through the engine again. Disable the plugin in the panel to stop this.
 - **Claude Code:** uses the process's original `ANTHROPIC_BASE_URL`, or Anthropic's official endpoint when absent. Start a new Code session after changing the endpoint. Bedrock, Vertex and Foundry keep their own transport and are not managed.
 
 The engine listens only on loopback: port 17891 serves the panel and existing official connections; port 17892 serves registered provider routes. Both belong to the same engine process. With a custom engine port, provider routes use the next port. Keep both ports available. An older plugin copy cannot serve the registered routes; update both platform plugins for normal operation.
@@ -103,6 +143,18 @@ curl -fsSL https://github.com/chipfighter/context-attachment-manager/releases/la
 ### Claude Desktop
 
 Uninstall it with **Manage plugins** under **+** → **Plugins** in the Code tab, or with `claude plugin uninstall codex-attachment-manager@codex-attachment-manager`. New sessions then connect directly; there is nothing to restore.
+
+### Other agents
+
+Undo the settings first, then restart the agent and delete the folder:
+
+```bash
+node "$HOME/context-attachment-manager/plugin/src/cam.ts" disconnect <agent>
+```
+
+`<agent>` is `workbuddy`, `opencode`, `gemini-cli` or `pi`. It puts back what was there before, except settings you changed since. For DeepSeek Harness: `dsh plugin --profile <profile> remove dsh-context-attachment-manager`.
+
+Remove the plugin only after this: an agent still pointed at the engine cannot connect once nothing starts it.
 
 ### Your data
 
