@@ -10,7 +10,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import { join } from "node:path";
 import { decodeBody, encodeBody, hasUnsafeInteger } from "../../core/engine/transport.ts";
 import type { Described } from "../../core/words.ts";
-import { currentLang } from "../../language.ts";
+import { currentLang } from "./language.ts";
 import { effectiveSelection, sideChatSelection } from "./selection.ts";
 import { selectionDir } from "../../core/selection.ts";
 import { findImages, type ImageRef } from "../protocols/openai-responses/images.ts";

@@ -1,10 +1,10 @@
 // Purpose: v0.11 — keeps the plugin's three layers apart (docs/v0.11/plan.md 3.6). The core imports only the core;
 // the panel only the core; a request-format translator (adapters/protocols) the core and other translators; a
 // platform (adapters/<name>) the core, the translators and its own files, and the panel when it shows one (Codex
-// desktop, Claude Desktop). Files at the top of plugin/src are the entry points and the ones not sorted yet; they may
+// desktop, Claude Desktop). Files at the top of plugin/src are the entry points and the engine's lifecycle; they may
 // import anything.
-// PENDING lists the imports that still break a rule while the split goes on. It may only shrink: a new break fails,
-// and so does an entry that no longer occurs, so the list never keeps a stale exception.
+// PENDING lists imports allowed to break a rule for a while (empty once the v0.11 split was done). It may only shrink:
+// a new break fails, and so does an entry that no longer occurs, so the list never keeps a stale exception.
 // Input: the source files of plugin/src. Output: test results.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -14,12 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const src = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", "src");
 
-const PENDING = new Set<string>([
-  "adapters/claude/engine.ts -> language.ts",
-  "adapters/codex/engine.ts -> language.ts",
-  "adapters/codex/install.ts -> language.ts",
-  "adapters/codex/install.ts -> messages.ts",
-]);
+const PENDING = new Set<string>([]);
 
 type Layer = "core" | "panel" | "protocols" | `adapter:${string}` | "top";
 

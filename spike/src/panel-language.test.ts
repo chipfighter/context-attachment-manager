@@ -12,7 +12,7 @@ test("the panel recognizes Japanese host locales without changing the model lang
   const expression = /const langOf = ([^;]+);/.exec(page)![1];
   const panelLangOf = new Function(`return (${expression})`)();
   assert.deepEqual(["en-US", "zh-CN", "zh-TW", "ja", "ja-JP", "fr-FR"].map(panelLangOf), ["en", "zh", "zh", "ja", "ja", "en"]);
-  const { langOf } = await import("../../plugin/src/language.ts");
+  const { langOf } = await import("../../plugin/src/core/language.ts");
   assert.equal(langOf("ja-JP"), "en", "Japanese panel support must not extend the model's existing language contract");
 });
 

@@ -43,8 +43,8 @@ import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf
 import { recordRequest } from "./core/request-stats.ts";
 import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./core/routes.ts";
 import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForCodex } from "./engine.ts";
-import { currentLang } from "./language.ts";
-import { say } from "./messages.ts";
+import { currentLang } from "./adapters/codex/language.ts";
+import { say } from "./core/messages.ts";
 import { ensureAutoDefault, ensureStableIds, selectionDir, stableIdsSince } from "./core/selection.ts";
 
 type Json = Record<string, any>;
@@ -484,7 +484,7 @@ async function main(): Promise<void> {
       const original = Buffer.concat(chunks);
       const encoding = req.headers["content-encoding"] as string | undefined;
       const rewriteNow = (): { body: Buffer; report: Json; attempts?: ClaudeAttempt[]; prefix?: SentPrefix } => {
-        try { return claudeRewrite ? rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking, sentPrefixes.get(claudeSession!) ?? []) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
+        try { return claudeRewrite ? rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking, sentPrefixes.get(claudeSession!) ?? [], currentLang()) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
         catch (error) { return { body: original, report: { skipped: `rewrite failed: ${String(error)}` } }; }
       };
       let out = rewriteNow();

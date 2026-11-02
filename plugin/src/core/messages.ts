@@ -4,7 +4,7 @@
 // languages (a unit test checks it), so changing a text means changing both.
 // Input: a language and a key, with {name} values filled in. Output: strings.
 
-import type { Lang } from "./language.ts";
+import type { Lang } from "./lang.ts";
 
 const zh = {
   // Codex's tool list; the panel tool's title is the tab's title.

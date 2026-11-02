@@ -31,8 +31,10 @@ import { bindThread, isUserThread, newThreads, resolveThread } from "./adapters/
 import { claudeStartedAt, loadClaudeIndex } from "./adapters/claude/claude-index.ts";
 import { DEFAULT_PORT, ensureEngine } from "./engine.ts";
 import { isEntryPoint } from "./core/entry.ts";
-import { currentLang, langOf, rememberLang, type Lang } from "./language.ts";
-import { say } from "./messages.ts";
+import { currentLang, rememberLang } from "./adapters/codex/language.ts";
+import { langOf } from "./core/language.ts";
+import type { Lang } from "./core/lang.ts";
+import { say } from "./core/messages.ts";
 import { migrateDataOnce } from "./core/migrate-data.ts";
 import { panelHtml } from "./panel/page.ts";
 import { applySelection, imageFor, loadPanelState } from "./adapters/codex/panel.ts";

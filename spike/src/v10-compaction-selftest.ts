@@ -18,7 +18,9 @@ import { fileURLToPath } from "node:url";
 import { AppServer, findBundledCodex } from "./appserver.ts";
 import { codexHome } from "../../plugin/src/adapters/codex/codexconfig.ts";
 import { engineHealth } from "../../plugin/src/engine.ts";
-import { languageFileOf, rememberLang, type Lang } from "../../plugin/src/language.ts";
+import { languageFileOf } from "../../plugin/src/core/language.ts";
+import { rememberLang } from "../../plugin/src/adapters/codex/language.ts";
+import type { Lang } from "../../plugin/src/core/lang.ts";
 import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { archiveThreads, CORNER_IMAGES, png, runTurn, says, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 
