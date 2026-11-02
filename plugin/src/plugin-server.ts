@@ -23,10 +23,9 @@
 // Input: MCP JSON-RPC over stdio. Env: CAM_ENGINE_PORT (default 17891), CAM_NO_ENGINE=1 (tests), CAM_DATA_DIR,
 // CAM_HOST. Output: tool results; <data dir>/plugin-server.jsonl (events and counts only, no conversation content).
 
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { fileURLToPath } from "node:url";
 import { codexHome } from "./adapters/codex/codexconfig.ts";
 import { bindThread, isUserThread, newThreads, resolveThread } from "./adapters/codex/binding.ts";
 import { claudeStartedAt, loadClaudeIndex } from "./adapters/claude/claude-index.ts";
@@ -35,6 +34,7 @@ import { isEntryPoint } from "./core/entry.ts";
 import { currentLang, langOf, rememberLang, type Lang } from "./language.ts";
 import { say } from "./messages.ts";
 import { migrateDataOnce } from "./core/migrate-data.ts";
+import { panelHtml } from "./panel/page.ts";
 import { applySelection, claudeImageFor, imageFor, loadPanelState, type ClaudePanelOptions, type PanelState } from "./panel/panel-state.ts";
 import { claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./core/paths.ts";
 import { fetchedLabel, fetchWords } from "./core/words.ts";
@@ -44,7 +44,6 @@ import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, setPixel
 import { threadTitle } from "./adapters/codex/thread-names.ts";
 
 type Json = Record<string, any>;
-const here = dirname(fileURLToPath(import.meta.url));
 // Kept fixed: Codex Desktop on Windows may show a blank panel after a resource URI changes (openai/codex#47512).
 export const PANEL_URI = "ui://codex-attachment-manager/panel.html";
 export const PANEL_MIME = "text/html;profile=mcp-app";
@@ -120,7 +119,7 @@ export const serverInfo = (lang: Lang) => ({ name: "codex-attachment-manager", t
 
 export function readResource(uri: string): Json {
   if (uri !== PANEL_URI) throw new Error(`unknown resource ${uri}`);
-  const text = readFileSync(join(here, "panel", "panel.html"), "utf8");
+  const text = panelHtml();
   // The page is self-contained: images arrive as data URLs through tool calls, nothing is fetched.
   return { contents: [{ uri, mimeType: PANEL_MIME, text, _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] }, prefersBorder: false } } }] };
 }

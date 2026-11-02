@@ -8,7 +8,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import zlib from "node:zlib";
-import { claudeIdentity, describeBody, forwardHeaders, hasUnsafeInteger, imageSizesOf, macProxy, needsRewrite, outboundProxy, redactImages, rewriteBody, requestIdentity, routeOf } from "../../plugin/src/proxy.ts";
+import { claudeIdentity } from "../../plugin/src/adapters/claude/engine.ts";
+import { describeBody, forwardHeaders, routeOf } from "../../plugin/src/proxy.ts";
+import { hasUnsafeInteger, macProxy, outboundProxy, redactImages } from "../../plugin/src/core/engine/transport.ts";
+import { imageSizesOf, needsRewrite, rewriteBody, requestIdentity } from "../../plugin/src/adapters/codex/engine.ts";
 import { writeSelection } from "../../plugin/src/selection.ts";
 import { png } from "./testkit.ts";
 
@@ -35,7 +38,7 @@ test("the macOS system proxy is read from scutil: HTTPS first, then HTTP, only w
 
 test("NO_PROXY entries covering the upstream host mean a direct connection", () => {
   for (const entry of ["chatgpt.com", ".chatgpt.com", "*"]) {
-    assert.equal(outboundProxy({ HTTPS_PROXY: "http://127.0.0.1:8888", NO_PROXY: `localhost,${entry}` }, none), null);
+    assert.equal(outboundProxy({ HTTPS_PROXY: "http://127.0.0.1:8888", NO_PROXY: `localhost,${entry}` }, none, "chatgpt.com"), null);
   }
 });
 
@@ -232,7 +235,7 @@ test("Messages metadata counts images in user messages and tool results, and thi
 });
 
 test("the panel's last request is the session's conversation, not Claude Desktop's side requests in it", async () => {
-  const { claudeConversationRequest } = await import("../../plugin/src/proxy.ts");
+  const { claudeConversationRequest } = await import("../../plugin/src/adapters/claude/engine.ts");
   const tool = { name: "Read", description: "", input_schema: { type: "object" } };
   // Claude Code's main loop: the conversation, with its tools.
   const main = describeBody("/v1/messages", { model: "claude-sonnet-5-5", stream: true, tools: [tool, tool], messages: [{ role: "user", content: "hi" }] });
@@ -246,7 +249,7 @@ test("the panel's last request is the session's conversation, not Claude Desktop
 
 test("v0.10: once the engine changes the history, a cache mark moves to where the request sent before had one", async () => {
   const { usualSession, usualRequest } = await import("./claude-fixtures.ts");
-  const { rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const { rewriteClaudeBody } = await import("../../plugin/src/adapters/claude/engine.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
   const session = "11111111-2222-4333-8444-555555555556";
@@ -279,7 +282,7 @@ test("v0.10: once the engine changes the history, a cache mark moves to where th
 
 test("a Claude Code request is rewritten from the session's transcript and selection, with images also with nothing unchecked", async () => {
   const { usualSession, usualRequest } = await import("./claude-fixtures.ts");
-  const { claudeNeedsRewrite, rewriteClaudeBody, claudeImageSizes } = await import("../../plugin/src/proxy.ts");
+  const { claudeNeedsRewrite, rewriteClaudeBody, claudeImageSizes } = await import("../../plugin/src/adapters/claude/engine.ts");
   const { buildClaudeIndex } = await import("../../plugin/src/adapters/claude/claude-index.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
@@ -317,7 +320,7 @@ test("a Claude Code request is rewritten from the session's transcript and selec
 
 test("an account that refuses thinking after an edited history gets the rewrite without the thinking that no longer fits", async () => {
   const { usualSession, usualRequest, text } = await import("./claude-fixtures.ts");
-  const { rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const { rewriteClaudeBody } = await import("../../plugin/src/adapters/claude/engine.ts");
   const { newThinkingRecord, recordSent } = await import("../../plugin/src/adapters/protocols/anthropic-messages/thinking.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
@@ -375,7 +378,7 @@ test("an account that refuses thinking after an edited history gets the rewrite 
 });
 
 test("Anthropic refusing the thinking after an edited history is told apart from other 400s", async () => {
-  const { thinkingRejected } = await import("../../plugin/src/proxy.ts");
+  const { thinkingRejected } = await import("../../plugin/src/adapters/claude/engine.ts");
   const rejected = JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "messages.3.content.0: Invalid `signature` in `thinking` block. The block is bound to a different conversation." } });
   assert.equal(thinkingRejected(400, rejected), true);
   assert.equal(thinkingRejected(400, JSON.stringify({ error: { message: "max_tokens: too large" } })), false);
@@ -384,7 +387,7 @@ test("Anthropic refusing the thinking after an edited history is told apart from
 
 test("v0.5: after a compaction, the images from before it go back after the summary: sent again when kept, else placeholders", async () => {
   const { image, pngA, pngB, pngC, text, transcript } = await import("./claude-fixtures.ts");
-  const { claudeNeedsRewrite, rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const { claudeNeedsRewrite, rewriteClaudeBody } = await import("../../plugin/src/adapters/claude/engine.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
   const session = "11111111-2222-4333-8444-555555555555";
@@ -448,7 +451,7 @@ test("v0.5: after a compaction, the images from before it go back after the summ
 
 test("v0.5: the request writing a second summary is rewritten as usual; after it, the images from before both go back", async () => {
   const { image, pngA, pngB, text, transcript } = await import("./claude-fixtures.ts");
-  const { rewriteClaudeBody } = await import("../../plugin/src/proxy.ts");
+  const { rewriteClaudeBody } = await import("../../plugin/src/adapters/claude/engine.ts");
   const home = mkdtempSync(join(tmpdir(), "cam-claude-home-"));
   const dir = mkdtempSync(join(tmpdir(), "cam-claude-sel-"));
   const session = "11111111-2222-4333-8444-666666666666";

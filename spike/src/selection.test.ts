@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { needsRewrite } from "../../plugin/src/proxy.ts";
+import { needsRewrite } from "../../plugin/src/adapters/codex/engine.ts";
 import { autoDefaultSince, effectiveSelection, ensureAutoDefault, ensureStableIds, mainTaskOf, readSelection, sideChatSelection, stableIdsSince, writeSelection } from "../../plugin/src/selection.ts";
 import { startThread } from "./testfixtures.ts";
 
