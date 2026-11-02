@@ -16,7 +16,7 @@
 
 另一条路线是在新任务里重建历史（阶段 0 验证过，技术上可行）。没有采用，因为用户要在同一个任务里看到连续的对话，见 [history/v0.1/phase0-report.md](history/v0.1/phase0-report.md)。
 
-v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不认识任何平台的核心，`panel/` 是面板，`adapters/<平台>/` 是各平台的接入；`plugin/src` 顶层只放入口（`plugin-server.ts`、`proxy.ts`、`cam.ts`）和引擎的生命周期（`engine.ts`）。分层规则由 `spike/src/layers.test.ts` 检查。
+v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不认识任何平台的核心，`panel/` 是面板，`adapters/<平台>/` 是各平台的接入；`plugin/src` 顶层只放入口（`plugin-server.ts`、`proxy.ts`、`cam.ts`）、引擎的生命周期（`engine.ts`）和平台登记表（`platforms.ts`）。分层规则由 `spike/src/layers.test.ts` 检查。Codex 和 Claude Code 带面板，接入层读它们自己的本地记录；其余平台只接核心，不带面板，见 [v0.11/plan.md](v0.11/plan.md) 第 3.8、3.9 节和对外的 [ADAPTERS.md](../ADAPTERS.md)。
 
 | 部分 | 代码（`plugin/src`） | 作用 |
 |---|---|---|
@@ -31,6 +31,8 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
 | Claude 会话索引和改写（v0.4） | `adapters/claude/claude-index.ts`、`adapters/claude/claude-rewrite.ts`、`adapters/protocols/anthropic-messages/rewrite.ts` | 从 Claude Code 的会话记录找图、编号，把请求里的图对上记录；把决定落进 Anthropic Messages 请求 |
 | Claude 思考记录和提示缓存（v0.4、v0.10） | `adapters/protocols/anthropic-messages/thinking.ts`、`adapters/protocols/anthropic-messages/cache.ts` | 账号校验思考记录时，去掉和实际发出的历史对不上的思考；改过历史后，让提示缓存仍能读到 |
 | 面板页（v0.4） | `panel/panel-web.js`、`panel/panel-language.ts`、`adapters/claude/panel-web.ts` | 引擎把 `panel.html` 作为网页提供时，代替 MCP 应用的宿主 |
+| 只接核心的平台（v0.11） | `platforms.ts`、`core/platform.ts`、`core/request-index.ts`、`adapters/protocols/any.ts`、`adapters/protocols/openai-chat/rewrite.ts`、`adapters/protocols/gemini/rewrite.ts`、`adapters/{workbuddy,opencode,gemini-cli,pi}/platform.ts`、`adapters/pi/extension.ts` | 平台登记表和每个平台的条目；按路径认格式，从请求本身认图、按内容编号、存原图，自动选图一直开着；`cam connect` 登记线路；pi 的扩展加会话头、注册取图服务 |
+| DeepSeek Harness（v0.11） | `adapters/dsh/plugin.ts` | dsh 插件，顶替官方的图片卸载插件：新一轮开始时卸载之前各轮的图，图片超预算时照旧卸载最旧的 |
 
 引擎和插件服务之间只通过数据目录里的文件共享状态，任何一方不在，另一方都照常工作。
 

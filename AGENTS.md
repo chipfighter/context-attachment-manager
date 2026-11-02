@@ -12,7 +12,7 @@ Context Attachment Manager（上下文素材管理器，2026-10-11 前叫 Codex 
 - [docs/v0.7/plan.md](docs/v0.7/plan.md)：v0.7 方案，Codex 的子代理和旁聊也自动选图（已发布 0.7.0）。
 - [docs/v0.8/plan.md](docs/v0.8/plan.md)：v0.8 方案，模型给每张图写特征行、压缩后照样拿对图，面板改成搜索加缩略图（已发布 0.8.0）。
 - [docs/v0.10/plan.md](docs/v0.10/plan.md)：v0.10 方案，压缩和续接之后照样拿回之前的图，编号不变（已发布 0.10.0；关卡结果见方案第 3 节）。
-- [docs/v0.11/plan.md](docs/v0.11/plan.md)：v0.11 方案，把插件拆成接入层、核心层、面板层，并接入 WorkBuddy（进行中）。
+- [docs/v0.11/plan.md](docs/v0.11/plan.md)：v0.11 方案，把插件拆成接入层、核心层、面板层，其他 Agent 平台只接核心、不带面板（第 1–8 步已在本机 main 上做完，没有推送）。
 - [docs/history/v0.1/](docs/history/v0.1/)：v0.1 的开发记录（原方案、任务记录、各阶段报告、最初的构想），只作参考，不作依据。
 - [CHANGELOG.md](CHANGELOG.md)：每个版本的更新记录，发布时就是 Release 说明。
 - [eval/README_CN.md](eval/README_CN.md)：评测（英文版 [eval/README.md](eval/README.md)），装插件和不装插件的对比：方法、结果和复现步骤。这一份是 Codex 里的关键帧对话；Claude Code 里压缩两次再分叉的长任务在 [eval/long-task/](eval/long-task/README_CN.md)。

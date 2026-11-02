@@ -5,9 +5,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./paths.ts";
 
-export type Platform = "codex" | "claude";
+// v0.11: a platform's name as its adapter registers it (platforms.ts): codex, claude, workbuddy, …
+export type Platform = string;
 export type ProviderRoute = { id: string; platform: Platform; baseUrl: string };
 const ID = /^[a-f0-9]{32}$/;
+export const PLATFORM_NAME = /^[a-z][a-z0-9-]{1,31}$/;
 
 export const routingPort = (enginePort: number): number => {
   if (!Number.isInteger(enginePort) || enginePort < 1 || enginePort > 65534) throw new Error("invalid engine port");
@@ -27,7 +29,7 @@ export function validateBaseUrl(value: string, enginePort?: number): URL {
 }
 
 export function registerRoute(input: { platform: Platform; baseUrl: string }, root = dataDir()): ProviderRoute {
-  if (input.platform !== "codex" && input.platform !== "claude") throw new Error("invalid provider platform");
+  if (typeof input.platform !== "string" || !PLATFORM_NAME.test(input.platform)) throw new Error("invalid provider platform");
   const baseUrl = validateBaseUrl(input.baseUrl).href;
   const dir = join(root, "routes");
   mkdirSync(dir, { recursive: true });
@@ -52,7 +54,7 @@ export function readRoute(id: string, root = dataDir()): ProviderRoute | null {
   if (!ID.test(id)) return null;
   try {
     const value = JSON.parse(readFileSync(join(root, "routes", `${id}.json`), "utf8"));
-    if (value.id !== id || !["codex", "claude"].includes(value.platform)) return null;
+    if (value.id !== id || typeof value.platform !== "string" || !PLATFORM_NAME.test(value.platform)) return null;
     return { id, platform: value.platform, baseUrl: validateBaseUrl(value.baseUrl).href };
   } catch { return null; }
 }

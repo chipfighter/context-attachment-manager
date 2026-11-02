@@ -31,3 +31,17 @@ export function awaitingLine(index: SessionIndex<IndexedImage>, image: IndexedIm
   for (let turn = image.turn + 1; turn < current; turn++) if (!index.interrupted.has(turn) && !index.skipped?.has(turn)) return false;
   return true;
 }
+
+// v0.3: the copies the model fetched before the request's turn (key → the id each copies), left out in either mode.
+export function earlierCopies(index: SessionIndex<IndexedImage>, current: number): Map<string, string> {
+  return new Map([...index.copies.values()].filter((copy) => copy.turn === null || copy.turn < current).map((copy) => [copy.key, copy.of]));
+}
+
+// v0.3: what automatic selection leaves out of a request of turn `current`: the images of earlier turns that can become
+// text and are not pinned. v0.10: where feature lines are written, an image waiting for its line (awaitingLine) is sent
+// once more instead. v0.11: decided here for every platform (it was written out in the Codex and the Claude engine).
+export function autoChoice(index: SessionIndex<IndexedImage>, current: number, pinned: Record<string, unknown>, features: boolean): { leaveOut: Set<string>; awaiting: Set<string> } {
+  const awaiting = new Set(features ? index.images.filter((image) => awaitingLine(index, image, current)).map((image) => image.key) : []);
+  const leaveOut = new Set(index.images.filter((image) => image.replaceable && image.turn !== null && image.turn < current && !pinned[image.key] && !awaiting.has(image.key)).map((image) => image.key));
+  return { leaveOut, awaiting };
+}

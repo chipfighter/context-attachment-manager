@@ -49,6 +49,8 @@ import { connectDirectly, useEngine, usesEngine } from "./adapters/codex/setup.t
 import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, sideChatOrigin } from "./adapters/codex/thread-index.ts";
 import { setPixelCache } from "./core/pixels.ts";
 import { threadTitle } from "./adapters/codex/thread-names.ts";
+import { latestSession, openRequestIndex, seenImage } from "./core/request-index.ts";
+import { corePlatformOf } from "./platforms.ts";
 
 type Json = Record<string, any>;
 // Kept fixed: Codex Desktop on Windows may show a blank panel after a resource URI changes (openai/codex#47512).
@@ -113,7 +115,9 @@ export const TOOLS = toolsFor("zh");
 // v0.4: under Claude Code only the model's fetch tool is listed. The Claude panel (the mod) reads and changes a
 // session's state through the engine (proxy.ts, claudePanelApi): a mod reaches an MCP server only through Claude Code's
 // tool permissions, a prompt for every call, and Claude Code registers no app-only tool at all.
-export const HOST: "codex" | "claude" = process.env.CAM_HOST === "claude" ? "claude" : "codex";
+// v0.11: or a platform using the core alone (platforms.ts), named by its MCP configuration (CAM_HOST=workbuddy, …):
+// only the model's fetch tool too.
+export const HOST: string = corePlatformOf(process.env.CAM_HOST) ? process.env.CAM_HOST! : process.env.CAM_HOST === "claude" ? "claude" : "codex";
 export const claudeToolsFor = (lang: Lang) => toolsFor(lang).filter((tool) => tool.name === "cam_view_image");
 
 // A stack of pictures, drawn for light and dark themes (Codex takes https or data URLs only).
@@ -287,6 +291,32 @@ export function callClaudeTool(name: string, args: Json, options: ClaudePanelOpt
   throw new Error(`unknown tool ${name}`);
 }
 
+// v0.11: the model's fetch tool on a platform using the core alone. The images are the ones the engine kept from the
+// session's requests (core/request-index.ts); the session is the one whose conversation went out last, the request the
+// model's call came from. Automatic selection is always on there.
+export function callPlatformTool(platform: string, name: string, args: Json, root = dataDir()): Json {
+  const lang = langOf(args.lang) ?? currentLang();
+  if (name !== "cam_view_image") throw new Error(`unknown tool ${name}`);
+  const words = fetchWords(lang);
+  const ids: string[] = Array.isArray(args.ids) ? args.ids.map(String) : typeof args.id === "string" ? [args.id] : [];
+  const session = latestSession(platform, root);
+  if (!session) throw new Error(say(lang, "call.noThread"));
+  const index = openRequestIndex(platform, session, root);
+  const content: Json[] = [];
+  const found: string[] = [];
+  for (const asked of ids) {
+    const id = asked.trim().toUpperCase();
+    const image = seenImage(index, id, root);
+    if (!image) { content.push({ type: "text", text: words.missing(asked) }); continue; }
+    if (!image.data) { content.push({ type: "text", text: words.unavailable(id) }); continue; }
+    const { seen } = image;
+    content.push({ type: "text", text: fetchedLabel({ id: seen.id, name: null, label: null, kind: seen.kind, turn: seen.turn, width: seen.width, height: seen.height }, lang) }, { type: "image", data: image.data, mimeType: seen.mime ?? "image/png" });
+    found.push(id);
+  }
+  log({ event: "fetch", host: platform, session, ids, found });
+  return { content, isError: ids.length > 0 && !found.length };
+}
+
 function main(): void {
   migrateDataOnce(); // v0.1-15: Windows moved the data folder
   // v0.6: the panel may read a selection before the engine has started: the same start for both (selection.ts).
@@ -298,7 +328,7 @@ function main(): void {
   let engineState = "";
   const supervise = async () => {
     if (process.env.CAM_NO_ENGINE === "1") return;
-    const result = await ensureEngine({ port: enginePort });
+    const result = await ensureEngine({ port: enginePort, client: HOST });
     const replaced = result.replaced ? { replacedPid: result.replaced.pid, replacedBuild: result.replaced.build ?? null } : {};
     if (result.state !== "running" || engineState !== "running") log({ event: "engine", host: HOST, state: result.state, enginePid: result.health?.pid ?? null, build: result.health?.build ?? null, ...replaced });
     engineState = result.state;
@@ -320,7 +350,7 @@ function main(): void {
     if (method === "initialize") {
       send({ id, result: { protocolVersion: params.protocolVersion ?? "2025-06-18", capabilities: { tools: {}, resources: {} }, serverInfo: serverInfo(currentLang()) } });
     } else if (method === "tools/list") {
-      send({ id, result: { tools: HOST === "claude" ? claudeToolsFor(currentLang()) : toolsFor(currentLang()) } });
+      send({ id, result: { tools: HOST === "codex" ? toolsFor(currentLang()) : claudeToolsFor(currentLang()) } });
     } else if (method === "resources/list") {
       send({ id, result: { resources: [{ uri: PANEL_URI, name: say(currentLang(), "resource.name"), mimeType: PANEL_MIME }] } });
     } else if (method === "resources/templates/list") {
@@ -335,7 +365,7 @@ function main(): void {
     } else if (method === "tools/call") {
       const started = performance.now();
       try {
-        const result = HOST === "claude" ? callClaudeTool(params.name, params.arguments ?? {}) : callTool(params.name, params.arguments ?? {}, params._meta);
+        const result = HOST === "claude" ? callClaudeTool(params.name, params.arguments ?? {}) : HOST === "codex" ? callTool(params.name, params.arguments ?? {}, params._meta) : callPlatformTool(HOST, params.name, params.arguments ?? {});
         const ms = Math.round(performance.now() - started);
         // The open panel reads its state every few seconds and loads each image once; only changes, and slow calls
         // (v0.1-11), are worth a line.

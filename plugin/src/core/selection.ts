@@ -13,6 +13,7 @@
 // Input/Output: <data dir>/selection/<thread id>.json, e.g. { "threadId": "…", "unchecked": { "<key>": { "id": "IMG-003", "at": "…" } } },
 // plus "auto", "autoAt", "autoSince" and "pinned" (same shape as "unchecked") once automatic selection has been used.
 
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { selectionDirOf } from "./paths.ts";
@@ -21,11 +22,16 @@ export type Mark = { id: string; at: string };
 export type Selection = { threadId: string; unchecked: Record<string, Mark>; auto?: boolean; autoAt?: string; autoSince?: string; pinned?: Record<string, Mark>; inheritedFrom?: string };
 
 export const selectionDir = selectionDirOf();
+// Codex and Claude Code name their sessions with UUIDs.
 export const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// v0.11: the name of a session's files, whatever the platform calls it: a UUID as it is, any other id as 32 hex
+// characters of its hash, which can be neither a path nor one of the files kept next to the selections.
+export const SESSION_KEY = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/;
+export const sessionKeyOf = (id: string): string => (THREAD_ID.test(id) ? id : createHash("sha256").update(id).digest("hex").slice(0, 32));
 const cache = new Map<string, { mtimeMs: number; size: number; selection: Selection }>();
 
 export function fileFor(threadId: string, dir: string): string {
-  if (!THREAD_ID.test(threadId)) throw new Error(`not a thread id: ${threadId}`);
+  if (!SESSION_KEY.test(threadId)) throw new Error(`not a thread id: ${threadId}`);
   return join(dir, `${threadId}.json`);
 }
 

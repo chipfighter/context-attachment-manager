@@ -15,6 +15,9 @@ export type ImageDigest = { contentId: string; mime: string | null; base64Chars:
 // v0.3 — the state our fetch tool (cam_view_image) writes in the line before each image it returns, in either
 // language, so the image is known as a copy of that id. The rest of the line is the usual heading (words.ts).
 export const FETCHED_STATE = { zh: "取回的原图", en: "fetched original" } as const;
+const FETCHED_LINE = new RegExp(`^\\[(?:图片|Image) (IMG-\\d{3,}) (?:${FETCHED_STATE.zh}|${FETCHED_STATE.en})(?:｜| \\|)`);
+// The id our fetch tool's line names, when `text` is one.
+export const fetchedIdIn = (text: string): string | null => FETCHED_LINE.exec(text)?.[1] ?? null;
 
 export function baseName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;

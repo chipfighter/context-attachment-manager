@@ -7,7 +7,7 @@
 // (core/images.ts). The names and captions it reads are Codex's own; for another client they simply do not match.
 // Input: items as parsed JSON. Output: ImageRef[] in item order (pure, no I/O).
 
-import { baseName, FETCHED_STATE, imageDigest, type ImageDigest, type ImageKind, type ImageSource } from "../../../core/images.ts";
+import { baseName, fetchedIdIn, imageDigest, type ImageDigest, type ImageKind, type ImageSource } from "../../../core/images.ts";
 
 type Json = Record<string, any>;
 
@@ -33,8 +33,6 @@ export type ImageRef = ImageDigest & {
   // v0.3: in a tool output, the id named by our fetch tool's line right before the image ("[图片 IMG-001 取回的原图｜…]").
   fetchedId: string | null;
 };
-
-const FETCHED_LINE = new RegExp(`^\\[(?:图片|Image) (IMG-\\d{3,}) (?:${FETCHED_STATE.zh}|${FETCHED_STATE.en})(?:｜| \\|)`);
 
 const OPEN_TAG = /^<image name=(\[Image #\d+\]) path="(.*)">$/s;
 // Codex desktop 26.924's own wording: the caption right before a comment's screenshot, and the line naming the PDF in
@@ -143,7 +141,7 @@ function toolContext(call: Json | undefined, output: Json[]): { kind: ImageKind;
   // order only when each call brought one image, otherwise which image is which is unknown.
   const views = [...source.matchAll(/(?<![\w$])view_image\s*\(/g)].map((m) => viewName(source, m.index + m[0].length));
   if (views.length || source.includes("view_image")) {
-    const viewed = output.flatMap((part, i) => (part?.type === "input_image" || part?.type === "output_image" ? [!FETCHED_LINE.test(output[i - 1]?.type === "input_text" ? String(output[i - 1].text) : "")] : []));
+    const viewed = output.flatMap((part, i) => (part?.type === "input_image" || part?.type === "output_image" ? [!fetchedIdIn(output[i - 1]?.type === "input_text" ? String(output[i - 1].text) : "")] : []));
     if (views.length !== viewed.filter(Boolean).length) return { kind: "view", names: [] };
     let next = 0;
     return { kind: "view", names: viewed.map((own) => (own ? views[next++] : null)) };
@@ -213,7 +211,7 @@ export function findImages(items: Json[]): ImageRef[] {
         source,
         pdfPage: pdf?.[1] ? Number(pdf[1]) : null,
         pdfName: pdf ? pdfName ?? null : null,
-        fetchedId: context && before !== null ? FETCHED_LINE.exec(before)?.[1] ?? null : null,
+        fetchedId: context && before !== null ? fetchedIdIn(before) : null,
       });
       n++;
     });

@@ -6,14 +6,14 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { requestStatsDirOf } from "./paths.ts";
+import { SESSION_KEY } from "./selection.ts";
 
 type Json = Record<string, any>;
 export type RequestStats = { latest: Json; lastHttp: Json | null };
 
-const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
+// v0.11: under the session's key (selection.ts, sessionKeyOf), whatever the platform.
 export function readRequestStats(threadId: string, dir = requestStatsDirOf()): RequestStats | null {
-  if (!THREAD_ID.test(threadId)) return null;
+  if (!SESSION_KEY.test(threadId)) return null;
   const file = join(dir, `${threadId}.json`);
   if (!existsSync(file)) return null;
   try {
@@ -26,7 +26,7 @@ export function readRequestStats(threadId: string, dir = requestStatsDirOf()): R
 }
 
 export function recordRequest(threadId: string | null, stats: Json, dir = requestStatsDirOf()): void {
-  if (!threadId || !THREAD_ID.test(threadId)) return;
+  if (!threadId || !SESSION_KEY.test(threadId)) return;
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${threadId}.json`);
   const next: RequestStats = { latest: stats, lastHttp: stats.transport === "http" ? stats : readRequestStats(threadId, dir)?.lastHttp ?? null };

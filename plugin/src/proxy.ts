@@ -42,9 +42,12 @@ import { migrateDataOnce } from "./core/migrate-data.ts";
 import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./core/paths.ts";
 import { recordRequest } from "./core/request-stats.ts";
 import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./core/routes.ts";
-import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForCodex } from "./engine.ts";
+import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForClients } from "./engine.ts";
 import { currentLang } from "./adapters/codex/language.ts";
 import { say } from "./core/messages.ts";
+import { headerOf } from "./core/platform.ts";
+import { formatOf, rewritePlatformRequest } from "./adapters/protocols/any.ts";
+import { corePlatformOf, isPlatform } from "./platforms.ts";
 import { ensureAutoDefault, ensureStableIds, selectionDir, stableIdsSince } from "./core/selection.ts";
 
 type Json = Record<string, any>;
@@ -82,10 +85,11 @@ export function routeOf(url: string, headers: IncomingHttpHeaders, root = dataDi
   return { host: UPSTREAM_HOST, url };
 }
 
+// v0.11: a platform other than Codex and Claude Code keeps every header but the engine's own (x-cam-).
 export function forwardHeaders(headers: IncomingHttpHeaders, upstream = UPSTREAM_HOST, platform?: Platform): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
   const client = platform ?? (upstream === CLAUDE_HOST ? "claude" : "codex");
-  const removed = new Set(client === "claude" ? ["chatgpt-account-id"] : ["anthropic-beta", "anthropic-version", "x-claude-code-session-id", "x-claude-code-agent-id", ...(!platform ? ["x-api-key"] : [])]);
+  const removed = new Set(client === "claude" ? ["chatgpt-account-id"] : client === "codex" ? ["anthropic-beta", "anthropic-version", "x-claude-code-session-id", "x-claude-code-agent-id", ...(!platform ? ["x-api-key"] : [])] : []);
   for (const [name, value] of Object.entries(headers)) if (value !== undefined && !HOP_BY_HOP.has(name) && !removed.has(name) && !name.startsWith("x-cam-")) out[name] = value;
   out.host = upstream;
   return out;
@@ -160,6 +164,9 @@ async function main(): Promise<void> {
     return vias.get(upstream)!;
   };
   const startedAt = new Date().toISOString();
+  // v0.11: when a plugin service last checked in (engine.ts, watchForClients); a platform other than Codex and Claude
+  // Code keeps the engine this way.
+  let lastClient = 0;
   // v0.1-3: which code this engine runs, so the plugin can tell when an update needs a new engine.
   const build = buildOf();
   const version = versionOf();
@@ -209,11 +216,11 @@ async function main(): Promise<void> {
       }
     };
     setInterval(() => checkPlugin(false), 15_000).unref();
-    watchForCodex(() => {
+    watchForClients(() => {
       checkPlugin(true);
-      log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: "no Codex or Claude Code process left" });
+      log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: "no Codex or Claude Code process left, and no plugin service checked in" });
       process.exit(0);
-    });
+    }, { lastClient: () => lastClient });
   }
   // Open WebSocket connections per thread. Over WebSocket Codex only sends new items and the server keeps the rest,
   // so a thread with unchecked images must move to HTTP: its idle connections are closed, and its next upgrade gets 426.
@@ -265,6 +272,7 @@ async function main(): Promise<void> {
 
   const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
     if (req.url === "/__cam/health") {
+      if (req.headers["x-cam-client"]) lastClient = Date.now();
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, service: ENGINE_SERVICE, pid: process.pid, startedAt, port, build, version, routingVersion: 1, routingPort: providerPort, upstream: UPSTREAM_HOST, upstreams: [UPSTREAM_HOST, CLAUDE_HOST, OPENAI_API_HOST], via: via ? `${via.host}:${via.port}` : "direct" }));
       return;
@@ -280,6 +288,7 @@ async function main(): Promise<void> {
         try {
           if (size > 8192) { res.writeHead(413); res.end(); return; }
           const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          if (!isPlatform(input.platform)) throw new Error("unknown platform");
           validateBaseUrl(input.baseUrl, port);
           const route = registerRoute(input);
           res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
@@ -346,6 +355,12 @@ async function main(): Promise<void> {
     const thinking = claudeSession ? thinkingOf(claudeSession) : null;
     const claudeRewrite = claudeNeedsRewrite(claudeSession) || !!thinking?.edited;
     const claudeFields = claude ? { claudeSessionId: claude.sessionId, claudeAgentId: claude.agentId } : {};
+    // v0.11: a platform using the core alone (platforms.ts): every model request but its side requests, automatic
+    // selection always on (adapters/protocols/any.ts).
+    const core = corePlatformOf(route.platform);
+    const coreRewrite = !!core && req.method === "POST" && formatOf(path) !== null && !core.sideRequest?.(req.headers);
+    const coreSession = core ? core.sessionOf?.(req.headers) ?? headerOf(req.headers, "x-cam-session") : null;
+    const coreFields = core ? { platform: core.name } : {};
     const chunks: Buffer[] = [];
     let requestBytes = 0;
     let responseBytes = 0;
@@ -378,7 +393,7 @@ async function main(): Promise<void> {
           }
         } catch { details = { kind: "unparsed" }; }
       }
-      const entry = { at: new Date(started).toISOString(), id, transport: "http", method: req.method, path, ...(upstream === OPENAI_API_HOST ? { upstream } : {}), status, requestBytes, decodedBytes: decoded?.length ?? null, contentEncoding: req.headers["content-encoding"] ?? null, responseBytes, ms: Date.now() - started, ...identity, ...claudeFields, ...details, ...extra, error: error ?? null };
+      const entry = { at: new Date(started).toISOString(), id, transport: "http", method: req.method, path, ...(upstream === OPENAI_API_HOST ? { upstream } : {}), status, requestBytes, decodedBytes: decoded?.length ?? null, contentEncoding: req.headers["content-encoding"] ?? null, responseBytes, ms: Date.now() - started, ...identity, ...claudeFields, ...coreFields, ...details, ...extra, error: error ?? null };
       log(entry);
       // Image keys go to the per-thread statistics only, not to the log.
       if (/\/responses$/.test(path)) {
@@ -478,13 +493,13 @@ async function main(): Promise<void> {
       }
       finish(String(error));
     }); };
-    if (!rewrite && !claudeRewrite) { send([{ body: null, report: null, edited: false }]); return; }
+    if (!rewrite && !claudeRewrite && !coreRewrite) { send([{ body: null, report: null, edited: false }]); return; }
     collect();
     req.on("end", async () => {
       const original = Buffer.concat(chunks);
       const encoding = req.headers["content-encoding"] as string | undefined;
       const rewriteNow = (): { body: Buffer; report: Json; attempts?: ClaudeAttempt[]; prefix?: SentPrefix } => {
-        try { return claudeRewrite ? rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking, sentPrefixes.get(claudeSession!) ?? [], currentLang()) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
+        try { return coreRewrite ? rewritePlatformRequest(core!.name, path, original, encoding, coreSession, dataDir(), currentLang()) : claudeRewrite ?rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking, sentPrefixes.get(claudeSession!) ?? [], currentLang()) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
         catch (error) { return { body: original, report: { skipped: `rewrite failed: ${String(error)}` } }; }
       };
       let out = rewriteNow();
