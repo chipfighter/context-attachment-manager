@@ -15,19 +15,16 @@ import { fileURLToPath } from "node:url";
 const src = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", "src");
 
 const PENDING = new Set<string>([
-  "adapters/claude/claude-index.ts -> adapters/codex/thread-index.ts",
-  "adapters/claude/engine.ts -> adapters/codex/thread-index.ts",
   "adapters/claude/engine.ts -> language.ts",
-  "adapters/claude/engine.ts -> selection.ts",
   "adapters/codex/engine.ts -> language.ts",
-  "adapters/codex/engine.ts -> selection.ts",
   "adapters/codex/install.ts -> language.ts",
   "adapters/codex/install.ts -> messages.ts",
   "panel/panel-state.ts -> adapters/claude/claude-index.ts",
+  "panel/panel-state.ts -> adapters/claude/selection.ts",
+  "panel/panel-state.ts -> adapters/codex/children.ts",
+  "panel/panel-state.ts -> adapters/codex/selection.ts",
   "panel/panel-state.ts -> adapters/codex/thread-index.ts",
   "panel/panel-state.ts -> adapters/codex/thread-names.ts",
-  "panel/panel-state.ts -> children.ts",
-  "panel/panel-state.ts -> selection.ts",
 ]);
 
 type Layer = "core" | "panel" | "protocols" | `adapter:${string}` | "top";

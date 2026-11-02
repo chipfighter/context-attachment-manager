@@ -6,9 +6,9 @@
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { childrenDirOf } from "./core/paths.ts";
+import { childrenDirOf } from "../../core/paths.ts";
 import { mainTaskOf } from "./selection.ts";
-import { sideChatOrigin, spawnParent } from "./adapters/codex/thread-index.ts";
+import { sideChatOrigin, spawnParent } from "./thread-index.ts";
 
 export type Child = { kind: "subagent" | "side"; from: string; at: string };
 const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

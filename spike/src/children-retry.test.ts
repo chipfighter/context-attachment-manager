@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { readChildren, recordChild } from "../../plugin/src/children.ts";
+import { readChildren, recordChild } from "../../plugin/src/adapters/codex/children.ts";
 
 test("a child can be recorded again after its first write fails", (t) => {
   const root = mkdtempSync(join(tmpdir(), "cam-children-retry-"));

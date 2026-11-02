@@ -368,7 +368,7 @@ function writeStats(kind: string): void {
 }
 // v0.8: the two copies' last requests (turn 7), and a subagent and a side chat of the auto one.
 {
-  const { recordChild } = await import("../../plugin/src/children.ts");
+  const { recordChild } = await import("../../plugin/src/adapters/codex/children.ts");
   const { childrenDirOf } = await import("../../plugin/src/core/paths.ts");
   const stats = requestStatsDirOf(process.env.CAM_DATA_DIR);
   for (const [id, file, auto] of V08_TASKS.flatMap(([main, manual]) => [[main, `rollout-2026-09-24T13-00-00-${main}.jsonl`, true], [manual, `rollout-2026-09-24T13-30-00-${manual}.jsonl`, false]] as const)) {

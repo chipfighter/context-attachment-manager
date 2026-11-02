@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { callTool, fromModel, PANEL_MIME, PANEL_URI, readResource, threadOf, TOOLS } from "../../plugin/src/plugin-server.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
+import { writeSelection } from "../../plugin/src/core/selection.ts";
 import { line, red, sampleSessions, startThread, THREAD, turn, upload } from "./testfixtures.ts";
 
 // These tests check the Chinese wording: the language is fixed, so neither the system's language nor one a panel

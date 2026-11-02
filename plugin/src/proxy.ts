@@ -26,14 +26,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
-import { childOf, recordChild } from "./children.ts";
+import { childOf, recordChild } from "./adapters/codex/children.ts";
 import { claudeHome, loadClaudeIndex } from "./adapters/claude/claude-index.ts";
 import { CLAUDE_HOST, claudeConversationRequest, claudeIdentity, claudeImageSizes, claudeNeedsRewrite, LATE_STEP_MS, LATE_WAIT_MS, rewriteClaudeBody, thinkingRejected, type ClaudeAttempt } from "./adapters/claude/engine.ts";
 import { claudePanelApi, claudePanelPage, PANEL_PAGE_CSP } from "./adapters/claude/panel-web.ts";
 import { codexHome } from "./adapters/codex/codexconfig.ts";
 import { CODEX_BASE, imageSizesOf, needsRewrite, OPENAI_API_HOST, requestIdentity, rewriteBody, UPSTREAM_HOST, type RequestIdentity } from "./adapters/codex/engine.ts";
 import { connectDirectly, pluginGone, usesEngine } from "./adapters/codex/setup.ts";
-import { setPixelCache } from "./adapters/codex/thread-index.ts";
+import { setPixelCache } from "./core/pixels.ts";
 import { REMEMBERED, type SentPrefix } from "./adapters/protocols/anthropic-messages/cache.ts";
 import { readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./adapters/protocols/anthropic-messages/thinking.ts";
 import { connectUpstream, decodeBody, HOP_BY_HOP, log, outboundProxy, ownRequest, readSystemProxy, redactImages } from "./core/engine/transport.ts";
@@ -45,7 +45,7 @@ import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, t
 import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, engineHealth, versionOf, watchForCodex } from "./engine.ts";
 import { currentLang } from "./language.ts";
 import { say } from "./messages.ts";
-import { ensureAutoDefault, ensureStableIds, selectionDir, stableIdsSince } from "./selection.ts";
+import { ensureAutoDefault, ensureStableIds, selectionDir, stableIdsSince } from "./core/selection.ts";
 
 type Json = Record<string, any>;
 

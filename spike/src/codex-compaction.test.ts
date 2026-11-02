@@ -13,7 +13,7 @@ import zlib from "node:zlib";
 import { rewriteBody } from "../../plugin/src/adapters/codex/engine.ts";
 import { addCodexCompacted } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
 import { compactList } from "../../plugin/src/core/words.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
+import { writeSelection } from "../../plugin/src/core/selection.ts";
 import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { png } from "./testkit.ts";
 

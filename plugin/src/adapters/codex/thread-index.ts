@@ -13,37 +13,24 @@
 // v0.8 — what the model noted about the images in record lines at the end of its replies (notes.ts), by image id.
 // Input: the sessions directory and a thread id. Output: ThreadIndex (in memory; files are parsed incrementally).
 
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
 import { findImages, type ImageRef } from "../protocols/openai-responses/images.ts";
 import { addNotes, type Notes } from "../../core/notes.ts";
-import { decodePng } from "../../core/png.ts";
+import { pixelHashOfData } from "../../core/pixels.ts";
+import type { FetchedCopy, IndexedImage as SessionImage, SessionIndex } from "../../core/session.ts";
 
 type Json = Record<string, any>;
-// v0.10: compacted, before Codex last compacted the thread and not in the history it kept (its tool outputs): the
-// engine puts it back after the compaction (openai-responses/rewrite.ts, addCodexCompacted); for Claude, before the latest compaction.
-export type IndexedImage = ImageRef & { id: string; turn: number | null; bytes: number; pixelSha256: string | null; compacted?: boolean };
-// v0.3: an image the model fetched with our tool, a copy of `of` sent in its own turn only (spec: automatic selection).
-export type FetchedCopy = { key: string; of: string; turn: number | null };
-// v0.10 (Codex): items, the items of the history, which image positions point into. interrupted: the turns the user
-// stopped before the model wrote its last reply (its record lines); skipped: turns that are only Claude Code's mark of
-// such a stop.
-export type ThreadIndex = { threadId: string; images: IndexedImage[]; byKey: Map<string, IndexedImage>; turns: number; turnNumbers: Map<string, number>; copies: Map<string, FetchedCopy>; notes: Map<string, Notes>; items?: Json[]; interrupted?: Set<number>; skipped?: Set<number> };
-
-// v0.10 (docs/v0.10/plan.md): an image of an interrupted turn without a feature line yet, with no turn finished since:
-// sent once more in the current turn, so the model can write its line (automatic selection would leave it out).
-export function awaitingLine(index: ThreadIndex, image: IndexedImage, current: number): boolean {
-  if (image.turn === null || image.turn >= current || index.notes.get(image.id)?.line || !index.interrupted?.has(image.turn)) return false;
-  for (let turn = image.turn + 1; turn < current; turn++) if (!index.interrupted.has(turn) && !index.skipped?.has(turn)) return false;
-  return true;
-}
+// v0.11: the shape of the index and awaitingLine are the core's (core/session.ts); a Codex image also carries where it
+// sits in its item (ImageRef).
+export type IndexedImage = ImageRef & SessionImage;
+export type ThreadIndex = SessionIndex<IndexedImage>;
 export type Parsed = { offset: number; type: string; payload: Json; timestamp: string | null };
 type FileCache = { size: number; mtimeMs: number; parsedTo: number; records: Parsed[] };
 
 const SEGMENT_NAME = /^rollout-[0-9T:-]+-([0-9a-f-]{36})(?:_([0-9a-f-]{36}))?\.jsonl(?:\.zst)?$/;
 const files = new Map<string, FileCache>();
-const pixelHashes = new Map<string, string | null>();
 
 function walk(directory: string): string[] {
   let entries;
@@ -180,48 +167,6 @@ function effective(segments: Map<string, string>, segmentId: string, endOffset =
   return [...inherited, ...records(file).filter((record) => record.offset < endOffset)];
 }
 
-// The engine and the plugin services (Codex starts one per task) share pixel fingerprints through this folder, so a
-// new process does not decode every PNG again. Only fingerprints are stored, never image content. Unset: memory only
-// (tests). "-" marks a PNG our decoder cannot read.
-let pixelCacheDir: string | null = null;
-export function setPixelCache(dir: string | null): void { pixelCacheDir = dir; }
-const SHA256 = /^[0-9a-f]{64}$/;
-
-function storedPixelHash(contentId: string): string | null | undefined {
-  if (!pixelCacheDir || !SHA256.test(contentId)) return undefined;
-  try {
-    const text = readFileSync(join(pixelCacheDir, contentId.slice(0, 2), contentId), "utf8").trim();
-    return text === "-" ? null : SHA256.test(text) ? text : undefined;
-  } catch { return undefined; }
-}
-
-function storePixelHash(contentId: string, hash: string | null): void {
-  if (!pixelCacheDir || !SHA256.test(contentId)) return;
-  try {
-    const folder = join(pixelCacheDir, contentId.slice(0, 2));
-    mkdirSync(folder, { recursive: true });
-    writeFileSync(join(folder, contentId), hash ?? "-", { flag: "wx" });
-  } catch { /* best effort; another process may have written it first */ }
-}
-
-function pixelHash(ref: ImageRef, value: string): string | null {
-  if (ref.mime !== "image/png") return null;
-  if (!pixelHashes.has(ref.contentId)) {
-    let hash = storedPixelHash(ref.contentId);
-    if (hash === undefined) {
-      try { hash = decodePng(Buffer.from(value, "base64")).pixelSha256; } catch { hash = null; }
-      storePixelHash(ref.contentId, hash);
-    }
-    pixelHashes.set(ref.contentId, hash);
-  }
-  return pixelHashes.get(ref.contentId) ?? null;
-}
-
-// v0.4: the same fingerprint for an image held elsewhere (a Claude Code transcript), by its digest and base64.
-export function pixelHashOfData(ref: Pick<ImageRef, "contentId" | "mime">, value: string): string | null {
-  return pixelHash(ref as ImageRef, value);
-}
-
 export function imageData(items: Json[], ref: ImageRef): string | null {
   const item = items[ref.item];
   if (ref.part === null) return typeof item?.result === "string" ? item.result : null;
@@ -231,7 +176,7 @@ export function imageData(items: Json[], ref: ImageRef): string | null {
 
 export function pixelHashOf(items: Json[], ref: ImageRef): string | null {
   const value = imageData(items, ref);
-  return value === null ? null : pixelHash(ref, value);
+  return value === null ? null : pixelHashOfData(ref, value);
 }
 
 export function buildIndex(threadId: string, history: Parsed[]): ThreadIndex {

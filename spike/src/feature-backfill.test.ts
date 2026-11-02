@@ -13,8 +13,9 @@ import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.
 import { rewriteBody } from "../../plugin/src/adapters/codex/engine.ts";
 import { rewriteClaudeBody } from "../../plugin/src/adapters/claude/engine.ts";
 import { featureNote } from "../../plugin/src/core/words.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
-import { awaitingLine, loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
+import { writeSelection } from "../../plugin/src/core/selection.ts";
+import { awaitingLine } from "../../plugin/src/core/session.ts";
+import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
 import { png } from "./testkit.ts";
 

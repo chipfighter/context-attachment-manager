@@ -22,7 +22,7 @@ import { languageFileOf, rememberLang } from "../../plugin/src/language.ts";
 import { askedIn } from "../../plugin/src/panel/panel-state.ts";
 import { selectionDirOf } from "../../plugin/src/core/paths.ts";
 import { readRequestStats } from "../../plugin/src/core/request-stats.ts";
-import { writeSelection } from "../../plugin/src/selection.ts";
+import { writeSelection } from "../../plugin/src/core/selection.ts";
 import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { archiveThreads, png, runTurn, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 

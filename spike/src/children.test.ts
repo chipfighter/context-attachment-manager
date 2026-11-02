@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { childOf, readChildren, recordChild } from "../../plugin/src/children.ts";
+import { childOf, readChildren, recordChild } from "../../plugin/src/adapters/codex/children.ts";
 
 const MAIN = "01a0d307-0000-7000-8000-0000000000c0";
 const CHILD = "01a0d307-0000-7000-8000-0000000000c1";

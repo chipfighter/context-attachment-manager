@@ -38,9 +38,12 @@ import { panelHtml } from "./panel/page.ts";
 import { applySelection, claudeImageFor, imageFor, loadPanelState, type ClaudePanelOptions, type PanelState } from "./panel/panel-state.ts";
 import { claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./core/paths.ts";
 import { fetchedLabel, fetchWords } from "./core/words.ts";
-import { claudeSelection, effectiveSelection, ensureAutoDefault, ensureStableIds, stableIdsSince } from "./selection.ts";
+import { claudeSelection } from "./adapters/claude/selection.ts";
+import { effectiveSelection } from "./adapters/codex/selection.ts";
+import { ensureAutoDefault, ensureStableIds, stableIdsSince } from "./core/selection.ts";
 import { connectDirectly, useEngine, usesEngine } from "./adapters/codex/setup.ts";
-import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, setPixelCache, sideChatOrigin } from "./adapters/codex/thread-index.ts";
+import { hasRollout, loadThreadIndex, readThreadHistory, sessionMetaOf, sideChatOrigin } from "./adapters/codex/thread-index.ts";
+import { setPixelCache } from "./core/pixels.ts";
 import { threadTitle } from "./adapters/codex/thread-names.ts";
 
 type Json = Record<string, any>;
