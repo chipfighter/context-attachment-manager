@@ -22,7 +22,7 @@ import { AppServer, findBundledCodex } from "./appserver.ts";
 import { codexHome } from "../../plugin/src/adapters/codex/codexconfig.ts";
 import { engineHealth } from "../../plugin/src/engine.ts";
 import { languageFileOf, rememberLang, type Lang } from "../../plugin/src/language.ts";
-import { loadPanelState } from "../../plugin/src/panel/panel-state.ts";
+import { loadPanelState } from "../../plugin/src/adapters/codex/panel.ts";
 import { requestStatsDirOf } from "../../plugin/src/core/paths.ts";
 import { readRequestStats } from "../../plugin/src/core/request-stats.ts";
 import { loadThreadIndex, threadsStartedSince } from "../../plugin/src/adapters/codex/thread-index.ts";

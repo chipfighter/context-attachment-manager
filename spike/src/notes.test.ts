@@ -14,7 +14,9 @@ import { addNotes, notesBy, sceneOf, type Notes } from "../../plugin/src/core/no
 import { autoPlaceholder, clip, featureNote, plainPlaceholder, type Described } from "../../plugin/src/core/words.ts";
 import { rewriteItems } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
 import { buildIndex, writesNotes, type Parsed } from "../../plugin/src/adapters/codex/thread-index.ts";
-import { claudeTurnTexts, loadPanelState, panelStateOf } from "../../plugin/src/panel/panel-state.ts";
+import { claudeTurnTexts } from "../../plugin/src/adapters/claude/panel.ts";
+import { loadPanelState } from "../../plugin/src/adapters/codex/panel.ts";
+import { panelStateOf } from "../../plugin/src/panel/panel-state.ts";
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
 import { assistant, line, sampleSessions, THREAD, turn } from "./testfixtures.ts";
 import { png } from "./testkit.ts";

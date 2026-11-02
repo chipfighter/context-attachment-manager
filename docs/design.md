@@ -22,7 +22,7 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
 |---|---|---|
 | 引擎 | `proxy.ts`（入口）、`core/engine/transport.ts`、`adapters/codex/engine.ts`、`adapters/claude/engine.ts`、`engine.ts`、`core/routes.ts` | 本机代理：按绑定线路转发、改写请求、记录每个任务最近一次请求的统计；全机只有一个 |
 | 插件服务 | `plugin-server.ts` | Codex 为每个会话启动的 MCP 服务：拉起并看守引擎，给面板提供数据；v0.3 起还给模型提供取图工具 |
-| 面板 | `panel/panel.html`、`panel/page.ts`、`panel/panel-state.ts` | 侧边面板里的 MCP 应用，以及它要显示的数据 |
+| 面板 | `panel/panel.html`、`panel/page.ts`、`panel/panel-state.ts`；Codex、Claude 各自的读取在 `adapters/codex/panel.ts`、`adapters/claude/panel.ts` | 侧边面板里的 MCP 应用，以及它要显示的数据 |
 | 任务索引 | `adapters/codex/thread-index.ts`、`adapters/codex/children.ts`、`adapters/protocols/openai-responses/images.ts`、`core/images.ts`、`core/session.ts`、`core/pixels.ts`、`core/thumbnail.ts`、`core/png.ts`、`adapters/codex/thread-names.ts` | 从 Codex 的任务记录里只读地找出图片和它的来源、编号、生成缩略图、读任务名 |
 | 改写 | `core/plan.ts`、`core/words.ts`、`adapters/protocols/openai-responses/rewrite.ts`、`core/selection.ts`、`adapters/codex/selection.ts`、`adapters/claude/selection.ts`、`core/request-stats.ts`、`core/notes.ts` | 每张图发不发、换成什么字（两个平台共用）；发给模型的全部文字；把决定落进 Responses 请求；勾选状态；请求统计；特征行 |
 | 接入和安装 | `adapters/codex/`：`codexconfig.ts`、`setup.ts`、`install.ts`、`codexcli.ts`、`plugin-cache.ts`、`binding.ts`；`cam.ts` | 管理 Codex 配置里带标记的块；用 Codex 的命令行装卸插件；保护升级中的旧运行文件；新任务绑定；`cam` 命令行 |
@@ -167,7 +167,7 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
   - 切换前，先把还没保存的勾选按原来的模式存完；切换进行中不接受勾选，免得记错地方。
   - 手动模式下不显示“最近一轮模型取回”，提示条照旧是“模型需要”。
   - 预计请求只算每轮都发的图，数字后面加“起”（英文是“+”），悬停说明模型取回的图不算在内。
-- **子代理和旁聊**（v0.7，`panel-state.ts`）：面板数据里的 `children` 是引擎登记的子代理和旁聊，按第一次请求的时间排，每个带名字（子代理的 `agent_nickname`，没有时用 `agent_path` 的最后一段）、最近一次完整请求带了几张图，以及和主任务一样算出的上次请求（替换几张、前后大小）。v0.8 起没有 `childrenAuto` 开关，每个也不再带“管不管”。
+- **子代理和旁聊**（v0.7，`adapters/codex/panel.ts`）：面板数据里的 `children` 是引擎登记的子代理和旁聊，按第一次请求的时间排，每个带名字（子代理的 `agent_nickname`，没有时用 `agent_path` 的最后一段）、最近一次完整请求带了几张图，以及和主任务一样算出的上次请求（替换几张、前后大小）。v0.8 起没有 `childrenAuto` 开关，每个也不再带“管不管”。
 - **任务名**：读 `<CODEX_HOME>/session_index.jsonl`，同一个任务以最后一行为准。
 - **新任务绑定**：在新任务页打开的面板，绑在 Codex 预先准备的任务上，发第一条消息后可能换成另一个任务。
   - 页面记下自己哪些时间段显示在屏幕上，读数据时带给插件服务。
