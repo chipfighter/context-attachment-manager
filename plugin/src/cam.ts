@@ -243,7 +243,7 @@ async function main(): Promise<void> {
     return;
   }
   // v0.11: a platform using the core alone (platforms.ts, ADAPTERS.md): registers the route from the engine to where its
-  // requests go now, and prints what to set in the platform; with --apply, sets it (backed up, recorded for
+  // requests go now, and prints what to set in the platform; with --apply, sets it (each setting's earlier value recorded for
   // `disconnect`). --base-url names that address; --provider the provider, for a platform with one per provider.
   if (command === "connect" || command === "disconnect") {
     const platform = corePlatformOf(threadId);
@@ -264,10 +264,14 @@ async function main(): Promise<void> {
     const route = registerRoute({ platform: platform.name, baseUrl });
     const url = routeBaseUrl(port, route.id).replace("localhost", "127.0.0.1");
     const mcp = { command: stableNode(), args: [join(import.meta.dirname, "plugin-server.ts")], env: { CAM_HOST: platform.name } };
+    if (apply && plan?.manual) {
+      console.log([`${platform.title}: ${plan.manual}.`, `${url} -> ${baseUrl}`, ...platform.connect({ url, mcp }).map((step, at) => `${at + 1}. ${step}`)].join("\n"));
+      return;
+    }
     if (apply) {
-      if (!plan) throw new Error(`${platform.title}: its settings cannot be written yet; set them by hand: cam connect ${platform.name}`);
+      if (!plan) throw new Error(`${platform.title}: its settings are not in a file this command writes; set them by hand: cam connect ${platform.name}`);
       const files = applyEdits(platform.name, plan.edits({ url, mcp }), dataDir());
-      console.log([`${platform.title}: requests go through the engine to ${baseUrl}.`, `Changed (backed up first): ${files.join(", ")}`, ...(plan.note ? [plan.note] : []), `Restart ${platform.title}. To undo: cam disconnect ${platform.name}`].join("\n"));
+      console.log([`${platform.title}: requests go through the engine to ${baseUrl}.`, `Changed: ${files.join(", ")}`, ...(plan.note ? [plan.note] : []), `Restart ${platform.title}. To undo: cam disconnect ${platform.name}`].join("\n"));
       return;
     }
     // Plain lines, to copy from: inside JSON the paths' backslashes would be escaped twice.

@@ -1,13 +1,14 @@
 // Purpose: v0.11 — `cam connect --apply` writes a platform's own settings (docs/v0.11/plan.md 3.8): a value at a path
 // in a JSON file, an item in a JSON list, or a NAME=value line in an env file. A file that does not parse as plain JSON
-// (comments, say) is left alone and the command says so. Each file is backed up before the first change; what was
-// written, and what was there before, is recorded, and `cam disconnect` puts back only what still holds the value
-// written, so changes the user made since stay.
-// Input: the edits a platform's entry asks for (core/platform.ts). Output: the files, backups under
-// <data dir>/config-backup/<platform>/, and <data dir>/platforms/<platform>/connected.json.
+// (comments, say) is left alone and the command says so. What was written, and what each setting held before, is
+// recorded, and `cam disconnect` puts back only what still holds the value written, so changes the user made since
+// stay. The files themselves are never copied: settings files and .env files often hold API keys, and a key does not
+// leave its file (as with Codex's .env). Only the settings changed are recorded.
+// Input: the edits a platform's entry asks for (core/platform.ts). Output: the files, and
+// <data dir>/platforms/<platform>/connected.json.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { platformDirOf } from "./request-index.ts";
 
 type Json = Record<string, any>;
@@ -60,7 +61,8 @@ const parentOf = (root: Json, path: string[], create: boolean): Json | null => {
   let node = root;
   for (const key of path.slice(0, -1)) {
     if (node[key] === undefined && create) node[key] = {};
-    if (!node[key] || typeof node[key] !== "object" || Array.isArray(node[key])) return null;
+    // A list is walked by index (Qwen Code keeps its models in lists); one is never made here.
+    if (!node[key] || typeof node[key] !== "object") return null;
     node = node[key];
   }
   return node;
@@ -113,16 +115,8 @@ export function applyEdits(platform: string, edits: ConfigEdit[], root: string, 
   const files = [...new Set(edits.map((edit) => edit.file))];
   // Everything is read and checked before the first file is written.
   for (const file of files) if (!edits.some((edit) => edit.file === file && "env" in edit)) readJson(file);
-  const backups = join(root, "config-backup", platform);
-  const stamp = now.toISOString().replaceAll(":", "-");
   const recorded: Recorded[] = [];
-  for (const file of files) {
-    if (existsSync(file)) {
-      mkdirSync(backups, { recursive: true });
-      copyFileSync(file, join(backups, `${basename(file)}.${stamp}`));
-    }
-    recorded.push(...applyTo(file, edits.filter((edit) => edit.file === file)));
-  }
+  for (const file of files) recorded.push(...applyTo(file, edits.filter((edit) => edit.file === file)));
   // A second connect keeps what was there before the first one.
   const earlier = readRecord(platform, root);
   const kept = recorded.map((entry) => {

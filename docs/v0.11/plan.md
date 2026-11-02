@@ -18,7 +18,7 @@
 1. **三层**：接入层（一个平台一份，尽量薄）、核心层（不认识任何平台）、面板层（只经核心接口拿数据）。以后调算法只改核心层；维护某个平台只看它的那一份。
 2. **Codex 和 Claude 的行为不变**：这次是重组，不改用户看得到的任何行为。
 3. **对外接口文档和契约测试**：第三方照文档写接入，跑契约测试证明能用。
-4. **用新结构接其他平台**：WorkBuddy、OpenCode、Gemini CLI、pi、DeepSeek Harness，只接核心，不带面板，检验接入层是不是真的薄。
+4. **用新结构接其他平台**：WorkBuddy、OpenCode、Gemini CLI、pi、DeepSeek Harness，再加 Qwen Code、Cline、Kilo Code、goose、Cherry Studio，只接核心，不带面板，检验接入层是不是真的薄。
 
 ## 2. 已定的规则（用户 2026-11-02 定）
 
@@ -42,7 +42,7 @@ plugin/src/
   adapters/                 接入层
     protocols/              请求格式的翻译器：openai-responses、anthropic-messages、openai-chat、gemini；any.ts 给只接核心的平台用
     codex/、claude/         带面板的两个平台，各自读本地记录、改配置、开面板
-    workbuddy/、opencode/、gemini-cli/、pi/   只接核心的平台，每个一个 platform.ts（pi 另有扩展）
+    workbuddy/、opencode/、gemini-cli/、pi/、qwen-code/、cline/、kilo-code/、goose/、cherry-studio/   只接核心的平台，每个一个 platform.ts（pi 另有扩展）
     dsh/                    DeepSeek Harness 的 dsh 插件包（index.js、offload.js、package.json、cordis.patch.yml）
 ```
 
@@ -94,7 +94,7 @@ plugin/src/
 
 - 仍是一个版本、一份内容。全机只有一个引擎，所有平台共用；各平台装不同版本时，引擎会互相请对方退役，Codex 和 Claude 两份副本之间已经出现过（design 第 5 节）。所以不按平台拆成不同的包。
 - 每个平台按它自己的方式装：Codex、Claude 照旧走各自的插件市场和安装命令；只接核心的平台把仓库克隆到一个固定的文件夹，`cam detect` 认出平台，`cam connect <平台> --apply` 登记线路并改好平台的设置，`cam disconnect` 撤回；DeepSeek Harness 用 `dsh plugin add` 装 dsh 包。
-- 用户 2026-11-02 定：用户把一句话发给自己的 Agent，Agent 看仓库就能在对应的平台上装好，而且不会装错（例如 WorkBuddy 里的 DeepSeek 模型要装 WorkBuddy 的那一份）。所以平台由各平台给命令设的环境变量来认，不靠模型自己猜；改设置由命令来做，不让模型手改：先备份，记下改了什么、原来是什么，`cam disconnect` 只撤回还保持原样的设置。带注释的 JSON 不改，只打出步骤。
+- 用户 2026-11-02 定：用户把一句话发给自己的 Agent，Agent 看仓库就能在对应的平台上装好，而且不会装错（例如 WorkBuddy 里的 DeepSeek 模型要装 WorkBuddy 的那一份）。所以平台由各平台给命令设的环境变量来认，不靠模型自己猜；改设置由命令来做，不让模型手改：记下改了哪几项、原来是什么（不复制整个文件：设置文件和 .env 里常有 API key），`cam disconnect` 只撤回还保持原样的设置。带注释的 JSON 不改，只打出步骤。
 - 面板文件随包一起发，只有 Codex 桌面版和 Claude 桌面版的接入打开它。
 - 拆的过程中插件版本号不动，免得 Codex 中途从工作区自动重装；全部做完再升到 0.11.0 发布。
 
@@ -140,7 +140,7 @@ DSH 的请求可能用 DeepSeek 的文件模式发图（请求里是文件引用
 5. 拆面板：`panel-state.ts` 只读核心接口；插件服务里的面板工具和取图工具分开。
 6. 拆安装：Codex 的配置和命令行、Claude 的 Mod 进各自的接入。
 7. 写 `ADAPTERS.md`（英文，对外）和契约测试；在 Codex 和 Claude 里跑一遍模型自测（gpt-6-sol，中英文）。
-8. 接其他平台：平台登记表（自动选图的规则收进核心、会话编号不限 UUID、引擎认所有平台的探活）；openai-chat、gemini 两个翻译器；核心从请求建清单；WorkBuddy、OpenCode、Gemini CLI、pi 的条目，pi 的扩展，DSH 的插件包；`cam detect`、`cam connect --apply`、`cam disconnect`；INSTALL.md 按平台写；Codex 在 cc-switch 切换后自动接回；README 底部的平台表。不带面板，不实跑（第 7 节）。
+8. 接其他平台：平台登记表（自动选图的规则收进核心、会话编号不限 UUID、引擎认所有平台的探活）；openai-chat、gemini 两个翻译器；核心从请求建清单；WorkBuddy、OpenCode、Gemini CLI、pi 的条目，pi 的扩展，DSH 的插件包；`cam detect`、`cam connect --apply`、`cam disconnect`；INSTALL.md 按平台写；Codex 在 cc-switch 切换后自动接回；README 底部的平台表；再接 Qwen Code、Cline、Kilo Code、goose、Cherry Studio（goose 的设置是 YAML、Cherry Studio 的在应用里，这两个只打出步骤）。不带面板，不实跑（第 7 节）。
 9. Claude 桌面版实跑一轮，然后推送、发 0.11.0。
 
 ## 6. 风险
@@ -164,3 +164,4 @@ DSH 的请求可能用 DeepSeek 的文件模式发图（请求里是文件引用
 10. 安装：Agent 看仓库就能在所在平台装对，平台靠环境变量认，设置由命令改（第 3.7 节）。
 11. DeepSeek Harness 直接停掉官方的图片卸载，用我们的（第 3.9 节）。
 12. 这几个平台接完以后，再改 README、定新的仓库名字、简介、标签，做新的视频和图片，调整宣传口径。
+13. 再接的平台只接开源、用户多、用途多的：Qwen Code、Cline、Kilo Code、goose、Cherry Studio（Roo Code 的仓库已归档，不接）。闭源平台暂时不支持。测试只在 Codex 和 Claude 上实跑，其余平台不测（11-02 晚）。

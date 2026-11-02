@@ -5,13 +5,18 @@
 // so it is not in CORE_PLATFORMS; `cam detect` still names it.
 // Input: none. Output: the registry, and which platform a shell command runs in.
 
+import { cherryStudio } from "./adapters/cherry-studio/platform.ts";
+import { cline } from "./adapters/cline/platform.ts";
 import { geminiCli } from "./adapters/gemini-cli/platform.ts";
+import { goose } from "./adapters/goose/platform.ts";
+import { kiloCode } from "./adapters/kilo-code/platform.ts";
 import { opencode } from "./adapters/opencode/platform.ts";
 import { pi } from "./adapters/pi/platform.ts";
+import { qwenCode } from "./adapters/qwen-code/platform.ts";
 import { workbuddy } from "./adapters/workbuddy/platform.ts";
 import type { CorePlatform } from "./core/platform.ts";
 
-export const CORE_PLATFORMS: CorePlatform[] = [workbuddy, opencode, geminiCli, pi];
+export const CORE_PLATFORMS: CorePlatform[] = [workbuddy, opencode, geminiCli, pi, qwenCode, cline, kiloCode, cherryStudio, goose];
 export const PANEL_PLATFORMS = ["codex", "claude"] as const;
 
 export const corePlatformOf = (name: string | null | undefined): CorePlatform | null => CORE_PLATFORMS.find((platform) => platform.name === name) ?? null;

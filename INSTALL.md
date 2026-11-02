@@ -1,6 +1,6 @@
 # Install
 
-The easy way: paste this to your agent (Codex, Claude Desktop's Code tab, WorkBuddy, OpenCode, Gemini CLI, pi or DeepSeek Harness) and let it do the steps below for you.
+The easy way: paste this to your agent (Codex, Claude Desktop's Code tab, WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code or goose; for Cherry Studio, see [Other agents](#other-agents)) and let it do the steps below for you.
 
 ```text
 Install the Context Attachment Manager plugin for me, following https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
@@ -21,6 +21,10 @@ Install for the agent the user is talking to you in, and only that one. Which ag
    | `GEMINI_CLI=1` | Gemini CLI | [Other agents](#other-agents) |
    | `PI_SESSION_ID` | pi | [Other agents](#other-agents) |
    | `DSH_SHELL=1` | DeepSeek Harness | [Other agents](#other-agents) |
+| `QWEN_CODE=1` | Qwen Code | [Other agents](#other-agents) |
+| `CLINE_ACTIVE=true` | Cline | [Other agents](#other-agents) |
+| `KILO=1` | Kilo Code | [Other agents](#other-agents) |
+| `GOOSE_TERMINAL=1` | goose | [Other agents](#other-agents) |
 
    If none matches, or more than one, ask the user which agent this is. For the other agents, `cam detect` (below) checks the same variables and prints the exact command to run next.
 2. **Follow that section only**, and run the commands yourself. Do not edit the agent's settings by hand: the commands back them up and record what they wrote, so they can be undone.
@@ -75,7 +79,7 @@ Then start a new session in the Code tab. There is nothing to set up: the plugin
 
 ## Other agents
 
-WorkBuddy, OpenCode, Gemini CLI, pi and DeepSeek Harness get auto-select without a panel: earlier turns' images go out as short placeholders, and the model pulls back the one it needs by its id. These adapters are new and were not tested on the agents themselves yet; please [open an issue](https://github.com/chipfighter/context-attachment-manager/issues) if one does not work for you.
+WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose and Cherry Studio get auto-select without a panel: earlier turns' images go out as short placeholders, and the model pulls back the one it needs by its id. These adapters are new and were not tested on the agents themselves yet; please [open an issue](https://github.com/chipfighter/context-attachment-manager/issues) if one does not work for you.
 
 They need [Node.js 24 or later](https://nodejs.org) (`node --version`) and the plugin's code in a folder where it can stay (the agent runs it from there):
 
@@ -95,9 +99,14 @@ Run the command it prints under `next`, then restart the agent. What that comman
 - **OpenCode**: `cam connect opencode --apply` sets `options.baseURL` of the provider your `model` uses (or `--provider <id>`) in `~/.config/opencode/opencode.json`, and adds the MCP server under `mcp`. A config file with comments is not changed; the command says so, and `cam connect opencode` without `--apply` prints the steps instead.
 - **Gemini CLI**: `cam connect gemini-cli --apply` sets `GOOGLE_GEMINI_BASE_URL` (API key sign-in) or `CODE_ASSIST_ENDPOINT` (Google sign-in) in `~/.gemini/.env`, and adds the MCP server to `~/.gemini/settings.json`. A `.env` in your project folder that sets the same variable wins over it. Vertex AI is not supported.
 - **pi**: `cam connect pi --apply` sets `baseUrl` of the provider pi uses now (or `--provider <name>`) in `~/.pi/agent/models.json`, and lists the plugin's pi extension under `extensions` in `~/.pi/agent/settings.json`. The extension adds the MCP server.
+- **Qwen Code**: `cam connect qwen-code --apply` sets `baseUrl` of the model you use under `modelProviders` in `~/.qwen/settings.json` (or `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL` in `~/.qwen/.env`), and adds the MCP server there. Qwen OAuth is not supported.
+- **Cline**: `cam connect cline --apply` sets `settings.baseUrl` of the provider you use (or `--provider <id>`) in `~/.cline/data/settings/providers.json`, and adds the MCP server to `cline_mcp_settings.json` beside it. Cline's own account provider is not supported. Reload the VS Code window afterwards.
+- **Kilo Code**: `cam connect kilo-code --apply` sets `options.baseURL` of the provider your `model` uses (or `--provider <id>`) in `~/.config/kilo/kilo.json`, and adds the MCP server under `mcp`. Kilo's own gateway account is not supported.
+- **goose**: `cam connect goose` prints what to put in goose's `config.yaml` (the provider's `<PROVIDER>_HOST` and an extension); this command does not write YAML.
+- **Cherry Studio**: it runs no commands of its own, so run `cam connect cherry-studio --base-url <API host>` yourself, with the API host your provider shows in Cherry Studio's settings, and put the printed address in that field; add the printed MCP server under Settings > MCP Servers.
 - **DeepSeek Harness**: `dsh plugin --profile <profile> add "<folder>/plugin/src/adapters/dsh"` installs the plugin as a dsh bundle. It turns dsh's own image offload off and does what it did, and also offloads earlier turns' images when a new turn starts. The model reads an offloaded image back from the path its placeholder names.
 
-Each `cam connect --apply` backs the files up first (in the data folder, see [Your data](#your-data)), and keeps the address the agent used before as the destination: requests go there through the engine. Run it again after an update; it keeps what it found the first time.
+Each `cam connect --apply` records the settings it changed and what they held before (in the data folder, see [Your data](#your-data)); it never copies the files, which may hold API keys. It keeps the address the agent used before as the destination: requests go there through the engine. Run it again after an update; it keeps what it found the first time.
 
 ## Custom endpoints
 
@@ -152,7 +161,7 @@ Undo the settings first, then restart the agent and delete the folder:
 node "$HOME/context-attachment-manager/plugin/src/cam.ts" disconnect <agent>
 ```
 
-`<agent>` is `workbuddy`, `opencode`, `gemini-cli` or `pi`. It puts back what was there before, except settings you changed since. For DeepSeek Harness: `dsh plugin --profile <profile> remove dsh-context-attachment-manager`.
+`<agent>` is `workbuddy`, `opencode`, `gemini-cli`, `pi`, `qwen-code`, `cline` or `kilo-code`; for goose and Cherry Studio, put back the address you had by hand. It puts back what was there before, except settings you changed since. For DeepSeek Harness: `dsh plugin --profile <profile> remove dsh-context-attachment-manager`.
 
 Remove the plugin only after this: an agent still pointed at the engine cannot connect once nothing starts it.
 

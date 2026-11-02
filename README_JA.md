@@ -95,6 +95,11 @@ Codex で短編ドラマのキーフレーム 9 枚、合計約 32 MB の画像�
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google のオープンソースのターミナル型エージェント | 自動選択、新規対応、フィードバック歓迎 |
 | [pi](https://github.com/earendil-works/pi) | ミニマルで拡張できるターミナル型コーディングエージェント | 自動選択（pi 拡張）、新規対応、フィードバック歓迎 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | すべてがプラグインの DeepSeek のエージェント基盤 | 自動選択（dsh プラグイン）、新規対応、フィードバック歓迎 |
+| [Qwen Code](https://github.com/QwenLM/qwen-code) | Qwen のオープンソースのターミナル型エージェント | 自動選択、新規対応、フィードバック歓迎 |
+| [Cline](https://github.com/cline/cline) | VS Code・JetBrains・ターミナルで使えるオープンソースのコーディングエージェント | 自動選択、新規対応、フィードバック歓迎 |
+| [Kilo Code](https://github.com/Kilo-Org/kilocode) | VS Code・JetBrains・ターミナルで使えるオープンソースのコーディングエージェント | 自動選択、新規対応、フィードバック歓迎 |
+| [goose](https://github.com/aaif-goose/goose) | MCP で拡張できる、デスクトップとターミナルのオープンソースエージェント | 自動選択、新規対応、フィードバック歓迎 |
+| [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | 多くのモデルにつながるオープンソースのデスクトップ AI チャット | 自動選択、新規対応、フィードバック歓迎 |
 | **あなたのエージェント** | 薄い接続層を書くだけで、コアは変更不要 | PR を送って、ここに追加してください：[ADAPTERS.md](ADAPTERS.md)（英語） |
 
 どのエージェントでも、[インストール](#インストール)の文をそのエージェントに送ればインストールできます。各エージェントで何を変更するかは [INSTALL.md](INSTALL.md#other-agents)（英語）にあります。問題があれば [issue](https://github.com/chipfighter/context-attachment-manager/issues) でお知らせください。

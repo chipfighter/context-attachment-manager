@@ -93,6 +93,11 @@ https://github.com/user-attachments/assets/b9767a20-8ca4-4a33-86bc-5e0a16a2ed13
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google 开源的终端智能体 | 自动选图，新接入，欢迎反馈 |
 | [pi](https://github.com/earendil-works/pi) | 极简、可扩展的终端编程智能体 | 自动选图（pi 扩展），新接入，欢迎反馈 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek 的智能体框架，一切皆插件 | 自动选图（dsh 插件），新接入，欢迎反馈 |
+| [Qwen Code](https://github.com/QwenLM/qwen-code) | 通义千问开源的终端智能体 | 自动选图，新接入，欢迎反馈 |
+| [Cline](https://github.com/cline/cline) | 开源的编程智能体，VS Code、JetBrains 和终端都能用 | 自动选图，新接入，欢迎反馈 |
+| [Kilo Code](https://github.com/Kilo-Org/kilocode) | 开源的编程智能体，VS Code、JetBrains 和终端都能用 | 自动选图，新接入，欢迎反馈 |
+| [goose](https://github.com/aaif-goose/goose) | 开源的桌面和终端智能体，用 MCP 扩展 | 自动选图，新接入，欢迎反馈 |
+| [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | 开源的桌面 AI 聊天客户端，能接多家模型 | 自动选图，新接入，欢迎反馈 |
 | **你的 Agent** | 写一层薄薄的接入，核心一行不用改 | 提个 PR，把你的平台加到这里：[接入说明](ADAPTERS.md)（英文） |
 
 在哪个平台上装，就把[安装](#安装)里那句话发给那个平台的 Agent；各平台具体改了什么，见 [INSTALL.md](INSTALL.md#other-agents)（英文）。用下来有问题，欢迎[提 issue](https://github.com/chipfighter/context-attachment-manager/issues)。
