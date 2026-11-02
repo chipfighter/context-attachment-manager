@@ -230,7 +230,8 @@ async function main(): Promise<void> {
     const route = registerRoute({ platform: platform.name, baseUrl });
     const url = routeBaseUrl(port, route.id).replace("localhost", "127.0.0.1");
     const mcp = { command: process.execPath, args: [join(import.meta.dirname, "plugin-server.ts")], env: { CAM_HOST: platform.name } };
-    console.log(JSON.stringify({ command, platform: platform.name, upstream: baseUrl, url, steps: platform.connect({ url, mcp }) }, null, 2));
+    // Plain lines, to copy from: inside JSON the paths' backslashes would be escaped twice.
+    console.log([`${platform.title}: ${url} -> ${baseUrl}`, ...platform.connect({ url, mcp }).map((step, at) => `${at + 1}. ${step}`)].join("\n"));
     return;
   }
   if (!command || !threadId) throw new Error("usage: cam.ts install [--port N] | setup [--port N] | uninstall | status | connect <platform> [--base-url URL] | list|uncheck|check|check-all <thread id> [IMG-…]");

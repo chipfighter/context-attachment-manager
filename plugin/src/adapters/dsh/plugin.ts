@@ -8,8 +8,8 @@
 // starts. Marks never revert, so the provider's cached prefix only moves forward. No request goes through the engine.
 // Written against dsh's docs and the source of its image-offload plugin (agent/pre-step, agent/request-error,
 // compaction/summary-error, image/offload); not tested live.
-// Use (dsh composition config): replace `- name: '@deepseek-ai/dsh-compaction-image-offload'` with
-// `- name: '<path to this file>'`.
+// Use: in the dsh composition (cordis.yml), replace the `@deepseek-ai/dsh-compaction-image-offload` row with one whose
+// `name` is the path to this file (dsh loads a local plugin by its path: `name: './…/plugin.ts'`).
 // Input: dsh's events. Output: image/offload events in the session log.
 
 import { IMAGE_OFFLOAD_REQUIRED_CODE, LlmError } from "@deepseek-ai/dsh-llm";
