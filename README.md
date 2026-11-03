@@ -15,7 +15,7 @@
 
 <p align="center"><b>English</b> · <a href="README_CN.md">简体中文</a> · <a href="README_JA.md">日本語</a></p>
 
-https://github.com/user-attachments/assets/aeec27c0-c56a-4775-bcc8-981d5e9a0d45
+https://github.com/user-attachments/assets/aeb90ea2-6cb9-4f7a-9db7-8b4cd382430e
 
 [简体中文视频](README_CN.md)
 
