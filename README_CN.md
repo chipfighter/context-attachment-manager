@@ -10,14 +10,13 @@
   <a href="https://github.com/chipfighter/framekeeper/releases"><img src="https://img.shields.io/github/v/release/chipfighter/framekeeper?include_prereleases" alt="版本"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="支持 Windows、macOS、Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT 许可证"></a>
-  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome"></a>
 </p>
 
 <p align="center"><a href="README.md">English</a> · <b>简体中文</b> · <a href="README_JA.md">日本語</a></p>
 
 https://github.com/user-attachments/assets/5a674aa3-9723-4b33-afa8-75693feb1cda
 
-[English video](README.md)
+[English video](README.md) · [日语视频](README_JA.md)
 
 ## 为各种多模态场景而生
 
