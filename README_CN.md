@@ -4,7 +4,7 @@
 
 <h1 align="center">FrameKeeper 帧管家</h1>
 
-<p align="center"><b>别再交多模态税。</b><br>给你的 Agent 用的多模态上下文自动管理工具。<br>装上照常用，图片交给模型自己管理。</p>
+<p align="center"><b>让 Agent 在长任务中，持续使用它看过的图片。</b><br>图片退出当前上下文，仍然是任务的一部分。<br>自动管理，需要时取回原图。</p>
 
 <p align="center">
   <a href="https://github.com/chipfighter/framekeeper/releases"><img src="https://img.shields.io/github/v/release/chipfighter/framekeeper?include_prereleases" alt="版本"></a>
@@ -18,16 +18,15 @@ https://github.com/user-attachments/assets/5a674aa3-9723-4b33-afa8-75693feb1cda
 
 [English video](README.md) · [日语视频](README_JA.md)
 
-## 为各种多模态场景而生
+## 图片，始终是任务的一部分
 
-旧图跟着对话一遍遍重发，越积越多，这份负担就是多模态税。FrameKeeper 自动管理这些图片，凡是 AI 需要看图的工作，都用得上：
+一张图可以退出当前请求，仍然保留在任务里。在 Codex 和 Claude Code 中，FrameKeeper 保留图片、视觉特征和你对它的评价之间的联系：
 
-- **图片和视频创作**：角色参考、分镜、关键帧、海报、商品图。
-- **阅读文档**：扫描版 PDF、页面截图、图像资料。
-- **操作电脑和浏览器**：Agent 每一步操作留下的截图。
-- **日常多模态对话**：照片、截图、图表、示意图。
+- **找得到**：稳定编号、视觉特征和你的评价，帮助模型认出之前讨论的是哪张图。
+- **拿得回**：需要核对细节时，模型按需取回原图，重新看图继续工作。
+- **接得上**：长对话经过压缩后，图片索引仍然保留，之前的原图依旧可以识别和取回。
 
-**装好以后，照常使用就行。** 自动选图默认开启，之前的图自动让位，模型要哪张就取回哪张。不打开面板、不手动挑图，它也在工作。
+**默认自动完成，照常使用就行。** 图片和视频创作、扫描文档、电脑与浏览器操作、日常看图对话，都可以使用。不打开面板、不手动挑图，它也在工作。
 
 ## 安装
 

@@ -4,7 +4,7 @@
 
 <h1 align="center">FrameKeeper</h1>
 
-<p align="center"><b>Stop paying the multimodal tax.</b><br>Automatic multimodal context management for your AI agent.<br>Install it, keep working, and let the model manage its images.</p>
+<p align="center"><b>Keep earlier images usable throughout long-running agent work.</b><br>Images can leave the current context and remain part of the task.<br>Automatic management. Original images on demand.</p>
 
 <p align="center">
   <a href="https://github.com/chipfighter/framekeeper/releases"><img src="https://img.shields.io/github/v/release/chipfighter/framekeeper?include_prereleases" alt="Release"></a>
@@ -18,16 +18,15 @@ https://github.com/user-attachments/assets/aeb90ea2-6cb9-4f7a-9db7-8b4cd382430e
 
 [简体中文视频](README_CN.md) · [日本語動画](README_JA.md)
 
-## Made for multimodal work
+## Images stay part of the task
 
-Old images travel through your conversation again and again. That growing burden is the multimodal tax. FrameKeeper manages them automatically, wherever your AI works with images:
+An image can leave the current request without losing its place in the task. In Codex and Claude Code, FrameKeeper preserves the link between images, visual details and your feedback:
 
-- **Image and video creation**: character references, storyboards, keyframes, posters and product shots.
-- **Reading documents**: scanned PDFs, page images and visual references.
-- **Computer and browser use**: screenshots from every step of an agent's work.
-- **Everyday multimodal chats**: photos, screenshots, charts and diagrams.
+- **Find the right reference**: stable image IDs, visual descriptions and your feedback help the model identify an image discussed earlier.
+- **Inspect the original**: when details matter, the model retrieves the original image on demand and looks again.
+- **Continue after compaction**: the image index survives conversation compaction, so earlier originals remain identifiable and retrievable.
 
-**Install it and keep working.** Auto-select is on by default: earlier images step aside, and the model brings back the ones it needs. It works as you chat, even if you never open the panel.
+**Automatic by default. Keep working.** Use it for image and video creation, scanned documents, computer and browser use, or everyday visual chats. It works even if you never open the panel or pick images yourself.
 
 ## Install
 
