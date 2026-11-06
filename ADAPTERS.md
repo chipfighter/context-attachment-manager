@@ -1,6 +1,6 @@
 # Connecting an agent
 
-Context Attachment Manager cuts the multimodal tax on any agent: earlier turns' images go out as short placeholders, and the model pulls back the one it needs by its id. The plugin has three layers:
+Context Attachment Manager can work with any agent through a thin adapter: earlier turns' images go out as short placeholders, and the model pulls back the one it needs by its id. The plugin has three layers:
 
 - **The core** (`plugin/src/core`) knows no platform. It decides what to leave out, numbers the images and keeps them for the fetch tool.
 - **Request-format translators** (`plugin/src/adapters/protocols`) find the images in a request and put the core's decision into it. Four formats today: OpenAI Responses, OpenAI Chat Completions, Anthropic Messages, Gemini generateContent.
@@ -10,7 +10,7 @@ The panel (pick images, pin, search) is only in Codex and Claude Desktop. Every 
 
 ## Agents you can connect now
 
-WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose and Cherry Studio. These adapters were written from each agent's code and docs and are **not tested live yet**. If one does not work for you, please [open an issue](https://github.com/chipfighter/context-attachment-manager/issues) with what you saw.
+WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose and Cherry Studio. These adapters were written from each agent's code and docs and are **not tested live yet**. If you use one of them, please [open an issue](https://github.com/chipfighter/context-attachment-manager/issues) and tell us how it went, whether it worked or not.
 
 How to install, step by step (also for an AI doing it for you): [INSTALL.md, Other agents](INSTALL.md#other-agents). In short, from a clone of this repository:
 

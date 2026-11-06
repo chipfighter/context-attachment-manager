@@ -2,38 +2,38 @@
   <img src="plugin/assets/logo.png" width="96" height="96" alt="">
 </p>
 
-<h1 align="center">FrameKeeper</h1>
+<h1 align="center">Context Attachment Manager</h1>
 
-<p align="center"><b>Keep earlier images usable throughout long-running agent work.</b><br>Images can leave the current context and remain part of the task.<br>Automatic management. Original images on demand.</p>
+<p align="center"><b>A local plugin for image-heavy chats in Codex, Claude Code and other agents.</b><br>Earlier images stop going out with every message. The model fetches the one it needs by its ID, also after the chat is compacted.</p>
 
 <p align="center">
-  <a href="https://github.com/chipfighter/framekeeper/releases"><img src="https://img.shields.io/github/v/release/chipfighter/framekeeper?include_prereleases" alt="Release"></a>
+  <a href="https://github.com/chipfighter/context-attachment-manager/releases"><img src="https://img.shields.io/github/v/release/chipfighter/context-attachment-manager?include_prereleases" alt="Release"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform: Windows, macOS, Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
 </p>
 
 <p align="center"><b>English</b> · <a href="README_CN.md">简体中文</a> · <a href="README_JA.md">日本語</a></p>
 
-https://github.com/user-attachments/assets/aeb90ea2-6cb9-4f7a-9db7-8b4cd382430e
+<p align="center">
+  <img src="docs/images/loop.gif" alt="The panel on a task with fifteen keyframes. With auto-select on, earlier images turn grey and the next request drops from 7.5 MB to 1.7 MB." width="100%">
+</p>
 
-[简体中文视频](README_CN.md) · [日本語動画](README_JA.md)
+## What it does
 
-## Images stay part of the task
+An agent normally sends every earlier image again with each message, so a long chat with many images gets slow and can stop going through. This plugin numbers each image (`IMG-001`, `IMG-002`, …) and sends earlier ones as short placeholders instead:
 
-An image can leave the current request without losing its place in the task. In Codex and Claude Code, FrameKeeper preserves the link between images, visual details and your feedback:
+- **The model fetches what it needs**: when it has to look at an earlier image again, it gets the original back by its ID.
+- **It can tell images apart**: the model notes one line on what each image shows, plus your comments on it. These stay in the placeholders, also after the chat is compacted.
+- **Nothing is deleted**: your original images and chat history stay as they are.
 
-- **Find the right reference**: stable image IDs, visual descriptions and your feedback help the model identify an image discussed earlier.
-- **Inspect the original**: when details matter, the model retrieves the original image on demand and looks again.
-- **Continue after compaction**: the image index survives conversation compaction, so earlier originals remain identifiable and retrievable.
-
-**Automatic by default. Keep working.** Use it for image and video creation, scanned documents, computer and browser use, or everyday visual chats. It works even if you never open the panel or pick images yourself.
+It is on by default; you do not need to open the panel. Typical uses: image and video creation, scanned documents, computer and browser use.
 
 ## Install
 
 Send this to your agent. It identifies its platform and installs the right setup:
 
 ```text
-Install FrameKeeper for me, following https://github.com/chipfighter/framekeeper/blob/main/INSTALL.md
+Install Context Attachment Manager for me, following https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
 ```
 
 Then restart the agent (in Claude Desktop, start a new Code session). See [supported agents](#works-with) and [installation, updates and uninstall](INSTALL.md).
@@ -41,7 +41,7 @@ Then restart the agent (in Claude Desktop, start a new Code session). See [suppo
 ## The panel, when you want control
 
 <p align="center">
-  <img src="docs/images/hero.png" alt="The FrameKeeper panel: automatically manage earlier images, search by what you remember, and preview an image." width="100%">
+  <img src="docs/images/hero.png" alt="The panel: automatically manage earlier images, search by what you remember, and preview an image." width="100%">
 </p>
 
 - **Find an image** by a detail or a comment you remember, like "rainy night" or "best face".
@@ -52,32 +52,31 @@ In **Codex**, open **Context Assets** in the task's side panel. In **Claude Desk
 
 ## Privacy
 
-FrameKeeper runs locally. Your original images and chat history stay on your computer; requests go to the service your agent already uses.
+The plugin runs locally. Your original images and chat history stay on your computer; requests go to the service your agent already uses.
 
 ## How we tested
 
-We tested image-heavy conversations in Codex and Claude Code, including finding earlier images after long chats and compaction. See the [Codex comparison](eval/README.md) and [Claude Code long-task comparison](eval/long-task/README.md) for the results and reproduction steps.
+In Codex, a chat with nine keyframes grew to 42.4 MB and could not be sent after a restart or a compaction; with the plugin the same requests were 0.12 MB. See the [Codex comparison](eval/README.md) and [Claude Code long-task comparison](eval/long-task/README.md) for the results and reproduction steps.
 
 ## Works with
 
-Auto-select works across the agents below. Codex and Claude Desktop also include the panel.
+Codex and Claude Code are tested, and Codex and Claude Desktop also have the panel. The other agents below are supported through adapters written from their code and docs, but we have not tested them live yet. If you use one of them, please [tell us how it went](https://github.com/chipfighter/context-attachment-manager/issues), whether it worked or not.
 
 | Agent | What it is | Support |
 |---|---|---|
 | [Codex](https://github.com/openai/codex) | OpenAI's coding agent, desktop and CLI | Auto-select + panel, tested |
 | [Claude Code](https://github.com/anthropics/claude-code) | Anthropic's coding agent, desktop and CLI | Auto-select + panel (desktop), tested |
-| [WorkBuddy](https://www.workbuddy.cn) | Tencent's desktop AI work assistant, with CodeBuddy inside | Auto-select, new, feedback welcome |
-| [OpenCode](https://github.com/anomalyco/opencode) | Open-source terminal coding agent for any model provider | Auto-select, new, feedback welcome |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google's open-source terminal agent | Auto-select, new, feedback welcome |
-| [pi](https://github.com/earendil-works/pi) | Minimal, extensible terminal coding agent | Auto-select (pi extension), new, feedback welcome |
-| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek's agent harness where everything is a plugin | Auto-select (dsh plugin), new, feedback welcome |
-| [Qwen Code](https://github.com/QwenLM/qwen-code) | Qwen's open-source terminal agent | Auto-select, new, feedback welcome |
-| [Cline](https://github.com/cline/cline) | Open-source coding agent for VS Code, JetBrains and the terminal | Auto-select, new, feedback welcome |
-| [Kilo Code](https://github.com/Kilo-Org/kilocode) | Open-source coding agent for VS Code, JetBrains and the terminal | Auto-select, new, feedback welcome |
-| [goose](https://github.com/aaif-goose/goose) | Open-source agent for desktop and terminal, extended with MCP | Auto-select, new, feedback welcome |
-| [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | Open-source desktop chat client for many models | Auto-select, new, feedback welcome |
-| **Your agent** | A thin adapter; the core stays as it is | Send a PR and add your agent here: [ADAPTERS.md](ADAPTERS.md) |
+| [WorkBuddy](https://www.workbuddy.cn) | Tencent's desktop AI work assistant, with CodeBuddy inside | Auto-select, not tested yet |
+| [OpenCode](https://github.com/anomalyco/opencode) | Open-source terminal coding agent for any model provider | Auto-select, not tested yet |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google's open-source terminal agent | Auto-select, not tested yet |
+| [pi](https://github.com/earendil-works/pi) | Minimal, extensible terminal coding agent | Auto-select (pi extension), not tested yet |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek's agent harness where everything is a plugin | Auto-select (dsh plugin), not tested yet |
+| [Qwen Code](https://github.com/QwenLM/qwen-code) | Qwen's open-source terminal agent | Auto-select, not tested yet |
+| [Cline](https://github.com/cline/cline) | Open-source coding agent for VS Code, JetBrains and the terminal | Auto-select, not tested yet |
+| [Kilo Code](https://github.com/Kilo-Org/kilocode) | Open-source coding agent for VS Code, JetBrains and the terminal | Auto-select, not tested yet |
+| [goose](https://github.com/aaif-goose/goose) | Open-source agent for desktop and terminal, extended with MCP | Auto-select, not tested yet |
+| [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | Open-source desktop chat client for many models | Auto-select, not tested yet |
 
-Want to connect your own agent? [Build an adapter](ADAPTERS.md), send a PR and add your platform to this list. For setup instructions, see [INSTALL.md](INSTALL.md#other-agents).
+Setup for these agents: [INSTALL.md](INSTALL.md#other-agents). To connect another agent, see [ADAPTERS.md](ADAPTERS.md).
 
 <p align="center"><sub><a href="CHANGELOG.md">Changelog</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a></sub></p>
