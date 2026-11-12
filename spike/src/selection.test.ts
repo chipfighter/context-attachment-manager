@@ -3,12 +3,12 @@
 // Input: synthetic rollouts and selection files in temporary folders; output: Node test assertions only.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { needsRewrite } from "../../plugin/src/adapters/codex/engine.ts";
-import { autoDefaultSince, ensureAutoDefault, ensureStableIds, readSelection, stableIdsSince, writeSelection } from "../../plugin/src/core/selection.ts";
+import { autoDefaultSince, ensureAutoDefault, ensureStableIds, readSelection, stableIdTimes, writeSelection } from "../../plugin/src/core/selection.ts";
 import { effectiveSelection, mainTaskOf, sideChatSelection } from "../../plugin/src/adapters/codex/selection.ts";
 import { startThread } from "./testfixtures.ts";
 
@@ -101,22 +101,37 @@ test("v0.6: the default's start time is written once and kept", () => {
   assert.equal(autoDefaultSince(dir), "2026-09-24T11:00:00.000Z");
 });
 
-// v0.10: the ids' start time is written once too, but starts again when the numbering rules change: what was written
-// under the earlier rules is then translated (claude-index.ts).
+// v0.10: the ids' start time is written once too, but starts again when the numbering rules change from ones older
+// than v0.10.0's: what was written under the earlier rules is then translated (claude-index.ts).
 test("v0.10: the stable ids' start time is kept, and starts again under newer numbering rules", () => {
   const { dir } = setup();
-  assert.equal(stableIdsSince(dir), null);
+  assert.equal(stableIdTimes(dir), null);
   ensureStableIds(dir, new Date("2026-11-01T00:00:00Z"));
   ensureStableIds(dir, new Date("2026-11-02T00:00:00Z"));
-  assert.equal(stableIdsSince(dir), "2026-11-01T00:00:00.000Z");
+  assert.deepEqual(stableIdTimes(dir), { since: "2026-11-01T00:00:00.000Z", chained: "2026-11-01T00:00:00.000Z" });
   // Written by a build before parallel calls off the chain got ids (no rules in the file).
   const older = mkdtempSync(join(tmpdir(), "cam-stable-"));
   writeFileSync(join(older, "stable-ids.json"), JSON.stringify({ since: "2026-10-31T01:13:00.000Z" }));
-  assert.equal(stableIdsSince(older), "2026-10-31T01:13:00.000Z");
+  assert.deepEqual(stableIdTimes(older), { since: "2026-10-31T01:13:00.000Z", chained: null });
   ensureStableIds(older, new Date("2026-11-03T00:00:00Z"));
-  assert.equal(stableIdsSince(older), "2026-11-03T00:00:00.000Z");
+  assert.deepEqual(stableIdTimes(older), { since: "2026-11-03T00:00:00.000Z", chained: "2026-11-03T00:00:00.000Z" });
   ensureStableIds(older, new Date("2026-11-04T00:00:00Z"));
-  assert.equal(stableIdsSince(older), "2026-11-03T00:00:00.000Z");
+  assert.deepEqual(stableIdTimes(older), { since: "2026-11-03T00:00:00.000Z", chained: "2026-11-03T00:00:00.000Z" });
+});
+
+// Ids were already stable under v0.10.0's rules: the start time stays, and the time the calls behind another call's
+// result first got ids is written once beside it. stable-ids.json keeps rules 2, which a copy of v0.10 or v0.11 still
+// running here (a Claude plugin not updated yet) leaves as it is.
+test("the time the calls behind a result first got ids is kept beside the stable ids' start time", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cam-stable-"));
+  const stable = JSON.stringify({ since: "2026-11-01T11:06:11.325Z", rules: 2 });
+  writeFileSync(join(dir, "stable-ids.json"), stable);
+  assert.deepEqual(stableIdTimes(dir), { since: "2026-11-01T11:06:11.325Z", chained: null });
+  ensureStableIds(dir, new Date("2026-11-12T12:00:00Z"));
+  assert.deepEqual(stableIdTimes(dir), { since: "2026-11-01T11:06:11.325Z", chained: "2026-11-12T12:00:00.000Z" });
+  ensureStableIds(dir, new Date("2026-11-13T00:00:00Z"));
+  assert.deepEqual(stableIdTimes(dir), { since: "2026-11-01T11:06:11.325Z", chained: "2026-11-12T12:00:00.000Z" });
+  assert.equal(readFileSync(join(dir, "stable-ids.json"), "utf8"), stable);
 });
 
 test("v0.6: a task started after the default began has automatic selection on, unless it has its own switch", () => {

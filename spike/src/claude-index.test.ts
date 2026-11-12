@@ -104,6 +104,104 @@ test("record lines written before this version, which left such a call out, are 
   assert.equal(after.notes.get("IMG-003")?.line, "desk｜d sheet");
 });
 
+// The calls of one reply as Claude Code 2.1.321 writes them (Claude Desktop, 2026-11-12): the second call follows the
+// first, each later one hangs off the result before it, and the first call's result came back last, so the conversation
+// goes on from it.
+function behindResults(t: ReturnType<typeof transcript>, at = "", names = ["a", "b", "c"]) {
+  const reply = { messageId: `msg_${names.join("")}`, ...(at ? { timestamp: at } : {}) };
+  const stamp = at ? { timestamp: at } : {};
+  const read = (name: string) => ({ type: "tool_use", id: `toolu_${name}`, name: "Read", input: { file_path: `C:\\work\\${name}.png` } });
+  const bash = t.assistant({ type: "tool_use", id: `toolu_bash_${names[0]}`, name: "Bash", input: { command: "render" } }, reply);
+  let parent = bash;
+  names.forEach((name, n) => {
+    const use = t.assistant(read(name), reply, parent);
+    parent = t.toolResult(`toolu_${name}`, [image([pngA, pngB, pngC][n % 3])], stamp, use);
+  });
+  return t.toolResult(`toolu_bash_${names[0]}`, [text("rendered")], stamp, bash);
+}
+
+test("parallel tool calls each written after the result before it: the calls behind a result count too, in call order", () => {
+  const t = transcript();
+  t.prompt("Render, then read a.png, b.png and c.png");
+  const last = behindResults(t);
+  t.assistant(text("Three images."), { messageId: "msg_next" }, last);
+  const index = buildClaudeIndex("s", t.records);
+  assert.deepEqual(index.images.map((entry) => [entry.id, entry.key, entry.name, entry.turn]), [
+    ["IMG-001", "tool:toolu_a#0", "a.png", 1],
+    ["IMG-002", "tool:toolu_b#0", "b.png", 1],
+    ["IMG-003", "tool:toolu_c#0", "c.png", 1],
+  ]);
+  // Each result right after its call, the reply's text after them all.
+  const blocks = index.chain.map((record) => record.message?.content?.[0]).map((block) => block?.type === "tool_use" ? `use:${block.id}` : block?.type === "tool_result" ? `result:${block.tool_use_id}` : block?.type ?? "prompt");
+  assert.deepEqual(blocks.slice(1), ["use:toolu_bash_a", "result:toolu_bash_a", "use:toolu_a", "result:toolu_a", "use:toolu_b", "result:toolu_b", "use:toolu_c", "result:toolu_c", "text"]);
+  assert.equal(claudeImageData(index, index.images[2]), pngC);
+});
+
+test("a call hanging off the note Claude Code writes after an image result counts too (2.1.317)", () => {
+  const t = transcript();
+  t.prompt("Read a.png, b.png, c.png and d.png");
+  const reply = { messageId: "msg_notes" };
+  const read = (name: string) => ({ type: "tool_use", id: `toolu_${name}`, name: "Read", input: { file_path: `C:\\work\\${name}.png` } });
+  const note = (parent: string) => t.prompt("[Image: original 2048x1152, displayed at 2000x1125.]", { isMeta: true, turnCompanion: true }, parent);
+  const useA = t.assistant(read("a"), reply);
+  const useB = t.assistant(read("b"), reply, useA);
+  const resultA = t.toolResult("toolu_a", [image(pngA)], {}, useA);
+  const useC = t.assistant(read("c"), reply, note(resultA));
+  t.toolResult("toolu_c", [image(pngC)], {}, useC);
+  const resultB = t.toolResult("toolu_b", [image(pngB)], {}, useB);
+  const useD = t.assistant(read("d"), reply, note(resultB));
+  const resultD = t.toolResult("toolu_d", [image(pngA)], {}, useD);
+  t.assistant(text("Four images."), { messageId: "msg_after" }, resultD);
+  const index = buildClaudeIndex("s", t.records);
+  // c.png joins after the reply's records on the chain, as the calls found off it do.
+  assert.deepEqual(index.images.map((entry) => entry.key), ["tool:toolu_a#0", "tool:toolu_b#0", "tool:toolu_d#0", "tool:toolu_c#0"]);
+  assert.equal(index.turns, 1);
+});
+
+test("record lines written while the calls behind a result had no ids are translated to the ids they have now", () => {
+  const t = transcript();
+  t.prompt("Render, then read a.png, b.png and c.png", { timestamp: "2026-11-12T08:00:00.000Z" });
+  const last = behindResults(t, "2026-11-12T08:00:01.000Z");
+  // b.png and c.png came without ids: the model named them counting on from IMG-001, as a.png had it (2026-11-12).
+  t.assistant(text("[//]: # (cam IMG-002 desk｜b sheet)\n[//]: # (cam IMG-003 desk｜c sheet)\n\nThree images."), { messageId: "msg_2", timestamp: "2026-11-12T08:00:02.000Z" }, last);
+  t.prompt("Read d.png", { timestamp: "2026-11-12T08:01:00.000Z" });
+  t.assistant({ type: "tool_use", id: "toolu_d", name: "Read", input: { file_path: "C:\\work\\d.png" } }, { messageId: "msg_3", timestamp: "2026-11-12T08:01:01.000Z" });
+  t.toolResult("toolu_d", [image(pngA)], { timestamp: "2026-11-12T08:01:02.000Z" });
+  // Written while b.png and c.png had no ids: this IMG-002 is d.png.
+  t.assistant(text("[//]: # (cam IMG-002 desk｜d sheet)\n\nOne more."), { messageId: "msg_4", timestamp: "2026-11-12T08:01:03.000Z" });
+  // Again: e.png follows the first call, so it had an id then (IMG-003); f.png had none, and the model counted on: IMG-004.
+  t.prompt("Render again, then read e.png and f.png", { timestamp: "2026-11-12T08:02:00.000Z" });
+  const again = behindResults(t, "2026-11-12T08:02:01.000Z", ["e", "f"]);
+  t.assistant(text("[//]: # (cam IMG-003 desk｜e sheet)\n[//]: # (cam IMG-004 desk｜f sheet)\n\nTwo more."), { messageId: "msg_5", timestamp: "2026-11-12T08:02:02.000Z" }, again);
+  const during = buildClaudeIndex("s", t.records, null, { eras: { family: [], since: "2026-11-01T00:00:00.000Z", chained: "2026-11-13T00:00:00.000Z" } });
+  assert.deepEqual(during.images.map((entry) => entry.key.replace(/^tool:toolu_|#0$/g, "")), ["a", "b", "c", "d", "e", "f"]);
+  assert.deepEqual([2, 3, 4, 5, 6].map((n) => during.notes.get(`IMG-00${n}`)?.line), ["desk｜b sheet", "desk｜c sheet", "desk｜d sheet", "desk｜e sheet", "desk｜f sheet"]);
+  // Written once they have ids: each id is this numbering's.
+  const after = buildClaudeIndex("s", t.records, null, { eras: { family: [], since: "2026-11-01T00:00:00.000Z", chained: "2026-11-11T00:00:00.000Z" } });
+  assert.deepEqual([2, 3].map((n) => after.notes.get(`IMG-00${n}`)?.line), ["desk｜b sheet", "desk｜c sheet"]);
+  // Written before ids were stable, when no call off the chain had an id and d.png was IMG-001: these ids name none.
+  const older = buildClaudeIndex("s", t.records, null, { eras: { family: [], since: "2026-11-13T00:00:00.000Z", chained: "2026-11-13T00:00:00.000Z" } });
+  assert.equal(older.notes.size, 0);
+});
+
+test("an incremental transcript read uses the current chain to translate old image ids", () => {
+  const t = transcript(4000);
+  const timestamp = "2026-11-12T08:00:00.000Z";
+  const stamp = { timestamp };
+  const options = { eras: { family: [], since: "2026-11-01T00:00:00.000Z", chained: "2026-11-13T00:00:00.000Z" } };
+  t.prompt("Render, then read a.png and b.png", stamp);
+  behindResults(t, timestamp, ["a", "b"]);
+  const resultB = t.records.at(-2)!.uuid;
+  // Before the next reply arrives, the last record is the render result and b.png has to be recovered.
+  buildClaudeIndex("s", t.records, null, options);
+  // The next reply instead continues from the read result. b.png was on that chain even under the old rules.
+  t.assistant(text("Two images."), stamp, resultB);
+  t.prompt([image(pngC), text("One more")], stamp);
+  t.assistant(text("[//]: # (cam IMG-003 desk｜new sheet)"), stamp);
+  const index = buildClaudeIndex("s", t.records, null, options);
+  assert.equal(index.notes.get("IMG-003")?.line, "desk｜new sheet");
+});
+
 test("a tool result left on an abandoned branch stays out", () => {
   const t = transcript();
   t.prompt("first");
