@@ -20,6 +20,8 @@ const pngD = png(8, 8, () => [30, 200, 60]).toString("base64");
 const ids = { O: "aaaaaaaa-0000-4000-8000-000000000001", R: "aaaaaaaa-0000-4000-8000-000000000002", R2: "aaaaaaaa-0000-4000-8000-000000000003", F: "aaaaaaaa-0000-4000-8000-000000000004" };
 const at = (minute: number) => `2026-10-01T10:${String(minute).padStart(2, "0")}:00.000Z`;
 const record = (line: string) => `[//]: # (cam ${line})`;
+// When this version first ran here, under its current numbering rules from the start (selection.ts).
+const times = (since: string) => ({ since, chained: since });
 
 function home(): { home: string; project: string; write: (id: string, records: Json[]) => string } {
   const root = mkdtempSync(join(tmpdir(), "cam-compaction-"));
@@ -122,7 +124,7 @@ test("a session resumed after a compaction keeps its ids: the history is read fr
   fresh.assistant(text(`${record("IMG-004 评价：好看")}\n\nE`), { timestamp: at(46) });
   write(ids.R, [...resumed(o.records, o.boundary, o.anchor, [o.kept], ids.R, at(30)), ...fresh.records.map((entry) => ({ ...entry, sessionId: ids.R }))]);
 
-  const index = loadClaudeIndex(ids.R, root, at(40));
+  const index = loadClaudeIndex(ids.R, root, times(at(40)));
   assert.deepEqual(index.images.map((entry) => [entry.id, entry.key, entry.compacted]), [
     ["IMG-001", `${o.p1}#0`, true], ["IMG-002", `${o.p2}#0`, true], ["IMG-003", `${o.p3}#0`, false], ["IMG-004", `${p4}#0`, false],
   ]);
@@ -145,7 +147,7 @@ test("a resumed session whose summary names no transcript: the project's transcr
   const { home: root, project, write } = home();
   const o = original(write, project, false);
   write(ids.R, resumed(o.records, o.boundary, o.anchor, [o.kept], ids.R, at(30)));
-  const index = loadClaudeIndex(ids.R, root, at(40));
+  const index = loadClaudeIndex(ids.R, root, times(at(40)));
   assert.deepEqual(index.images.map((entry) => [entry.id, entry.compacted]), [["IMG-001", true], ["IMG-002", true], ["IMG-003", false]]);
   assert.equal(index.notes.get("IMG-003")?.line, "书房｜白色长方形");
 });
@@ -155,7 +157,7 @@ test("without the transcript the compaction happened in, the resumed one is read
   const o = original(write, project);
   write(ids.R, resumed(o.records, o.boundary, o.anchor, [o.kept], ids.R, at(30)));
   writeFileSync(o.file, "");
-  const index = loadClaudeIndex(ids.R, root, at(40));
+  const index = loadClaudeIndex(ids.R, root, times(at(40)));
   assert.deepEqual(index.images.map((entry) => [entry.id, entry.key]), [["IMG-001", `${o.p3}#0`]]);
 });
 
@@ -172,12 +174,12 @@ test("resumed twice across two compactions, and forked: ids and history carry th
   r.assistant(text(`${record("IMG-005 门口｜红色方块又一张")}\n\nE`), { timestamp: at(45) });
   const resumedOnce = [...resumed(o.records, o.boundary, o.anchor, [o.kept], ids.R, at(30)), ...r.records.map((entry) => ({ ...entry, sessionId: ids.R }))];
   write(ids.R, resumedOnce);
-  const live = loadClaudeIndex(ids.R, root, at(20));
+  const live = loadClaudeIndex(ids.R, root, times(at(20)));
   assert.deepEqual(live.images.map((entry) => [entry.id, entry.compacted]), [["IMG-001", true], ["IMG-002", true], ["IMG-003", true], ["IMG-004", true], ["IMG-005", false]]);
   // Resumed again after the second compaction.
   const twice = resumed(resumedOnce, second.boundary, second.anchor, [kept2], ids.R2, at(50));
   write(ids.R2, twice);
-  const index = loadClaudeIndex(ids.R2, root, at(20));
+  const index = loadClaudeIndex(ids.R2, root, times(at(20)));
   assert.deepEqual(index.images.map((entry) => [entry.id, entry.key, entry.compacted]), [
     ["IMG-001", `${o.p1}#0`, true], ["IMG-002", `${o.p2}#0`, true], ["IMG-003", `${o.p3}#0`, true], ["IMG-004", `${p4}#0`, true], ["IMG-005", `${p5}#0`, false],
   ]);
@@ -186,7 +188,7 @@ test("resumed twice across two compactions, and forked: ids and history carry th
   assert.equal(claudeImageData(index, index.images[3]), pngD);
   // A fork copies the records with the session's own id in them, from the same compaction.
   write(ids.F, [{ type: "queue-operation", operation: "enqueue", timestamp: at(55), sessionId: ids.F }, ...twice.filter((entry) => entry.uuid).map((entry) => ({ ...entry, sessionId: ids.R2 }))]);
-  const fork = loadClaudeIndex(ids.F, root, at(20));
+  const fork = loadClaudeIndex(ids.F, root, times(at(20)));
   assert.deepEqual(fork.images.map((entry) => entry.key), index.images.map((entry) => entry.key));
   assert.equal(fork.previous[0].sessionId, ids.R2);
 });
