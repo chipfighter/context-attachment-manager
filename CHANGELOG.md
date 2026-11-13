@@ -2,6 +2,33 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.11.1] - 2026-11-13
+
+This update brings missing images back to the Claude Code sidebar so you can open them and select them again after compaction.
+
+### Fixed
+
+- **Missing images in the Claude Code sidebar.** When Claude opened several images at once, some could be left out of the sidebar. The plugin now picks up those images from the session history. You can preview them and select which originals to send again after the conversation is compacted.
+- **Notes and ratings on earlier images.** When restored images change the numbering in an existing session, the plugin matches earlier notes and ratings to the images they describe.
+
+### After updating
+
+- Reopen your Claude Code sessions to load the updated plugin.
+- If you also use the plugin in Codex, update it there and restart Codex.
+
+### How we tested
+
+- Replayed 44 Claude Code sessions that had been compacted. The fix restored 14 images across 7 sessions.
+- All 343 local unit tests passed, and GitHub CI passed on Windows, macOS, and Linux.
+
+<details>
+<summary>Technical details</summary>
+
+- The Claude Code adapter now recovers parallel tool calls recorded after another call’s result or after Claude Code’s image-resize note.
+- The adapter translates earlier image references using the numbering in effect when they were written. A regression test covers transcript updates that change which tool results belong to the active conversation.
+
+</details>
+
 ## [0.11.0] - 2026-11-02
 
 The plugin now works beyond Codex and Claude. Ten more agents leave earlier images out of each message and fetch back the one they need, your agent can install the plugin by itself, and switching models in Codex with a tool such as cc-switch no longer turns it off.
