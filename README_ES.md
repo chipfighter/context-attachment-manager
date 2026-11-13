@@ -1,0 +1,82 @@
+<p align="center">
+  <img src="plugin/assets/logo.png" width="96" height="96" alt="">
+</p>
+
+<h1 align="center">Context Attachment Manager</h1>
+
+<p align="center"><b>Un complemento local para conversaciones con muchas imágenes en Codex, Claude Code y otros agentes.</b><br>Las imágenes anteriores dejan de reenviarse con cada mensaje. El modelo recupera por su identificador la imagen que necesita, incluso después de compactar la conversación.</p>
+
+<p align="center">
+  <a href="https://github.com/chipfighter/context-attachment-manager/releases"><img src="https://img.shields.io/github/v/release/chipfighter/context-attachment-manager?include_prereleases" alt="Versión"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Plataformas: Windows, macOS y Linux">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="Licencia MIT"></a>
+</p>
+
+<p align="center"><a href="README.md">English</a> · <a href="README_CN.md">简体中文</a> · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <b>Español</b> · <a href="README_PT_BR.md">Português (Brasil)</a> · <a href="README_FR.md">Français</a> · <a href="README_DE.md">Deutsch</a></p>
+
+<p align="center">
+  <img src="docs/images/loop.gif" alt="Panel de una tarea con quince fotogramas clave. Con la selección automática activada, las imágenes anteriores aparecen en gris y la siguiente solicitud pasa de 7,5 MB a 1,7 MB." width="100%">
+</p>
+
+## Qué hace
+
+Normalmente, un agente vuelve a enviar todas las imágenes anteriores con cada mensaje. Por eso, una conversación larga con muchas imágenes se vuelve más lenta y puede llegar a fallar al enviar un mensaje. Este complemento asigna un número a cada imagen (`IMG-001`, `IMG-002`, …) y, en los mensajes posteriores, envía una breve referencia en su lugar.
+
+- **El modelo recupera la imagen que necesita.** Cuando tiene que volver a ver una imagen anterior, recupera la original por su identificador.
+- **Puede distinguir las imágenes.** El modelo anota en una línea lo que muestra cada imagen y también guarda tus comentarios. Las notas quedan en las referencias, incluso después de compactar la conversación.
+- **Conserva los originales.** Tus imágenes y el historial de la conversación se mantienen intactos.
+
+El complemento está activado por defecto y funciona con el panel cerrado. Puedes usarlo para crear imágenes y vídeos, revisar documentos escaneados o manejar el equipo y el navegador.
+
+## Instalación
+
+Envía este mensaje a tu agente. Identificará la plataforma en la que se ejecuta y hará la instalación correspondiente.
+
+```text
+Instala Context Attachment Manager siguiendo estas instrucciones: https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
+```
+
+Después, reinicia el agente. En Claude Desktop, inicia una nueva sesión de Code. Consulta los [agentes compatibles](#agentes-compatibles) y las [instrucciones de instalación, actualización y desinstalación](INSTALL.md) (en inglés).
+
+## El panel, para elegir qué se envía
+
+<p align="center">
+  <img src="docs/images/hero.png" alt="Panel para gestionar automáticamente las imágenes anteriores, buscarlas por detalles que recuerdes y abrir una vista previa." width="100%">
+</p>
+
+- **Busca una imagen** por un detalle o un comentario que recuerdes, como «noche lluviosa» o «la mejor cara».
+- **Ten siempre a mano una imagen de referencia.** Ábrela y marca **Send every turn** (Enviar en cada turno).
+- **Elige las imágenes manualmente.** Desactiva **Auto-select** (Selección automática) y elige cuáles se enviarán con tu próximo mensaje.
+
+En **Codex**, abre **Context Assets** en el panel lateral de la tarea. En la **pestaña Code de Claude Desktop**, el panel se abre automáticamente cuando hay imágenes. Escribe `/cam` para volver a abrirlo.
+
+## Privacidad
+
+El complemento se ejecuta localmente. Tus imágenes originales y el historial de la conversación se quedan en tu equipo. Las solicitudes van al servicio que ya usa tu agente.
+
+## Cómo lo probamos
+
+En Codex, una conversación con nueve fotogramas clave llegó a 42,4 MB y ya no se podía enviar después de reiniciar el agente o compactar la conversación. Con el complemento, las mismas solicitudes ocupaban 0,12 MB. Los resultados y los pasos para reproducirlos están en la [comparativa en Codex](eval/README.md) y la [comparativa de una tarea larga en Claude Code](eval/long-task/README.md), ambas en inglés.
+
+## Agentes compatibles
+
+Hemos probado Codex y Claude Code. El panel está disponible en Codex y Claude Desktop. Los demás agentes de la tabla son compatibles mediante adaptadores desarrollados a partir de su código y documentación. Todavía no hemos probado esos adaptadores en los propios agentes. Si usas alguno, [cuéntanos qué tal te fue](https://github.com/chipfighter/context-attachment-manager/issues), tanto si funcionó como si tuviste algún problema.
+
+| Agente | Qué es | Compatibilidad |
+|---|---|---|
+| [Codex](https://github.com/openai/codex) | Agente de programación de OpenAI para escritorio y terminal | Selección automática y panel, probado |
+| [Claude Code](https://github.com/anthropics/claude-code) | Agente de programación de Anthropic para escritorio y terminal | Selección automática y panel (escritorio), probado |
+| [WorkBuddy](https://www.workbuddy.cn) | Asistente de trabajo con IA de Tencent para escritorio, con CodeBuddy integrado | Selección automática, pendiente de pruebas |
+| [OpenCode](https://github.com/anomalyco/opencode) | Agente de programación de código abierto para terminal, compatible con cualquier proveedor de modelos | Selección automática, pendiente de pruebas |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Agente de código abierto de Google para terminal | Selección automática, pendiente de pruebas |
+| [pi](https://github.com/earendil-works/pi) | Agente de programación minimalista y ampliable para terminal | Selección automática (extensión de pi), pendiente de pruebas |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | Entorno de agentes de DeepSeek en el que todo funciona mediante complementos | Selección automática (complemento de dsh), pendiente de pruebas |
+| [Qwen Code](https://github.com/QwenLM/qwen-code) | Agente de código abierto de Qwen para terminal | Selección automática, pendiente de pruebas |
+| [Cline](https://github.com/cline/cline) | Agente de programación de código abierto para VS Code, JetBrains y terminal | Selección automática, pendiente de pruebas |
+| [Kilo Code](https://github.com/Kilo-Org/kilocode) | Agente de programación de código abierto para VS Code, JetBrains y terminal | Selección automática, pendiente de pruebas |
+| [goose](https://github.com/aaif-goose/goose) | Agente de código abierto para escritorio y terminal, ampliable con MCP | Selección automática, pendiente de pruebas |
+| [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | Cliente de chat de escritorio de código abierto, compatible con distintos modelos | Selección automática, pendiente de pruebas |
+
+Para configurar estos agentes, consulta [INSTALL.md](INSTALL.md#other-agents). Para conectar otro agente, consulta [ADAPTERS.md](ADAPTERS.md). Ambas guías están en inglés.
+
+<p align="center"><sub><a href="CHANGELOG.md">Historial de cambios</a> · <a href="CONTRIBUTING.md">Cómo contribuir</a> · <a href="LICENSE">Licencia MIT</a></sub></p>

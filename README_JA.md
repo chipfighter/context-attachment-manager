@@ -12,7 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT ライセンス"></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README_CN.md">简体中文</a> · <b>日本語</b></p>
+<p align="center"><a href="README.md">English</a> · <a href="README_CN.md">简体中文</a> · <b>日本語</b> · <a href="README_KO.md">한국어</a> · <a href="README_ES.md">Español</a> · <a href="README_PT_BR.md">Português (Brasil)</a> · <a href="README_FR.md">Français</a> · <a href="README_DE.md">Deutsch</a></p>
 
 <p align="center">
   <img src="docs/images/loop.gif" alt="15 枚のキーフレームがあるタスクのパネル。自動選択をオンにすると以前の画像が灰色になり、次のリクエストが 7.5 MB から 1.7 MB に減ります。" width="100%">
