@@ -24,6 +24,7 @@ Normalerweise sendet ein Agent mit jeder Nachricht alle früheren Bilder erneut.
 
 - **Das Modell holt Bilder bei Bedarf.** Wenn es ein früheres Bild erneut ansehen muss, ruft es das Original über die ID ab.
 - **Das Modell kann Bilder auseinanderhalten.** Es hält in einer Zeile fest, was jedes Bild zeigt, und merkt sich deine Kommentare dazu. Beides bleibt im Platzhalter erhalten, auch wenn der Chat komprimiert wird.
+- **Der Cache bleibt nutzbar.** Ein Platzhalter wird nur einmal geschrieben und bleibt danach gleich. Der bisherige Chat wird deshalb weiterhin aus dem Prompt-Cache des Modells gelesen. Mehr dazu unter [Design](#design-der-cache-bleibt-nutzbar).
 - **Die Originale bleiben erhalten.** Deine Bilder und der Chatverlauf bleiben unverändert.
 
 Das Plugin ist standardmäßig aktiv, auch wenn du das Panel nicht öffnest. Es eignet sich zum Beispiel für die Arbeit mit Bildern, Videos und gescannten Dokumenten sowie für Aufgaben am Computer oder im Browser.
@@ -100,5 +101,31 @@ Codex und Claude Code wurden getestet. Das Panel ist in Codex und Claude Desktop
 | [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | Open-Source-Chat-App für den Desktop, die viele Modelle unterstützt | Automatische Auswahl, Praxistest ausstehend |
 
 Die Einrichtung dieser Agenten ist in [INSTALL.md](INSTALL.md#other-agents) beschrieben. Wie du einen weiteren Agenten anbindest, steht in [ADAPTERS.md](ADAPTERS.md). Beide Anleitungen sind auf Englisch.
+
+## Häufige Fragen
+
+### Warum werden Codex und Claude Code in langen Chats mit vielen Bildern langsam?
+
+Der Agent sendet mit jeder Nachricht alle früheren Bilder erneut. Dadurch werden lange Chats mit vielen Bildern immer langsamer, und irgendwann lassen sich Nachrichten unter Umständen nicht mehr senden. In Codex wuchs ein Chat mit neun Keyframes auf 42,4 MB an, und nach einem Neustart oder einer Komprimierung des Chats schlug das Senden fehl. Mit Context Attachment Manager waren dieselben Anfragen nur 0,12 MB groß.
+
+### Macht Context Attachment Manager den Prompt-Cache unbrauchbar?
+
+Kaum. Ein Platzhalter wird nur einmal geschrieben und bleibt danach gleich, und ein abgerufenes Bild wird am Ende der aktuellen Runde angehängt. Alle früheren Runden werden deshalb weiterhin aus dem Cache gelesen. Nach einer Runde mit Bildern wird der Rest dieser Runde einmal neu verarbeitet. In unserem Vergleich zu langen Aufgaben in Claude Code wurden mit dem Plugin 87 % der Eingabe aus dem Cache gelesen, ohne Plugin 91 %.
+
+### Worin unterscheidet es sich von der Komprimierung des Chats oder vom Verkleinern der Bilder?
+
+Die Komprimierung und das Verwerfen des frühen Verlaufs entfernen den Anfang des Chats, und das Verkleinern der Bilder verändert ihn. In beiden Fällen wird fast der gesamte Chat neu verarbeitet, und dem Modell bleibt nur eine Zusammenfassung oder eine verkleinerte Kopie. Mit Context Attachment Manager wird nur der Rest der vorherigen Runde neu verarbeitet, und das Modell ruft das Originalbild über die ID ab.
+
+### Kann das Modell ein früheres Bild noch einmal ansehen?
+
+Ja. Jedes Bild hat eine ID wie `IMG-001`, und das Modell ruft das Original ab, wenn es das Bild erneut ansehen muss, auch nachdem der Chat komprimiert wurde.
+
+### Werden meine Bilder gelöscht oder woandershin gesendet?
+
+Nein. Das Plugin läuft auf deinem Computer. Deine Originalbilder und der Chatverlauf bleiben unverändert, und Anfragen gehen an den Dienst, den dein Agent bereits nutzt.
+
+### Mit welchen Agenten funktioniert es? Ist es kostenlos?
+
+Codex und Claude Code sind getestet. WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose und Cherry Studio werden über Adapter unterstützt, die wir noch nicht in der Praxis getestet haben. Das Plugin ist kostenlos und Open Source unter der MIT-Lizenz.
 
 <p align="center"><sub><a href="CHANGELOG.md">Versionsverlauf</a> · <a href="CONTRIBUTING.md">Mitmachen</a> · <a href="LICENSE">MIT-Lizenz</a></sub></p>
