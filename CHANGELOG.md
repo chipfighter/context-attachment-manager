@@ -2,6 +2,37 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.11.2] - 2026-11-14
+
+This update keeps the cache working in Codex after you comment on an earlier image, and the README now explains how the plugin is designed around the cache.
+
+### Fixed
+
+- **Comments on earlier images in Codex.** When you commented on an image from a few turns back, the plugin added your comment to the short text that stands in for that image. That changed an earlier part of the chat, so with your next message Codex processed everything after that image again instead of reading it from its cache. The text now stays as it first went out. Your comment is still kept: it is in the model's reply, the panel shows and finds it, and it goes with the image again after the next compaction.
+
+### Documentation
+
+- **How the plugin is designed.** A new README section, in all eight languages, shows with two figures why earlier images are replaced only once, why fetching an image back leaves the rest of the chat untouched, and what this costs compared with shrinking images or dropping early history.
+
+### After updating
+
+- Update the plugin in Codex and restart Codex.
+- Nothing changes in Claude Code, which has worked this way since 0.10.
+
+### How we tested
+
+- All 345 local unit tests passed, two of them new for this fix, and GitHub CI passed on Windows, macOS, and Linux.
+- On five real Codex tasks, we compared what the plugin changed in each request with how much Codex reported reading from its cache. Every time, the cache was read up to the place that changed.
+- The feature-line test with a real model (`gpt-6-sol`, Chinese) passed all 15 checks. The compaction test passed 7 of 8: the model named the right image from the list without fetching the original, as it also did before this change.
+
+<details>
+<summary>Technical details</summary>
+
+- The Codex adapter now shows, in a placeholder, only the ratings noted by the image's own turn, as the Claude Code adapter has since 0.10. For images from before Codex's latest compaction, placeholders and the list after the compaction item use the notes as they stood at that compaction.
+- Measured with ChatGPT login and `gpt-6.1-sol`: the backend reads the prompt cache up to the first changed item, in steps of 128 tokens, with no cache breakpoints from the engine. The engine therefore places none for Codex. Codex logged in with an API key was not measured.
+
+</details>
+
 ## [0.11.1] - 2026-11-13
 
 This update brings missing images back to the Claude Code sidebar so you can open them and select them again after compaction.
