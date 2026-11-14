@@ -58,6 +58,28 @@ O plugin roda localmente. As imagens originais e o histórico da conversa ficam 
 
 No Codex, uma conversa com nove quadros-chave chegou a 42,4 MB, e o envio falhou depois de reiniciar o agente ou compactar a conversa. Com o plugin, as mesmas solicitações ficaram com 0,12 MB. Consulte o [comparativo no Codex](eval/README.md) e o [comparativo de uma tarefa longa no Claude Code](eval/long-task/README.md) para ver os resultados e como reproduzi-los. Os dois estão em inglês.
 
+## Design: preservar o cache
+
+Os serviços de modelos guardam em cache o início da conversa. Quando uma solicitação começa exatamente igual à anterior, essa parte é lida do cache, o que é mais rápido e bem mais barato. Se algo muda no início da conversa, tudo o que vem depois da mudança é processado de novo.
+
+Para reduzir uma conversa longa, sempre é preciso mudar alguma coisa. O plugin faz essa mudança o mais tarde possível na conversa:
+
+<p align="center">
+  <img src="docs/images/cache-compare.svg" alt="Quatro formas de lidar com uma conversa longa com imagens, desenhadas como a próxima solicitação. Enviar tudo preserva o cache, mas reenvia todas as imagens. Reduzir as imagens ou descartar o histórico inicial faz quase toda a conversa ser processada de novo. Com as referências do plugin, só o restante do turno anterior é processado de novo." width="100%">
+</p>
+
+- **A referência é escrita uma única vez.** A imagem é trocada pela referência no turno seguinte àquele em que apareceu, então só o restante desse turno é processado de novo, uma vez. Daí em diante, a referência é o mesmo texto em todas as solicitações.
+- **Buscar uma imagem não muda nada do que veio antes.** A original é adicionada ao final do turno atual, e a referência fica onde estava. Seja qual for a imagem que o modelo escolher, e quantas houver na conversa, tudo o que vem antes do turno atual continua sendo lido do cache.
+- **O modelo recebe a original.** Não é uma cópia reduzida nem um resumo.
+
+<p align="center">
+  <img src="docs/images/cache-fetch.svg" alt="Quando o modelo busca IMG-001, a original é adicionada ao final do turno atual e a referência do turno 1 fica como estava, então todos os turnos anteriores são lidos do cache. No turno seguinte, a cópia buscada vira uma nota de uma linha, e só o que vinha depois dela é processado de novo." width="100%">
+</p>
+
+Isso tem um custo. Depois de um turno com imagens, o restante desse turno é processado de novo uma vez, e o modelo escreve uma linha curta para cada imagem nova. Se você alterar uma imagem antiga no painel (desmarcar, marcar de novo ou marcar **Send every turn**), a conversa muda naquele ponto e o que vem depois é processado de novo uma vez. No nosso [comparativo de uma tarefa longa no Claude Code](eval/long-task/README.md) (em inglês), 87% da entrada foi lida do cache com o plugin e 91% sem ele.
+
+A terceira linha da primeira figura também é o que a compactação do próprio agente faz, e o que acontece quando resultados antigos de ferramentas são apagados pela API (por exemplo, o context editing da Anthropic): o conteúdo do início é removido e o que vem depois é processado de novo.
+
 ## Agentes compatíveis
 
 Testamos o Codex e o Claude Code. O painel está disponível no Codex e no Claude Desktop. Os demais agentes da tabela são compatíveis por meio de adaptadores desenvolvidos com base no código e na documentação de cada um. Ainda não testamos esses adaptadores nos próprios agentes. Se você usa algum deles, [conte como foi](https://github.com/chipfighter/context-attachment-manager/issues), tanto se deu certo quanto se encontrou algum problema.

@@ -58,6 +58,28 @@ Le plugin s’exécute localement. Vos images d’origine et l’historique de v
 
 Dans Codex, une conversation contenant neuf images clés a atteint 42,4 Mo. L’envoi échouait après un redémarrage ou une compression de la conversation. Avec le plugin, les mêmes requêtes ne pesaient que 0,12 Mo. Les résultats et les étapes pour reproduire les tests sont disponibles en anglais dans le [comparatif Codex](eval/README.md) et le [comparatif sur les tâches longues dans Claude Code](eval/long-task/README.md).
 
+## Conception : préserver le cache
+
+Les services de modèles mettent en cache le début de la conversation. Quand une requête commence exactement comme la précédente, cette partie est lue depuis le cache, ce qui est plus rapide et bien moins cher. Si quelque chose change au début de la conversation, tout ce qui suit la modification est traité à nouveau.
+
+Pour alléger une longue conversation, il faut forcément modifier quelque chose. Le plugin place cette modification le plus tard possible dans la conversation :
+
+<p align="center">
+  <img src="docs/images/cache-compare.svg" alt="Quatre façons de gérer une longue conversation avec des images, représentées par la requête suivante. Tout envoyer préserve le cache, mais renvoie toutes les images. Réduire les images ou supprimer le début de l’historique oblige à traiter à nouveau presque toute la conversation. Avec les textes de remplacement du plugin, seul le reste du tour précédent est traité à nouveau." width="100%">
+</p>
+
+- **Le texte de remplacement est écrit une seule fois.** L’image est remplacée au tour qui suit celui où elle est apparue. Seul le reste de ce tour est traité à nouveau, une fois. Ensuite, le texte de remplacement reste identique d’une requête à l’autre.
+- **Récupérer une image ne change rien à ce qui précède.** L’original est ajouté à la fin du tour en cours et le texte de remplacement reste à sa place. Quelle que soit l’image choisie par le modèle, et quel que soit le nombre d’images dans la conversation, tout ce qui précède le tour en cours est encore lu depuis le cache.
+- **Le modèle récupère l’original.** Ce n’est ni une copie réduite ni un résumé.
+
+<p align="center">
+  <img src="docs/images/cache-fetch.svg" alt="Quand le modèle récupère IMG-001, l’original est ajouté à la fin du tour en cours et le texte de remplacement du tour 1 reste tel quel : tous les tours précédents sont lus depuis le cache. Au tour suivant, la copie récupérée devient une note d’une ligne et seul ce qui la suivait est traité à nouveau." width="100%">
+</p>
+
+Ce n’est pas gratuit. Après un tour contenant des images, le reste de ce tour est traité à nouveau une fois, et le modèle écrit une courte ligne pour chaque nouvelle image. Si vous modifiez une ancienne image dans le panneau (la décocher, la recocher ou cocher **Send every turn**), la conversation change à cet endroit et ce qui suit est traité à nouveau une fois. Dans notre [comparatif sur les tâches longues dans Claude Code](eval/long-task/README.md) (en anglais), 87 % de l’entrée a été lue depuis le cache avec le plugin, contre 91 % sans.
+
+La troisième ligne de la première figure correspond aussi à ce que fait la compression de l’agent lui-même, et à l’effacement d’anciens résultats d’outils côté API (par exemple le context editing d’Anthropic) : le contenu du début est retiré et ce qui suit est traité à nouveau.
+
 ## Agents compatibles
 
 Codex et Claude Code ont été testés. Le panneau est également disponible dans Codex et Claude Desktop. Les autres agents du tableau sont pris en charge par des adaptateurs écrits à partir de leur code et de leur documentation. Leur fonctionnement reste à vérifier en conditions réelles. Si vous utilisez l’un de ces agents, [dites-nous comment cela s’est passé](https://github.com/chipfighter/context-attachment-manager/issues). Tous les retours sont les bienvenus.
