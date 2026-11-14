@@ -58,6 +58,28 @@ El complemento se ejecuta localmente. Tus imágenes originales y el historial de
 
 En Codex, una conversación con nueve fotogramas clave llegó a 42,4 MB y ya no se podía enviar después de reiniciar el agente o compactar la conversación. Con el complemento, las mismas solicitudes ocupaban 0,12 MB. Los resultados y los pasos para reproducirlos están en la [comparativa en Codex](eval/README.md) y la [comparativa de una tarea larga en Claude Code](eval/long-task/README.md), ambas en inglés.
 
+## Diseño: conservar la caché
+
+Los servicios de modelos guardan en caché el principio de la conversación. Cuando una solicitud empieza exactamente igual que la anterior, esa parte se lee de la caché, lo que es más rápido y mucho más barato. Si cambia algo al principio de la conversación, todo lo que viene después del cambio se vuelve a procesar.
+
+Para reducir una conversación larga siempre hay que cambiar algo. El complemento hace ese cambio lo más tarde posible en la conversación:
+
+<p align="center">
+  <img src="docs/images/cache-compare.svg" alt="Cuatro formas de manejar una conversación larga con imágenes, dibujadas como la siguiente solicitud. Enviarlo todo conserva la caché, pero vuelve a enviar todas las imágenes. Reducir las imágenes o descartar el historial inicial obliga a procesar de nuevo casi toda la conversación. Con las referencias del complemento, solo se vuelve a procesar el resto del turno anterior." width="100%">
+</p>
+
+- **La referencia se escribe una sola vez.** La imagen se sustituye por su referencia en el turno siguiente al que apareció, así que solo se vuelve a procesar, una vez, el resto de ese turno. A partir de ahí, la referencia es el mismo texto en todas las solicitudes.
+- **Recuperar una imagen no cambia nada de lo anterior.** La original se añade al final del turno actual y su referencia se queda donde estaba. Elija la imagen que elija el modelo, y haya las que haya en la conversación, todo lo anterior al turno actual se sigue leyendo de la caché.
+- **El modelo recupera la original.** No es una copia reducida ni un resumen.
+
+<p align="center">
+  <img src="docs/images/cache-fetch.svg" alt="Cuando el modelo recupera IMG-001, la original se añade al final del turno actual y la referencia del turno 1 se queda como estaba, así que todos los turnos anteriores se leen de la caché. En el turno siguiente, la copia recuperada pasa a ser una nota de una línea y solo se vuelve a procesar lo que venía después." width="100%">
+</p>
+
+No es gratis. Después de un turno con imágenes, el resto de ese turno se vuelve a procesar una vez, y el modelo escribe una línea breve por cada imagen nueva. Si cambias una imagen antigua en el panel (la desmarcas, la vuelves a marcar o marcas **Send every turn**), la conversación cambia en ese punto y lo que viene después se vuelve a procesar una vez. En nuestra [comparativa de una tarea larga en Claude Code](eval/long-task/README.md) (en inglés), el 87 % de la entrada se leyó de la caché con el complemento y el 91 % sin él.
+
+La tercera fila de la primera figura es también lo que hace la compactación del propio agente, y lo que ocurre al borrar resultados antiguos de herramientas desde la API (por ejemplo, context editing de Anthropic): se elimina contenido del principio y lo que sigue se vuelve a procesar.
+
 ## Agentes compatibles
 
 Hemos probado Codex y Claude Code. El panel está disponible en Codex y Claude Desktop. Los demás agentes de la tabla son compatibles mediante adaptadores desarrollados a partir de su código y documentación. Todavía no hemos probado esos adaptadores en los propios agentes. Si usas alguno, [cuéntanos qué tal te fue](https://github.com/chipfighter/context-attachment-manager/issues), tanto si funcionó como si tuviste algún problema.

@@ -58,6 +58,28 @@ The plugin runs locally. Your original images and chat history stay on your comp
 
 In Codex, a chat with nine keyframes grew to 42.4 MB and could not be sent after a restart or a compaction; with the plugin the same requests were 0.12 MB. See the [Codex comparison](eval/README.md) and [Claude Code long-task comparison](eval/long-task/README.md) for the results and reproduction steps.
 
+## Design: keep the cache working
+
+Model services cache the start of a chat. When a request begins exactly like the one before, that part is read from the cache, which is faster and much cheaper. When something early in the chat changes, everything after the change is processed again.
+
+Any way of making a long chat smaller has to change something. The plugin makes its change as late in the chat as it can:
+
+<p align="center">
+  <img src="docs/images/cache-compare.svg" alt="Four ways to handle a long chat with images, each drawn as the next request. Sending everything keeps the cache but sends every image again. Shrinking the images or dropping early history makes nearly the whole chat be processed again. With the plugin's placeholders, only the rest of the previous turn is processed again." width="100%">
+</p>
+
+- **A placeholder is written once**: an image becomes a placeholder in the turn after it appeared, so only the rest of that one turn is processed again. After that the placeholder stays the same from request to request.
+- **Fetching changes nothing earlier**: the original is added at the end of the current turn, and its placeholder stays where it is. Whichever image the model picks, and however many the chat holds, everything before the current turn is still read from the cache.
+- **The model gets the original back**: not a smaller copy, and not a summary of it.
+
+<p align="center">
+  <img src="docs/images/cache-fetch.svg" alt="When the model fetches IMG-001, the original is attached at the end of the current turn and the placeholder in turn 1 stays as it is, so every earlier turn is read from the cache. In the next turn the fetched copy becomes a one-line note, and only what came after it is processed again." width="100%">
+</p>
+
+This is not free. After a turn with images, the rest of that turn is processed again once, and the model writes a short line for each new image. Changing an old image in the panel (unchecking it, checking it again, **Send every turn**) changes the chat at that image, so what follows it is processed again once. In our [long-task comparison in Claude Code](eval/long-task/README.md), 87% of the input was read from the cache with the plugin and 91% without it.
+
+The third row of the first figure is also what an agent's own compaction does, and what clearing old tool results on the API side does (Anthropic's context editing, for example): early content is removed, and what follows is processed again.
+
 ## Works with
 
 Codex and Claude Code are tested, and Codex and Claude Desktop also have the panel. The other agents below are supported through adapters written from their code and docs, but we have not tested them live yet. If you use one of them, please [tell us how it went](https://github.com/chipfighter/context-attachment-manager/issues), whether it worked or not.

@@ -58,6 +58,28 @@ Das Plugin läuft lokal. Deine Originalbilder und der Chatverlauf bleiben auf de
 
 In Codex wuchs ein Chat mit neun Keyframes auf 42,4 MB an. Nach einem Neustart oder einer Komprimierung des Chats schlug das Senden fehl. Mit dem Plugin waren dieselben Anfragen nur 0,12 MB groß. Die Ergebnisse und die Schritte zum Nachstellen findest du im [Codex-Vergleich](eval/README.md) und im [Vergleich zu langen Aufgaben in Claude Code](eval/long-task/README.md) auf Englisch.
 
+## Design: Der Cache bleibt nutzbar
+
+Modelldienste speichern den Anfang eines Chats im Cache. Beginnt eine Anfrage genau wie die vorherige, wird dieser Teil aus dem Cache gelesen. Das ist schneller und deutlich günstiger. Ändert sich etwas am Anfang des Chats, wird alles nach der Änderung neu verarbeitet.
+
+Wer einen langen Chat verkleinern will, muss etwas ändern. Das Plugin nimmt diese Änderung so weit hinten im Chat vor wie möglich:
+
+<p align="center">
+  <img src="docs/images/cache-compare.svg" alt="Vier Wege, mit einem langen Chat voller Bilder umzugehen, jeweils als nächste Anfrage dargestellt. Alles zu senden erhält den Cache, sendet aber jedes Bild erneut. Bilder zu verkleinern oder frühen Verlauf zu verwerfen führt dazu, dass fast der ganze Chat neu verarbeitet wird. Mit den Platzhaltern des Plugins wird nur der Rest der vorherigen Runde neu verarbeitet." width="100%">
+</p>
+
+- **Ein Platzhalter wird nur einmal geschrieben.** Ein Bild wird in der Runde nach seinem Erscheinen durch den Platzhalter ersetzt. Nur der Rest dieser einen Runde wird einmal neu verarbeitet. Danach bleibt der Platzhalter in jeder Anfrage gleich.
+- **Das Abrufen ändert nichts an früheren Inhalten.** Das Original wird am Ende der aktuellen Runde angehängt, der Platzhalter bleibt an seiner Stelle. Egal welches Bild das Modell wählt und wie viele Bilder der Chat enthält: Alles vor der aktuellen Runde wird weiterhin aus dem Cache gelesen.
+- **Das Modell bekommt das Original zurück.** Keine verkleinerte Kopie und keine Zusammenfassung.
+
+<p align="center">
+  <img src="docs/images/cache-fetch.svg" alt="Wenn das Modell IMG-001 abruft, wird das Original am Ende der aktuellen Runde angehängt und der Platzhalter in Runde 1 bleibt unverändert. Alle früheren Runden werden deshalb aus dem Cache gelesen. In der nächsten Runde wird die abgerufene Kopie zu einer einzeiligen Notiz, und nur was danach kam, wird neu verarbeitet." width="100%">
+</p>
+
+Das ist nicht kostenlos. Nach einer Runde mit Bildern wird der Rest dieser Runde einmal neu verarbeitet, und das Modell schreibt für jedes neue Bild eine kurze Zeile. Wenn du im Panel ein älteres Bild änderst (abwählen, wieder auswählen oder **Send every turn**), ändert sich der Chat an dieser Stelle, und alles danach wird einmal neu verarbeitet. In unserem [Vergleich zu langen Aufgaben in Claude Code](eval/long-task/README.md) (auf Englisch) wurden mit dem Plugin 87 % der Eingabe aus dem Cache gelesen, ohne Plugin 91 %.
+
+Die dritte Zeile der ersten Abbildung zeigt auch, was die Komprimierung des Agenten selbst macht und was beim Löschen alter Tool-Ergebnisse auf API-Seite passiert (zum Beispiel Anthropics Context Editing): Frühe Inhalte werden entfernt, und alles danach wird neu verarbeitet.
+
 ## Unterstützte Agenten
 
 Codex und Claude Code wurden getestet. Das Panel ist in Codex und Claude Desktop verfügbar. Die übrigen Agenten in der Tabelle werden über Adapter unterstützt, die auf ihrem Code und ihrer Dokumentation beruhen. Praxistests stehen noch aus. Wenn du einen davon nutzt, [erzähl uns, wie es gelaufen ist](https://github.com/chipfighter/context-attachment-manager/issues). Jede Rückmeldung hilft.
