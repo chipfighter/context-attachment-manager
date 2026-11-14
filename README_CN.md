@@ -24,6 +24,7 @@ Agent 每发一条消息，通常会把之前所有的图再发一遍，图一�
 
 - **模型要哪张取哪张**：需要再看之前的某张图时，按编号取回原图。
 - **认得出是哪张**：模型给每张图记一行看得见的特征，也记下你对它的评价；这些写在占位里，对话压缩之后也还在。
+- **尽量不打断缓存**：占位符只写一次，之后不再变，之前的对话照常从模型服务的缓存（prompt cache）读取。见[设计](#设计尽量不打断缓存)。
 - **什么都不删**：原始图片和对话记录保持原样。
 
 默认开着，不用打开面板。常见用法：图片和视频创作、扫描文档、电脑和浏览器操作。
@@ -100,5 +101,31 @@ Codex 和 Claude Code 已实测，Codex 和 Claude 桌面版还有面板。下�
 | [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | 开源的桌面 AI 聊天客户端，能接多家模型 | 自动选图，未实测 |
 
 这些平台的安装步骤见 [INSTALL.md](INSTALL.md#other-agents)（英文）。想接入别的 Agent，见[接入说明](ADAPTERS.md)（英文）。
+
+## 常见问题
+
+### 为什么 Codex、Claude Code 的对话图一多就变慢？
+
+Agent 每发一条消息，通常会把之前所有的图再发一遍，图一多，对话就越来越慢，最后可能发不出去。在 Codex 里，一段有九张关键帧的对话涨到 42.4 MB，重启或压缩之后发不出去；装上 Context Attachment Manager，同样的请求是 0.12 MB。
+
+### 用了 Context Attachment Manager，提示缓存（prompt cache）会失效吗？
+
+影响很小。占位符只写一次，之后不再变；取回的原图加在当前这一轮的末尾，所以之前各轮照常从缓存读取。有图的一轮结束后，那一轮剩下的内容要重新处理一次。在 Claude Code 长任务评测里，装插件时 87% 的输入从缓存读取，不装是 91%。
+
+### 它和对话压缩、压缩图片有什么不同？
+
+对话压缩和丢掉早期历史会拿掉对话靠前的内容，压缩图片会改动这些内容。两种做法下，几乎整段对话都要重新处理，模型手里只剩摘要或缩小的副本。用 Context Attachment Manager，只有上一轮剩下的部分重新处理，模型按编号取回的是原图。
+
+### 模型还能看到之前的图吗？
+
+能。每张图都有编号，比如 `IMG-001`，模型需要再看时按编号取回原图，对话压缩之后也一样。
+
+### 我的图片会被删除，或者发到别的地方吗？
+
+不会。插件在本机运行，原始图片和对话记录保持原样，请求仍发给 Agent 原本使用的服务。
+
+### 支持哪些平台？收费吗？
+
+Codex 和 Claude Code 已实测。WorkBuddy、OpenCode、Gemini CLI、pi、DeepSeek Harness、Qwen Code、Cline、Kilo Code、goose、Cherry Studio 也支持，接入是照各平台的代码和文档写的，还没有实际测过。项目开源，使用 MIT 许可证，不收费。
 
 <p align="center"><sub><a href="CHANGELOG.md">更新记录</a> · <a href="CONTRIBUTING.md">参与开发</a> · <a href="LICENSE">MIT 许可证</a></sub></p>

@@ -24,6 +24,7 @@ En temps normal, l’agent renvoie toutes les images précédentes à chaque mes
 
 - **Le modèle récupère les images dont il a besoin.** Pour revoir une image, il récupère l’original à partir de son identifiant.
 - **Il sait distinguer les images.** Pour chacune, le modèle note en une ligne ce qu’elle montre et conserve vos commentaires. Ces informations figurent dans le texte de remplacement et restent disponibles après la compression de la conversation.
+- **Le cache est préservé.** Le texte de remplacement est écrit une seule fois et ne change plus ensuite. La conversation précédente est donc encore lue depuis le cache de prompts du modèle. Voir [la conception](#conception--préserver-le-cache).
 - **Vos originaux sont conservés.** Les images d’origine et l’historique de conversation restent intacts.
 
 Le plugin est actif par défaut, même si vous n’ouvrez pas le panneau. Il sert notamment à la création d’images et de vidéos, au travail sur des documents numérisés et aux tâches réalisées sur ordinateur ou dans un navigateur.
@@ -100,5 +101,31 @@ Codex et Claude Code ont été testés. Le panneau est également disponible dan
 | [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | Application de bureau open source pour discuter avec de nombreux modèles | Sélection automatique, à tester |
 
 Les étapes de configuration figurent dans [INSTALL.md](INSTALL.md#other-agents). Pour connecter un autre agent, consultez [ADAPTERS.md](ADAPTERS.md). Les deux guides sont en anglais.
+
+## Questions fréquentes
+
+### Pourquoi Codex et Claude Code ralentissent-ils dans une longue conversation avec beaucoup d’images ?
+
+L’agent renvoie toutes les images précédentes à chaque message. Une longue conversation avec beaucoup d’images finit par ralentir, et les messages peuvent ne plus partir. Dans Codex, une conversation contenant neuf images clés a atteint 42,4 Mo, et l’envoi échouait après un redémarrage ou une compression de la conversation. Avec Context Attachment Manager, les mêmes requêtes ne pesaient que 0,12 Mo.
+
+### Context Attachment Manager casse-t-il le cache de prompts ?
+
+Très peu. Le texte de remplacement est écrit une seule fois et ne change plus ensuite, et l’image récupérée est ajoutée à la fin du tour en cours. Les tours précédents sont donc encore lus depuis le cache. Après un tour contenant des images, le reste de ce tour est traité à nouveau une fois. Dans notre comparatif sur les tâches longues dans Claude Code, 87 % de l’entrée a été lue depuis le cache avec le plugin, contre 91 % sans.
+
+### Quelle différence avec la compression de la conversation ou la réduction des images ?
+
+La compression et la suppression de l’historique ancien retirent le début de la conversation, et réduire les images le modifie. Dans les deux cas, presque toute la conversation est traitée à nouveau, et il ne reste au modèle qu’un résumé ou une copie réduite. Avec Context Attachment Manager, seul le reste du tour précédent est traité à nouveau, et le modèle récupère l’image d’origine à partir de son identifiant.
+
+### Le modèle peut-il encore voir une image précédente ?
+
+Oui. Chaque image a un identifiant, par exemple `IMG-001`, et le modèle récupère l’original quand il a besoin de la revoir, y compris après la compression de la conversation.
+
+### Mes images sont-elles supprimées ou envoyées ailleurs ?
+
+Non. Le plugin s’exécute sur votre ordinateur. Vos images d’origine et l’historique de vos conversations restent intacts, et les requêtes sont envoyées au service que votre agent utilise déjà.
+
+### Avec quels agents fonctionne-t-il ? Est-il gratuit ?
+
+Codex et Claude Code sont testés. WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose et Cherry Studio sont pris en charge par des adaptateurs que nous n’avons pas encore testés. Le plugin est gratuit et open source, sous licence MIT.
 
 <p align="center"><sub><a href="CHANGELOG.md">Historique des versions</a> · <a href="CONTRIBUTING.md">Contribuer</a> · <a href="LICENSE">Licence MIT</a></sub></p>

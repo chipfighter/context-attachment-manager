@@ -24,6 +24,7 @@ An agent normally sends every earlier image again with each message, so a long c
 
 - **The model fetches what it needs**: when it has to look at an earlier image again, it gets the original back by its ID.
 - **It can tell images apart**: the model notes one line on what each image shows, plus your comments on it. These stay in the placeholders, also after the chat is compacted.
+- **The cache keeps working**: a placeholder is written once and then stays the same, so the earlier chat is still read from the model's prompt cache. See [the design](#design-keep-the-cache-working).
 - **Nothing is deleted**: your original images and chat history stay as they are.
 
 It is on by default; you do not need to open the panel. Typical uses: image and video creation, scanned documents, computer and browser use.
@@ -100,5 +101,31 @@ Codex and Claude Code are tested, and Codex and Claude Desktop also have the pan
 | [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | Open-source desktop chat client for many models | Auto-select, not tested yet |
 
 Setup for these agents: [INSTALL.md](INSTALL.md#other-agents). To connect another agent, see [ADAPTERS.md](ADAPTERS.md).
+
+## FAQ
+
+### Why do Codex and Claude Code get slow in a long chat with many images?
+
+The agent sends every earlier image again with each message, so a long chat with many images gets slow and can stop going through. In Codex, a chat with nine keyframes grew to 42.4 MB and could not be sent after a restart or a compaction; with Context Attachment Manager the same requests were 0.12 MB.
+
+### Does Context Attachment Manager break the prompt cache?
+
+Only a little. A placeholder is written once and then stays the same, and a fetched image is added at the end of the current turn, so earlier turns are still read from the cache. After a turn with images, the rest of that turn is processed again once. In our long-task comparison in Claude Code, 87% of the input was read from the cache with the plugin and 91% without it.
+
+### How is it different from compaction, or from shrinking the images?
+
+Compaction and dropping early history remove the early part of the chat, and shrinking the images changes it. Either way nearly the whole chat is processed again, and the model is left with a summary or a smaller copy. With Context Attachment Manager, only the rest of the previous turn is processed again, and the model gets the original image back by its ID.
+
+### Can the model still see an earlier image?
+
+Yes. Every image has an ID such as `IMG-001`, and the model fetches the original when it needs to look at it again, also after the chat is compacted.
+
+### Are my images deleted, or sent anywhere else?
+
+No. The plugin runs on your computer. Your original images and chat history stay as they are, and requests go to the service your agent already uses.
+
+### Which agents does it work with, and is it free?
+
+Codex and Claude Code are tested. WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose and Cherry Studio are supported through adapters that we have not tested live yet. It is free and open source under the MIT license.
 
 <p align="center"><sub><a href="CHANGELOG.md">Changelog</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a></sub></p>

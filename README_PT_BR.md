@@ -24,6 +24,7 @@ Normalmente, o agente reenvia todas as imagens anteriores a cada mensagem. Com m
 
 - **O modelo busca a imagem de que precisa.** Quando precisa rever uma imagem anterior, o modelo recupera a original pelo ID.
 - **O modelo consegue distinguir as imagens.** Ele anota em uma linha o que cada imagem mostra e também guarda seus comentários. As anotações ficam nas referências, mesmo depois de a conversa ser compactada.
+- **O cache é preservado.** A referência é escrita uma única vez e depois não muda, então a conversa anterior continua sendo lida do cache de prompts do modelo. Veja [o design](#design-preservar-o-cache).
 - **Os arquivos originais são preservados.** Suas imagens e o histórico da conversa permanecem intactos.
 
 O plugin vem ativado por padrão e funciona com o painel fechado. Você pode usá-lo para criar imagens e vídeos, consultar documentos digitalizados ou operar o computador e o navegador.
@@ -100,5 +101,31 @@ Testamos o Codex e o Claude Code. O painel está disponível no Codex e no Claud
 | [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | Cliente de chat de código aberto para desktop, compatível com vários modelos | Seleção automática, ainda não testada |
 
 Para configurar esses agentes, consulte [INSTALL.md](INSTALL.md#other-agents). Para conectar outro agente, consulte [ADAPTERS.md](ADAPTERS.md). Os dois guias estão em inglês.
+
+## Perguntas frequentes
+
+### Por que o Codex e o Claude Code ficam lentos em uma conversa longa com muitas imagens?
+
+O agente reenvia todas as imagens anteriores a cada mensagem. Com muitas imagens, uma conversa longa fica mais lenta e o envio pode até falhar. No Codex, uma conversa com nove quadros-chave chegou a 42,4 MB, e o envio falhou depois de reiniciar o agente ou compactar a conversa. Com o Context Attachment Manager, as mesmas solicitações ficaram com 0,12 MB.
+
+### O Context Attachment Manager quebra o cache de prompts?
+
+Muito pouco. A referência é escrita uma única vez e depois não muda, e a imagem recuperada é adicionada ao final do turno atual, então os turnos anteriores continuam sendo lidos do cache. Depois de um turno com imagens, o restante desse turno é processado de novo uma vez. No nosso comparativo de uma tarefa longa no Claude Code, 87% da entrada foi lida do cache com o plugin e 91% sem ele.
+
+### Qual é a diferença em relação à compactação ou a reduzir as imagens?
+
+A compactação e o descarte do histórico antigo removem o início da conversa, e reduzir as imagens altera esse início. Nos dois casos, quase toda a conversa é processada de novo, e o modelo fica só com um resumo ou uma cópia reduzida. Com o Context Attachment Manager, só o restante do turno anterior é processado de novo, e o modelo recupera a imagem original pelo ID.
+
+### O modelo ainda consegue ver uma imagem anterior?
+
+Sim. Cada imagem tem um ID, como `IMG-001`, e o modelo recupera a original quando precisa revê-la, mesmo depois de a conversa ser compactada.
+
+### Minhas imagens são apagadas ou enviadas para outro lugar?
+
+Não. O plugin roda no seu computador. As imagens originais e o histórico da conversa permanecem intactos, e as solicitações vão para o serviço que seu agente já usa.
+
+### Com quais agentes ele funciona? É gratuito?
+
+O Codex e o Claude Code foram testados. WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose e Cherry Studio são compatíveis por meio de adaptadores que ainda não testamos. O plugin é gratuito e de código aberto, sob a licença MIT.
 
 <p align="center"><sub><a href="CHANGELOG.md">Histórico de alterações</a> · <a href="CONTRIBUTING.md">Como contribuir</a> · <a href="LICENSE">Licença MIT</a></sub></p>
