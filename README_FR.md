@@ -128,4 +128,8 @@ Non. Le plugin s’exécute sur votre ordinateur. Vos images d’origine et l’
 
 Codex et Claude Code sont testés. WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose et Cherry Studio sont pris en charge par des adaptateurs que nous n’avons pas encore testés. Le plugin est gratuit et open source, sous licence MIT.
 
+### Comment installer Context Attachment Manager ? Faut-il utiliser le terminal ?
+
+Non. Envoyez à votre agent le message de la section [Installation](#installation) : il détecte sa plateforme et effectue l’installation lui-même, et il ne vous reste qu’à redémarrer l’agent (dans Claude Desktop, ouvrez une nouvelle session Code). Dans Codex, vous pouvez aussi l’installer depuis la page des plugins en quelques clics. Si vous préférez le faire à la main, il suffit d’une commande dans Codex et de deux commandes `claude` dans Claude Desktop ; voir [INSTALL.md](INSTALL.md) (en anglais).
+
 <p align="center"><sub><a href="CHANGELOG.md">Historique des versions</a> · <a href="CONTRIBUTING.md">Contribuer</a> · <a href="LICENSE">Licence MIT</a></sub></p>

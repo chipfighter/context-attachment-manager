@@ -128,4 +128,8 @@ Codex と Claude Code は動作確認済みで、Codex と Claude Desktop には
 
 Codex と Claude Code は検証済みです。WorkBuddy、OpenCode、Gemini CLI、pi、DeepSeek Harness、Qwen Code、Cline、Kilo Code、goose、Cherry Studio はアダプターで対応していますが、まだ検証していません。MIT ライセンスのオープンソースで、無料です。
 
+### Context Attachment Manager はどうやってインストールしますか？ ターミナルは必要ですか？
+
+必要ありません。上の[インストール](#インストール)にある一文をエージェントに送ると、エージェントが実行中のプラットフォームを確認し、自分でセットアップします。あとはエージェントを再起動するだけです（Claude Desktop では新しい Code セッションを始めてください）。Codex では、プラグインページから数回のクリックでインストールすることもできます。手動で行う場合は、Codex ではコマンド 1 つ、Claude Desktop では `claude` コマンド 2 つで済みます。詳しくは [INSTALL.md](INSTALL.md)（英語）をご覧ください。
+
 <p align="center"><sub><a href="CHANGELOG.md">変更履歴（英語）</a> · <a href="CONTRIBUTING.md">開発への参加（英語）</a> · <a href="LICENSE">MIT ライセンス</a></sub></p>

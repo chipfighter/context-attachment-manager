@@ -128,4 +128,8 @@ No. The plugin runs on your computer. Your original images and chat history stay
 
 Codex and Claude Code are tested. WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose and Cherry Studio are supported through adapters that we have not tested live yet. It is free and open source under the MIT license.
 
+### How do I install Context Attachment Manager? Do I need a terminal?
+
+No. Send your agent the one sentence in [Install](#install) above: it identifies its platform and runs the setup itself, and you only restart the agent afterwards (in Claude Desktop, start a new Code session). In Codex you can also install it from the Plugins page with a few clicks. If you prefer to do it by hand, it takes one command in Codex and two `claude` commands in Claude Desktop; see [INSTALL.md](INSTALL.md).
+
 <p align="center"><sub><a href="CHANGELOG.md">Changelog</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a></sub></p>
