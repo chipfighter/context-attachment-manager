@@ -128,4 +128,8 @@ No. El complemento se ejecuta en tu equipo. Tus imágenes originales y el histor
 
 Codex y Claude Code están probados. WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose y Cherry Studio son compatibles mediante adaptadores que aún no hemos probado. Es gratuito y de código abierto, con licencia MIT.
 
+### ¿Cómo se instala Context Attachment Manager? ¿Hace falta usar la terminal?
+
+No. Envía a tu agente el mensaje de la sección [Instalación](#instalación): identificará su plataforma y hará la instalación por sí mismo, y tú solo tendrás que reiniciar el agente (en Claude Desktop, inicia una nueva sesión de Code). En Codex también puedes instalarlo desde la página de complementos con unos pocos clics. Si prefieres hacerlo a mano, basta un comando en Codex y dos comandos `claude` en Claude Desktop; consulta [INSTALL.md](INSTALL.md) (en inglés).
+
 <p align="center"><sub><a href="CHANGELOG.md">Historial de cambios</a> · <a href="CONTRIBUTING.md">Cómo contribuir</a> · <a href="LICENSE">Licencia MIT</a></sub></p>

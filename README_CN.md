@@ -128,4 +128,8 @@ Agent 每发一条消息，通常会把之前所有的图再发一遍，图一�
 
 Codex 和 Claude Code 已实测。WorkBuddy、OpenCode、Gemini CLI、pi、DeepSeek Harness、Qwen Code、Cline、Kilo Code、goose、Cherry Studio 也支持，接入是照各平台的代码和文档写的，还没有实际测过。项目开源，使用 MIT 许可证，不收费。
 
+### 怎么安装 Context Attachment Manager？要用终端吗？
+
+不用。把上面[安装](#安装)一节的那句话发给你的 Agent，它会认出自己所在的平台、自己完成安装，你只需要在装好后重启 Agent（Claude 桌面版是新建一个 Code 会话）。在 Codex 里也可以到插件页点几下装上。想自己动手的话，Codex 是一条命令，Claude 桌面版是两条 `claude` 命令，见 [INSTALL.md](INSTALL.md)（英文）。
+
 <p align="center"><sub><a href="CHANGELOG.md">更新记录</a> · <a href="CONTRIBUTING.md">参与开发</a> · <a href="LICENSE">MIT 许可证</a></sub></p>

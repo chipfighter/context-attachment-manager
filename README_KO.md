@@ -128,4 +128,8 @@ Codex와 Claude Code는 실제로 테스트했습니다. 패널은 Codex와 Clau
 
 Codex와 Claude Code는 테스트를 마쳤습니다. WorkBuddy, OpenCode, Gemini CLI, pi, DeepSeek Harness, Qwen Code, Cline, Kilo Code, goose, Cherry Studio는 어댑터로 지원하지만 아직 테스트하지 않았습니다. MIT 라이선스의 오픈소스이며 무료입니다.
 
+### Context Attachment Manager는 어떻게 설치하나요? 터미널이 필요한가요?
+
+필요하지 않습니다. 위 [설치](#설치)에 있는 문장을 에이전트에게 보내면, 에이전트가 실행 중인 플랫폼을 확인해 직접 설치합니다. 설치가 끝나면 에이전트만 다시 시작하면 됩니다. Claude Desktop에서는 새 Code 세션을 시작하세요. Codex에서는 플러그인 페이지에서 몇 번의 클릭으로 설치할 수도 있습니다. 직접 설치하려면 Codex에서는 명령 한 줄, Claude Desktop에서는 `claude` 명령 두 줄이면 됩니다. 자세한 내용은 [INSTALL.md](INSTALL.md)(영어)를 참고하세요.
+
 <p align="center"><sub><a href="CHANGELOG.md">변경 기록</a> · <a href="CONTRIBUTING.md">기여하기</a> · <a href="LICENSE">MIT 라이선스</a></sub></p>
