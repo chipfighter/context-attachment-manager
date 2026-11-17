@@ -88,6 +88,13 @@ test("integers JavaScript cannot hold exactly are detected outside strings only"
   assert.equal(hasUnsafeInteger('{"a":9007199254740991}'), false);
 });
 
+test("the integer guard scans past a large inline image without exhausting the stack", () => {
+  const imageUrl = `data:image/png;base64,${"Aa01".repeat(5_000_000)}`;
+  const body = JSON.stringify({ image_url: imageUrl, text: 'escaped \\ and "9007199254740993"' });
+  assert.equal(hasUnsafeInteger(body), false);
+  assert.equal(hasUnsafeInteger(`[${body},9007199254740993]`), true);
+});
+
 // P2: a zstd request for a thread whose rollout and selection live in temporary directories.
 function fixture() {
   const threadId = "01a0d301-0000-7000-8000-00000000000c";
