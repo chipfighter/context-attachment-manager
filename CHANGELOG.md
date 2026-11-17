@@ -2,6 +2,35 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.11.3] - 2026-11-17
+
+This update fixes a bug that could send deselected images in conversations with very large images.
+
+### Fixed
+
+- **Image selection in large requests.** A very large image could interrupt request processing, causing the plugin to send the original request with images you had deselected. The plugin now handles these requests and applies your selections. Thanks to [@inhm112](https://github.com/inhm112) for the fix in [#18](https://github.com/chipfighter/context-attachment-manager/pull/18).
+
+### Documentation
+
+- The README now has answers about installation, image handling, and prompt caching in all eight languages.
+
+### After updating
+
+- In Codex, rerun the install command and restart Codex. In Claude Desktop, update the plugin and start a new Code session. See the [update instructions](https://github.com/chipfighter/context-attachment-manager/blob/v0.11.3/INSTALL.md#update).
+
+### How we tested
+
+- The unit tests, plugin startup checks, and install script checks passed on Windows, macOS, and Linux.
+- In an offline Codex test with two large synthetic images, both deselected originals were removed from the outgoing request.
+
+<details>
+<summary>Technical details</summary>
+
+- The shared request engine scans JSON strings incrementally and preserves the existing check for integers that JavaScript cannot represent exactly.
+- The regression test covers a 20-million-character inline image, escaped quotes, and an unsafe integer after the image.
+
+</details>
+
 ## [0.11.2] - 2026-11-14
 
 This update keeps the cache working in Codex after you comment on an earlier image, and the README now explains how the plugin is designed around the cache.
