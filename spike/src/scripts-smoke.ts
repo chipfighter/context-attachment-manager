@@ -6,13 +6,16 @@
 // engine. Output: a JSON summary on stdout; exit code 1 when a check fails.
 
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { findCodexCli } from "../../plugin/src/adapters/codex/codexcli.ts";
 import { buildOf, engineHealth } from "../../plugin/src/engine.ts";
 import { MARKETPLACE, PLUGIN, pluginStatus } from "../../plugin/src/adapters/codex/install.ts";
+import { routingPort } from "../../plugin/src/core/routes.ts";
 
 type Json = Record<string, any>;
 const root = resolve(import.meta.dirname, "..", "..");
@@ -59,10 +62,28 @@ async function main(): Promise<boolean> {
   const dotenv = `OTHER_SETTING=1${eol}`;
   writeFileSync(join(home, "config.toml"), config);
   writeFileSync(join(home, ".env"), dotenv);
-  const env = { ...process.env, CODEX_HOME: home, CAM_DATA_DIR: data, CAM_ENGINE_PORT: String(port), CAM_SOURCE: source, CODEX_CLI_PATH: cli };
+  const env = { ...process.env, CODEX_HOME: home, CAM_DATA_DIR: data, CAM_ENGINE_PORT: String(port), CAM_LANG: "en", CAM_SOURCE: source, CODEX_CLI_PATH: cli };
   const summary: Json = { platform: process.platform, cli, scratch, checks: {} };
   const checks: Record<string, boolean> = summary.checks;
 
+  const blockedPort = routingPort(port);
+  const blocker = createServer();
+  const listening = once(blocker, "listening");
+  blocker.listen(blockedPort, "127.0.0.1");
+  await listening;
+  try {
+    const failed = await run("install", env);
+    summary.blockedInstall = failed.output.split(/\r?\n/).slice(-12);
+    checks.blockedInstallFailed = !failed.ok && !failed.output.includes("Done. Restart Codex");
+    checks.blockedPortReported = failed.output.includes(`Could not listen on port ${blockedPort} at 127.0.0.1`);
+    checks.connectionPreserved = !/^openai_base_url\s*=/m.test(readFileSync(join(home, "config.toml"), "utf8"));
+    checks.dotenvPreservedOnFailure = readFileSync(join(home, ".env"), "utf8") === dotenv;
+    checks.noEnableIntentOnFailure = !existsSync(join(data, "codex-engine.json"));
+  } finally {
+    await new Promise<void>((done) => blocker.close(() => done()));
+  }
+
+  // Retry in the same Codex home after releasing the port.
   const installed = await run("install", env);
   summary.install = installed.output.split(/\r?\n/).slice(-12);
   const afterInstall = readFileSync(join(home, "config.toml"), "utf8");

@@ -1,7 +1,7 @@
 # Purpose: v0.1-5 - install the Codex attachment manager on Windows in one line, without opening GitHub:
 #   irm https://github.com/chipfighter/context-attachment-manager/releases/latest/download/install.ps1 | iex
 # Codex's own command line adds this repository as a plugin marketplace and installs the plugin; the installed plugin
-# then points Codex at its local engine (cam setup) and starts it. Running it again upgrades. Restart Codex afterwards.
+# then starts its local engine (cam setup) and points Codex at it. Running it again upgrades. Restart Codex afterwards.
 # Input: CAM_REF (a tag or branch; a release sets its own tag), CAM_SOURCE (a local checkout, for tests),
 # CODEX_CLI_PATH, CODEX_HOME. Output: Codex's plugin cache, config.toml (backed up first) and, when needed, .env.
 # ASCII only: Windows PowerShell 5.1 decodes a downloaded script as Latin-1. The body runs in its own scope, so the
@@ -68,10 +68,10 @@
       Get-ChildItem -LiteralPath (Join-Path $cacheBackup $entry.Name) -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target -Recurse -Force }
     }
   }
-  # The installed plugin writes the proxy settings itself (checking for conflicts first) and starts its engine.
-  Write-Host 'Pointing Codex at the local engine ...'
+  # The installed plugin checks the settings and starts the engine before switching the connection.
+  Write-Host 'Starting the local engine and setting up the Codex connection ...'
   & cmd.exe /d /s /c call "$($installed.FullName)\scripts\launch.cmd" "$($installed.FullName)\src\cam.ts" setup
-  if ($LASTEXITCODE -ne 0) { throw 'The proxy settings were not written (see above); Codex still connects directly.' }
+  if ($LASTEXITCODE -ne 0) { throw 'Codex connection setup failed. See the error above.' }
   Write-Host ''
   Write-Host 'Done. Restart Codex, then open the panel from the side panel: New tab > Plugins and MCP.'
 }
