@@ -2,6 +2,31 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.11.4] - 2026-11-20
+
+Codex keeps its existing connection settings if the installer cannot start the local proxy.
+
+### Fixed
+
+- If a local port is unavailable, setup reports the affected port and stops before switching Codex to the proxy. Previously, the installer could report success and leave Codex unable to send messages. Thanks to [@IbukiFuko](https://github.com/IbukiFuko) for reporting [#19](https://github.com/chipfighter/context-attachment-manager/issues/19).
+
+### After updating
+
+- Rerun the [Codex installer](https://github.com/chipfighter/context-attachment-manager/blob/v0.11.4/INSTALL.md#update). If it reports a port conflict, free the reported port and rerun it. Restart Codex after setup succeeds.
+
+### How we tested
+
+- The install test holds the second local port open, verifies that the installer reports the conflict and preserves the connection settings, then releases the port and retries in the same test profile.
+- The release checks cover plugin startup, installation, upgrade, and removal on Windows, macOS, and Linux.
+
+<details>
+<summary>Technical details</summary>
+
+- `cam setup` and `cam install` wait for the engine health check before writing `openai_base_url` or `.env`. Startup readiness requires all supported loopback listeners. Port binding errors propagate to the installer as a nonzero exit.
+- The engine waits for its listeners before reapplying a previously enabled route after a provider change.
+
+</details>
+
 ## [0.11.3] - 2026-11-17
 
 This update fixes a bug that could send deselected images in conversations with very large images.
