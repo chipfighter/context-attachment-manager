@@ -2,6 +2,29 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.11.5] - 2026-11-20
+
+CAM reads Windows proxy settings without opening a terminal window.
+
+### Fixed
+
+- On Windows, reading proxy settings in the background could open a black terminal window or show error `0x800700e8`. CAM now hides the window when reading both system proxy settings and saved proxy environment variables. Thanks to [@ryanye981006-sudo](https://github.com/ryanye981006-sudo) for reporting [#20](https://github.com/chipfighter/context-attachment-manager/issues/20) and verifying the proposed fix.
+
+### After updating
+
+- Rerun the Codex installer and restart Codex. In Claude Desktop, update the plugin and start a new Code session. See the [update instructions](https://github.com/chipfighter/context-attachment-manager/blob/v0.11.5/INSTALL.md#update).
+
+### How we tested
+
+- On Windows, we checked that both background commands stop opening a console window and that the registry queries return the same results. The release checks cover plugin startup, installation, upgrade, and removal on Windows, macOS, and Linux.
+
+<details>
+<summary>Technical details</summary>
+
+- The two Windows `reg query` calls now pass `windowsHide: true` to `execFileSync`.
+
+</details>
+
 ## [0.11.4] - 2026-11-20
 
 Codex keeps its existing connection settings if the installer cannot start the local proxy.
