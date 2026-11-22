@@ -163,6 +163,9 @@ async function startEngine(port: number, extraArgs: string[] = [], dir = here): 
 
 // Set once a WMI start did not give an engine (or could not run): this process starts engines the old way from then on.
 let wmiFailed = false;
+// The longest a start through WMI may take. Usually about a second, but PowerShell's first call on a freshly started
+// machine can take several (Windows CI, 2026-11-22).
+const WMI_START_MS = 10_000;
 
 // The new process gets this process's environment explicitly (WMI would give it the user's default one), on stdin, not
 // on a command line. Resolves with its process id, or null when it could not be started this way.
@@ -182,7 +185,7 @@ export function startOutsideJob(commandLine: string[], cwd: string, env: NodeJS.
     let settled = false;
     const done = (pid: number | null) => { if (settled) return; settled = true; clearTimeout(timer); if (pid === null) wmiFailed = true; resolve(pid); };
     const shell = spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
-    const timer = setTimeout(() => { shell.kill(); done(null); }, 10_000);
+    const timer = setTimeout(() => { shell.kill(); done(null); }, WMI_START_MS);
     shell.on("error", () => done(null));
     shell.stdout.on("data", (chunk) => { out += chunk; });
     shell.on("close", () => {
@@ -256,10 +259,12 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
     for (let i = 0; i < 20 && (await engineHealth(port, 300))?.pid === existing.pid; i++) await sleep(150);
     replaced = existing;
   }
-  const deadline = Date.now() + (options.waitMs ?? 8000);
-  // v0.12: another process is starting one right now: wait for it instead of starting a second.
+  const waitMs = options.waitMs ?? 8000;
+  // v0.12: another process is starting one right now: wait for it instead of starting a second. Its start through WMI
+  // can take a while before the engine even runs, so the wait allows for that too.
   const unlock = takeStartLock();
   if (!unlock) {
+    const deadline = Date.now() + WMI_START_MS + waitMs;
     while (Date.now() < deadline) {
       await sleep(250);
       const health = await engineHealth(port);
@@ -270,6 +275,10 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
   let started: Started | null = null;
   try {
     started = await startEngine(port, options.extraArgs, dir);
+    // v0.12: the wait for the engine counts from here, once it is started. Counted from before, a slow start through
+    // WMI used up most of it, and the start was reported as failed while the engine was still coming up (Windows CI,
+    // 2026-11-22); `cam install` reports that as an engine that is not ready.
+    const deadline = Date.now() + waitMs;
     let viaWmi = process.platform === "win32" && started.pid !== null && !wmiFailed && process.env.CAM_ENGINE_START !== "child";
     while (Date.now() < deadline) {
       await sleep(150);
