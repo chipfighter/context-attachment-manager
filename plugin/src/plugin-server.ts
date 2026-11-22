@@ -339,7 +339,8 @@ function main(): void {
     const replaced = result.replaced ? { replacedPid: result.replaced.pid, replacedBuild: result.replaced.build ?? null } : {};
     // v0.12: a busy engine (engine.ts, probeEngine) is noted once, not every round while it lasts.
     const unchanged = (result.state === "running" || result.state === "busy") && result.state === engineState;
-    if (!unchanged) log({ event: "engine", host: HOST, state: result.state, enginePid: result.health?.pid ?? null, build: result.health?.build ?? null, ...replaced });
+    // v0.12: with how it was started, when this service started it (engine.ts, StartNote).
+    if (!unchanged) log({ event: "engine", host: HOST, state: result.state, enginePid: result.health?.pid ?? null, build: result.health?.build ?? null, ...replaced, ...(result.start ? { start: result.start } : {}) });
     engineState = result.state;
     engineRunning = result.state !== "failed";
   };
