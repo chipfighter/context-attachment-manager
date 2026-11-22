@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" font-family="-apple-system, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif" role="img" aria-label="每轮结束时的上下文（token）">
+<rect x="0.5" y="0.5" width="959" height="439" rx="12" fill="#fcfcfb" stroke="#e1e0d9"/>
+<text x="76" y="30" font-size="17" font-weight="600" fill="#0b0b0b">每轮结束时的上下文（token）</text>
+<text x="76" y="50" font-size="13" fill="#52514e">Sonnet 5.5，同一段 16 轮的短片任务；超过 10 万就压缩</text>
+<line x1="76" x2="810" y1="384" y2="384" stroke="#e1e0d9" stroke-width="1"/>
+<text x="66" y="388" font-size="12" fill="#898781" text-anchor="end">0K</text>
+<line x1="76" x2="810" y1="317.3333333333333" y2="317.3333333333333" stroke="#e1e0d9" stroke-width="1"/>
+<text x="66" y="321.3333333333333" font-size="12" fill="#898781" text-anchor="end">25K</text>
+<line x1="76" x2="810" y1="250.66666666666666" y2="250.66666666666666" stroke="#e1e0d9" stroke-width="1"/>
+<text x="66" y="254.66666666666666" font-size="12" fill="#898781" text-anchor="end">50K</text>
+<line x1="76" x2="810" y1="184" y2="184" stroke="#e1e0d9" stroke-width="1"/>
+<text x="66" y="188" font-size="12" fill="#898781" text-anchor="end">75K</text>
+<line x1="76" x2="810" y1="117.33333333333331" y2="117.33333333333331" stroke="#e1e0d9" stroke-width="1"/>
+<text x="66" y="121.33333333333331" font-size="12" fill="#898781" text-anchor="end">100K</text>
+<line x1="76" x2="810" y1="117.33333333333331" y2="117.33333333333331" stroke="#898781" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="84" y="109.33333333333331" font-size="12" fill="#52514e">压缩门槛 10 万</text>
+<text x="76" y="408" font-size="12" fill="#898781" text-anchor="middle">第 1 轮</text>
+<text x="222.8" y="408" font-size="12" fill="#898781" text-anchor="middle">第 4 轮</text>
+<text x="418.53333333333336" y="408" font-size="12" fill="#898781" text-anchor="middle">第 8 轮</text>
+<text x="614.2666666666667" y="408" font-size="12" fill="#898781" text-anchor="middle">第 12 轮</text>
+<text x="810" y="408" font-size="12" fill="#898781" text-anchor="middle">第 16 轮</text>
+<polyline points="76.0,350.5 124.9,332.3 173.9,314.2 222.8,306.0 271.7,293.5 320.7,275.1 369.6,263.3 418.5,245.0 467.5,198.6 516.4,168.0 565.3,154.6 614.3,142.0 663.2,123.8 712.1,88.9 761.1,324.5 810.0,312.5" fill="none" stroke="#eb6834" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="810" cy="312.464" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="820" y="322.584" font-size="13" font-weight="600" fill="#0b0b0b">不装插件</text>
+<text x="820" y="338.584" font-size="12" fill="#52514e">27K</text>
+<circle cx="712.1333333333333" cy="88.87733333333335" r="5" fill="#fcfcfb" stroke="#eb6834" stroke-width="2.5"/>
+<text x="702.1333333333333" y="76.87733333333335" font-size="12" fill="#52514e" text-anchor="end">压缩 111K</text>
+<polyline points="76.0,350.9 124.9,326.9 173.9,332.0 222.8,338.4 271.7,332.0 320.7,323.0 369.6,325.9 418.5,316.9 467.5,284.1 516.4,300.3 565.3,306.5 614.3,303.8 663.2,294.8 712.1,273.7 761.1,272.4 810.0,284.6" fill="none" stroke="#2a78d6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="810" cy="284.584" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<text x="820" y="288.584" font-size="13" font-weight="600" fill="#0b0b0b">装插件 0.12</text>
+<text x="820" y="304.584" font-size="12" fill="#52514e">37K</text>
+</svg>

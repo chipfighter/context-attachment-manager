@@ -45,6 +45,7 @@ Depois da instalação, reinicie o agente. No Claude Desktop, inicie uma nova se
   <img src="docs/images/hero.png" alt="Painel para gerenciar automaticamente as imagens anteriores, buscar por detalhes de que você se lembra e abrir uma prévia." width="100%">
 </p>
 
+- **Navegue por personagem e lugar.** As imagens são organizadas em personagens, lugares, telas e documentos, com um cartão por nome. Abra um cartão para ver os designs de um personagem e as cenas em que ele aparece, ou todas as imagens de um lugar.
 - **Encontre uma imagem** por um detalhe ou comentário de que você se lembra, como “noite chuvosa” ou “melhor rosto”.
 - **Mantenha uma imagem de referência à mão.** Abra a imagem e marque **Send every turn** (Enviar a cada turno).
 - **Escolha as imagens manualmente.** Desative **Auto-select** (Seleção automática) e escolha quais imagens vão junto com a próxima mensagem.
@@ -57,7 +58,11 @@ O plugin roda localmente. As imagens originais e o histórico da conversa ficam 
 
 ## Como testamos
 
-No Codex, uma conversa com nove quadros-chave chegou a 42,4 MB, e o envio falhou depois de reiniciar o agente ou compactar a conversa. Com o plugin, as mesmas solicitações ficaram com 0,12 MB. Consulte o [comparativo no Codex](eval/README.md) e o [comparativo de uma tarefa longa no Claude Code](eval/long-task/README.md) para ver os resultados e como reproduzi-los. Os dois estão em inglês.
+No Codex, uma conversa com nove quadros-chave chegou a 42,4 MB, e o envio falhou depois de reiniciar o agente ou compactar a conversa. Com o plugin, as mesmas solicitações ficaram com 0,12 MB.
+
+No Claude Code com o Sonnet, compactamos uma tarefa de curta-metragem de 16 turnos, com imagens que existem só na conversa, e depois fizemos perguntas sobre essas imagens. Com o plugin, ele acertou as 20 perguntas; sem o plugin, acertou 8. O custo foi praticamente o mesmo.
+
+Consulte o [comparativo no Codex](eval/README.md), o [comparativo de compactação no Claude Code](eval/compaction/README.md) e o [comparativo de uma tarefa longa no Claude Code](eval/long-task/README.md) para ver os resultados e como reproduzi-los. Todos estão em inglês.
 
 ## Design: preservar o cache
 

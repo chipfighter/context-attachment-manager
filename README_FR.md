@@ -45,6 +45,7 @@ Redémarrez ensuite l’agent. Dans Claude Desktop, ouvrez une nouvelle session 
   <img src="docs/images/hero.png" alt="Le panneau permet de gérer automatiquement les images précédentes, de les retrouver à partir d’un détail et de les prévisualiser." width="100%">
 </p>
 
+- **Parcourez par personnage et par lieu.** Les images sont rangées en personnages, lieux, écrans et documents, avec une carte par nom. Ouvrez une carte pour voir les planches d’un personnage et les plans où il apparaît, ou toutes les images d’un lieu.
 - **Retrouvez une image** à partir d’un détail ou d’un commentaire dont vous vous souvenez, comme « nuit pluvieuse » ou « meilleur visage ».
 - **Gardez une image de référence.** Ouvrez l’image et cochez **Send every turn** pour l’envoyer avec chaque message.
 - **Choisissez vous-même les images.** Désactivez **Auto-select**, puis sélectionnez les images à joindre à votre prochain message.
@@ -57,7 +58,11 @@ Le plugin s’exécute localement. Vos images d’origine et l’historique de v
 
 ## Résultats des tests
 
-Dans Codex, une conversation contenant neuf images clés a atteint 42,4 Mo. L’envoi échouait après un redémarrage ou une compression de la conversation. Avec le plugin, les mêmes requêtes ne pesaient que 0,12 Mo. Les résultats et les étapes pour reproduire les tests sont disponibles en anglais dans le [comparatif Codex](eval/README.md) et le [comparatif sur les tâches longues dans Claude Code](eval/long-task/README.md).
+Dans Codex, une conversation contenant neuf images clés a atteint 42,4 Mo. L’envoi échouait après un redémarrage ou une compression de la conversation. Avec le plugin, les mêmes requêtes ne pesaient que 0,12 Mo.
+
+Dans Claude Code avec Sonnet, nous avons compressé une tâche de court métrage de 16 tours, dont les images n’existent que dans la conversation, puis posé des questions sur ces images. Avec le plugin, il a répondu juste aux 20 questions ; sans le plugin, à 8 sur 20. Le coût était presque le même.
+
+Les résultats et les étapes pour reproduire les tests sont disponibles en anglais dans le [comparatif Codex](eval/README.md), le [comparatif sur la compression dans Claude Code](eval/compaction/README.md) et le [comparatif sur les tâches longues dans Claude Code](eval/long-task/README.md).
 
 ## Conception : préserver le cache
 

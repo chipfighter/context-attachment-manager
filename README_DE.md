@@ -45,6 +45,7 @@ Starte den Agenten danach neu. In Claude Desktop genügt es, eine neue Code-Sitz
   <img src="docs/images/hero.png" alt="Im Panel kannst du frühere Bilder automatisch verwalten, sie anhand eines Details suchen und in einer Vorschau ansehen." width="100%">
 </p>
 
+- **Nach Figur und Ort durchsuchen.** Bilder werden nach Figuren, Orten, Bildschirmen und Dokumenten sortiert, mit einer Karte pro Name. Öffne eine Karte, um die Entwürfe einer Figur und die Einstellungen zu sehen, in denen sie vorkommt, oder alle Bilder eines Orts.
 - **Finde ein Bild** anhand eines Details oder Kommentars, an den du dich erinnerst, etwa „regnerische Nacht“ oder „bestes Gesicht“.
 - **Halte ein Referenzbild griffbereit.** Öffne das Bild und aktiviere **Send every turn**, um es mit jeder Nachricht mitzusenden.
 - **Wähle Bilder selbst aus.** Schalte **Auto-select** aus und wähle die Bilder für deine nächste Nachricht.
@@ -57,7 +58,11 @@ Das Plugin läuft lokal. Deine Originalbilder und der Chatverlauf bleiben auf de
 
 ## Ergebnisse der Tests
 
-In Codex wuchs ein Chat mit neun Keyframes auf 42,4 MB an. Nach einem Neustart oder einer Komprimierung des Chats schlug das Senden fehl. Mit dem Plugin waren dieselben Anfragen nur 0,12 MB groß. Die Ergebnisse und die Schritte zum Nachstellen findest du im [Codex-Vergleich](eval/README.md) und im [Vergleich zu langen Aufgaben in Claude Code](eval/long-task/README.md) auf Englisch.
+In Codex wuchs ein Chat mit neun Keyframes auf 42,4 MB an. Nach einem Neustart oder einer Komprimierung des Chats schlug das Senden fehl. Mit dem Plugin waren dieselben Anfragen nur 0,12 MB groß.
+
+In Claude Code mit Sonnet haben wir eine Kurzfilm-Aufgabe über 16 Runden komprimiert, deren Bilder nur im Chat vorkommen, und danach Fragen zu diesen Bildern gestellt. Mit dem Plugin waren alle 20 Antworten richtig, ohne Plugin 8 von 20. Die Kosten waren fast gleich.
+
+Die Ergebnisse und die Schritte zum Nachstellen findest du im [Codex-Vergleich](eval/README.md), im [Vergleich zur Komprimierung in Claude Code](eval/compaction/README.md) und im [Vergleich zu langen Aufgaben in Claude Code](eval/long-task/README.md) auf Englisch.
 
 ## Design: Der Cache bleibt nutzbar
 

@@ -45,6 +45,7 @@ Then restart the agent (in Claude Desktop, start a new Code session). See [suppo
   <img src="docs/images/hero.png" alt="The panel: automatically manage earlier images, search by what you remember, and preview an image." width="100%">
 </p>
 
+- **Browse by character and place**: images are sorted into characters, places, screens and documents, with one card per name. Open a card to see a character's design images and the shots they appear in, or every image of a place.
 - **Find an image** by a detail or a comment you remember, like "rainy night" or "best face".
 - **Keep a reference in view**: open an image and check **Send every turn**.
 - **Choose images yourself**: turn off **Auto-select** and pick what goes with your next message.
@@ -57,7 +58,11 @@ The plugin runs locally. Your original images and chat history stay on your comp
 
 ## How we tested
 
-In Codex, a chat with nine keyframes grew to 42.4 MB and could not be sent after a restart or a compaction; with the plugin the same requests were 0.12 MB. See the [Codex comparison](eval/README.md) and [Claude Code long-task comparison](eval/long-task/README.md) for the results and reproduction steps.
+In Codex, a chat with nine keyframes grew to 42.4 MB and could not be sent after a restart or a compaction; with the plugin the same requests were 0.12 MB.
+
+In Claude Code on Sonnet, we ran a 16-turn short-film task whose images exist only in the conversation, compacted it, and then asked about the images. With the plugin it answered 20 of 20 questions correctly; without it, 8 of 20. The cost was about the same.
+
+See the [Codex comparison](eval/README.md), the [Claude Code compaction comparison](eval/compaction/README.md) and the [Claude Code long-task comparison](eval/long-task/README.md) for the results and reproduction steps.
 
 ## Design: keep the cache working
 
