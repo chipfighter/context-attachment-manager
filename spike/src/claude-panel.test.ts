@@ -73,7 +73,11 @@ test("the panel's data for a session: images, turns, title, the language", () =>
   assert.equal(body.lang, "zh");
 });
 
-test("v0.13: the panel's data carries the plugin's version and its updates; the switch and the seen note are saved", () => {
+test("v0.13: the panel's data carries the plugin's version and its updates; the switch and the seen note are saved", (t) => {
+  // The switch's default, whatever the machine running the tests set.
+  const saved = process.env.CAM_AUTO_UPDATE;
+  delete process.env.CAM_AUTO_UPDATE;
+  t.after(() => { if (saved !== undefined) process.env.CAM_AUTO_UPDATE = saved; });
   const { options } = setup();
   const withVersion = { ...options, version: "0.13.0" };
   const panel = get(`/__cam/claude/panel?session=${session}`, withVersion).body.update;
