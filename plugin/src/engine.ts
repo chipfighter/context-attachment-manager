@@ -9,11 +9,12 @@
 
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
+import { dataDir, proxyLogDirOf } from "./core/paths.ts";
 
 export const ENGINE_SERVICE = "codex-attachment-manager";
 export const DEFAULT_PORT = 17891;
@@ -117,15 +118,106 @@ export function shouldReplace(running: Health, own: { build: string | null; vers
   return newer > 0 || (force && newer === 0) || !running.build;
 }
 
-// Detached and hidden, so it outlives whoever asked for it (a plugin server instance, the CLI). Its working folder is
-// not the plugin's: Windows will not delete a folder a running process works in, and Codex replaces the plugin's
-// folder on every update and removes it on uninstall.
-function spawnEngine(port: number, extraArgs: string[] = [], dir = here) {
-  const child = spawn(process.execPath, [join(dir, "proxy.ts"), "--port", String(port), ...extraArgs], {
-    cwd: tmpdir(), detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"], windowsHide: true,
-  });
+// v0.11.6: Node's diagnostic report when the engine dies of something no handler can catch (out of memory, a native
+// crash), so such an end leaves a trace: in <data>/proxy/reports, without the environment (it may hold keys) and
+// network details. Only flags this Node knows, so an older one still starts the engine.
+export function reportFlags(root = dataDir()): string[] {
+  const known = process.allowedNodeEnvironmentFlags;
+  const wanted = ["--report-on-fatalerror", "--report-compact", "--report-exclude-env", "--report-exclude-network"];
+  if (!wanted.every((flag) => known.has(flag)) || !known.has("--report-directory")) return [];
+  return [...wanted, `--report-directory=${join(proxyLogDirOf(root), "reports")}`];
+}
+
+// A Windows command line from arguments (the rules CommandLineToArgvW reads back).
+export const windowsCommandLine = (args: string[]): string => args.map((arg) => (arg && !/[\s"]/.test(arg) ? arg : `"${arg.replace(/(\\*)"/g, "$1$1\\\"").replace(/(\\+)$/, "$1$1")}"`)).join(" ");
+
+// A started engine: its process id when known, whether it has already failed to start, and why it could not bind.
+type Started = { pid: number | null; failed: () => boolean; bindFailure: () => EngineBindFailure | undefined; release: () => void };
+
+// Hidden, and its working folder is not the plugin's: Windows will not delete a folder a running process works in, and
+// Codex replaces the plugin's folder on every update and removes it on uninstall.
+// v0.11.6, Windows: started through WMI (Win32_Process.Create), so the engine is not in the job of the process that
+// asked for it. Codex and Claude run each plugin service in a job that ends everything in it with the service, and the
+// engine one service started ended with it, cutting the requests in flight of every task and session (2026-11-22: 238
+// engines in a month ended that way or crashed, median life 4 minutes; the running one was in a job, its parent a
+// Codex plugin service). Outside the job, the engine ends as designed: when no Codex or Claude Code is left
+// (watchForClients). Where WMI cannot start it (no PowerShell, a security policy), it starts as before.
+// CAM_ENGINE_START=child: always as before. Elsewhere: detached, so it outlives whoever asked for it.
+async function startEngine(port: number, extraArgs: string[] = [], dir = here): Promise<Started> {
+  const args = [...reportFlags(), join(dir, "proxy.ts"), "--port", String(port), ...extraArgs];
+  if (process.platform === "win32" && process.env.CAM_ENGINE_START !== "child" && !wmiFailed) {
+    const pid = await startOutsideJob([process.execPath, ...args], tmpdir());
+    if (pid !== null) {
+      const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+      return { pid, failed: () => !alive(), bindFailure: () => readStartFailure(pid), release: () => {} };
+    }
+  }
+  const child = spawn(process.execPath, args, { cwd: tmpdir(), detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"], windowsHide: true });
   child.unref();
-  return child;
+  let spawnFailed = false;
+  let bindFailure: EngineBindFailure | undefined;
+  child.on("error", () => { spawnFailed = true; });
+  child.on("message", (message) => { bindFailure = message as EngineBindFailure; });
+  return { pid: child.pid ?? null, failed: () => spawnFailed, bindFailure: () => bindFailure, release: () => { if (child.connected) child.disconnect(); } };
+}
+
+// Set once a WMI start did not give an engine (or could not run): this process starts engines the old way from then on.
+let wmiFailed = false;
+
+// The new process gets this process's environment explicitly (WMI would give it the user's default one), on stdin, not
+// on a command line. Resolves with its process id, or null when it could not be started this way.
+export function startOutsideJob(commandLine: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<number | null> {
+  const quote = (text: string) => `'${text.replaceAll("'", "''")}'`;
+  const vars = Object.entries(env).filter(([, value]) => value !== undefined).map(([name, value]) => `${name}=${value}`);
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    `$vars = ConvertFrom-Json ${quote(JSON.stringify(vars))}`,
+    "$startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0; EnvironmentVariables = [string[]]$vars }",
+    `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = ${quote(windowsCommandLine(commandLine))}; CurrentDirectory = ${quote(cwd)}; ProcessStartupInformation = $startup }`,
+    "Write-Output \"started $($r.ReturnValue) $($r.ProcessId)\"",
+    "",
+  ].join("\n");
+  return new Promise((resolve) => {
+    let out = "";
+    let settled = false;
+    const done = (pid: number | null) => { if (settled) return; settled = true; clearTimeout(timer); if (pid === null) wmiFailed = true; resolve(pid); };
+    const shell = spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
+    const timer = setTimeout(() => { shell.kill(); done(null); }, 10_000);
+    shell.on("error", () => done(null));
+    shell.stdout.on("data", (chunk) => { out += chunk; });
+    shell.on("close", () => {
+      const match = /started (\d+) (\d+)/.exec(out);
+      done(match && match[1] === "0" && Number(match[2]) > 0 ? Number(match[2]) : null);
+    });
+    shell.stdin.on("error", () => {});
+    shell.stdin.end(script);
+  });
+}
+
+// v0.11.6: an engine started through WMI has no channel back; when it cannot bind its port it leaves the reason here
+// (proxy.ts), for `cam install` to say.
+export const startFailureFile = (root = dataDir()) => join(root, "state", "engine-start-failure.json");
+function readStartFailure(pid: number): EngineBindFailure | undefined {
+  try {
+    const failure = JSON.parse(readFileSync(startFailureFile(), "utf8"));
+    return failure?.pid === pid ? { port: failure.port, host: failure.host, code: failure.code } : undefined;
+  } catch { return undefined; }
+}
+
+// v0.11.6: one engine start at a time across processes (Codex starts several plugin services at once, and a WMI start
+// takes a second): the others wait for the engine the first one starts. A lock older than 20 s is left over.
+function takeStartLock(): (() => void) | null {
+  const file = join(dataDir(), "state", "engine-start.lock");
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, String(process.pid), { flag: "wx" });
+    return () => { try { unlinkSync(file); } catch { /* gone */ } };
+  } catch {
+    try {
+      if (Date.now() - statSync(file).mtimeMs > 20_000) { unlinkSync(file); writeFileSync(file, String(process.pid), { flag: "wx" }); return () => { try { unlinkSync(file); } catch { /* gone */ } }; }
+    } catch { /* another process took it */ }
+    return null;
+  }
 }
 
 // An engine from v0.1-3 on stops listening at once and exits after its open requests; an older one does not know the
@@ -164,22 +256,35 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
     for (let i = 0; i < 20 && (await engineHealth(port, 300))?.pid === existing.pid; i++) await sleep(150);
     replaced = existing;
   }
-  const child = spawnEngine(port, options.extraArgs, dir);
-  let spawnFailed = false;
-  let bindFailure: EngineBindFailure | undefined;
-  child.on("error", () => { spawnFailed = true; });
-  child.on("message", (message) => { bindFailure = message as EngineBindFailure; });
+  const deadline = Date.now() + (options.waitMs ?? 8000);
+  // v0.11.6: another process is starting one right now: wait for it instead of starting a second.
+  const unlock = takeStartLock();
+  if (!unlock) {
+    while (Date.now() < deadline) {
+      await sleep(250);
+      const health = await engineHealth(port);
+      if (health && health.pid !== replaced?.pid) return { state: "running", health, replaced };
+    }
+    return { state: "failed", health: null, replaced };
+  }
+  let started: Started | null = null;
   try {
-    const deadline = Date.now() + (options.waitMs ?? 8000);
+    started = await startEngine(port, options.extraArgs, dir);
+    let viaWmi = process.platform === "win32" && started.pid !== null && !wmiFailed && process.env.CAM_ENGINE_START !== "child";
     while (Date.now() < deadline) {
       await sleep(150);
       const health = await engineHealth(port);
       if (health && health.pid !== replaced?.pid) return { state: replaced ? "replaced" : "started", health, replaced };
-      if (bindFailure || spawnFailed) break;
+      if (started.bindFailure() || started.failed()) {
+        // An engine WMI started that died at once (a policy ending it): this process starts them as before from now on.
+        if (viaWmi && !started.bindFailure()) { wmiFailed = true; viaWmi = false; started.release(); started = await startEngine(port, options.extraArgs, dir); continue; }
+        break;
+      }
     }
-    return { state: "failed", health: null, replaced, bindFailure };
+    return { state: "failed", health: null, replaced, bindFailure: started.bindFailure() };
   } finally {
-    if (child.connected) child.disconnect();
+    started?.release();
+    unlock();
   }
 }
 

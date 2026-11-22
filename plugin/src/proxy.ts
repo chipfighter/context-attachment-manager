@@ -43,7 +43,7 @@ import { migrateDataOnce } from "./core/migrate-data.ts";
 import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./core/paths.ts";
 import { recordRequest } from "./core/request-stats.ts";
 import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./core/routes.ts";
-import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, probeEngine, versionOf, watchForClients, type EngineBindFailure } from "./engine.ts";
+import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, probeEngine, startFailureFile, versionOf, watchForClients, type EngineBindFailure } from "./engine.ts";
 import { currentLang } from "./adapters/codex/language.ts";
 import { say } from "./core/messages.ts";
 import { headerOf } from "./core/platform.ts";
@@ -660,6 +660,11 @@ async function main(): Promise<void> {
     const failure = await listen(host, listenPort);
     if (!failure) continue;
     log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: `port ${listenPort} unavailable on ${host}`, code: failure.code });
+    // v0.11.6: an engine started through WMI (engine.ts) has no channel back: the reason goes into a file too.
+    try {
+      mkdirSync(join(dataDir(), "state"), { recursive: true });
+      writeFileSync(startFailureFile(), JSON.stringify({ pid: process.pid, ...failure, at: new Date().toISOString() }));
+    } catch { /* the plugin service says only that the engine did not start */ }
     if (process.send && process.connected) process.send(failure, () => process.exit(1));
     else process.exit(1);
     return;
