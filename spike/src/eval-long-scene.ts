@@ -181,12 +181,16 @@ function grainOf(key: string): () => number {
 }
 const finish = (rgb: Rgb, grain: () => number): Rgb => [rgb[0], rgb[1], rgb[2]].map((value) => Math.max(0, Math.min(255, Math.round(value + grain())))) as Rgb;
 const cornerOf = (key: string) => hashOf(`${key}#corner`) % 4;
+// v0.12 (eval-v12.ts): drawn `scale` times as large, the sizes real tools output: each point of the picture a block of
+// pixels, each pixel with its own grain, so the file is about as large as a real one. At 1, eval-long.ts's images.
+const scaled = (W: number, H: number, scale: number, pixel: (x: number, y: number) => Rgb) =>
+  scale === 1 ? png(W, H, pixel) : png(Math.round(W * scale), Math.round(H * scale), (x, y) => pixel(Math.floor(x / scale), Math.floor(y / scale)));
 
-function drawKeyframe(image: Extract<Image, { kind: "keyframe" }>): Buffer {
+function drawKeyframe(image: Extract<Image, { kind: "keyframe" }>, scale = 1): Buffer {
   const W = 512, H = 768;
   const grain = grainOf(image.key);
   const mark = cornerMark(image.number, cornerOf(image.key), W, H);
-  return png(W, H, (x, y) => {
+  return scaled(W, H, scale, (x, y) => {
     let rgb = (image.who ? person(image.who, image.size, image.variant, x, y) : null) ?? backdrop(image.place, x, y, W, H);
     if (image.variant.tint === "warm") rgb = [rgb[0] + 38, rgb[1] + 12, rgb[2] - 28];
     if (image.variant.tint === "cool") rgb = [rgb[0] - 28, rgb[1] + 2, rgb[2] + 38];
@@ -196,12 +200,12 @@ function drawKeyframe(image: Extract<Image, { kind: "keyframe" }>): Buffer {
 }
 
 // Front, side and back of one character on a grey sheet; the second version of a sheet adds a yellow belt.
-function drawSheet(image: Extract<Image, { kind: "sheet" }>): Buffer {
+function drawSheet(image: Extract<Image, { kind: "sheet" }>, scale = 1): Buffer {
   const W = 768, H = 512;
   const grain = grainOf(image.key);
   const mark = cornerMark(image.number, cornerOf(image.key), W, H);
   const look = LOOK[image.who];
-  return png(W, H, (x, y) => finish(mark(x, y, sheetAt(x, y)), grain));
+  return scaled(W, H, scale, (x, y) => finish(mark(x, y, sheetAt(x, y)), grain));
   function sheetAt(x: number, y: number): Rgb {
     for (const [view, cx] of [["front", 128], ["side", 384], ["back", 640]] as const) {
       const cy = 120, r = 38;
@@ -229,13 +233,13 @@ function drawSheet(image: Extract<Image, { kind: "sheet" }>): Buffer {
 // along the beach past the setting sun. `mark` is the frame the car is right under the lamp, or she covers the sun.
 export const carX = (frame: number, frames: number) => 100 + ((frame - 1) * (768 - 200)) / (frames - 1);
 export const walkerX = (frame: number, frames: number) => 700 - ((frame - 1) * 640) / (frames - 1);
-function drawFrame(image: Extract<Image, { kind: "frame" }>): Buffer {
+function drawFrame(image: Extract<Image, { kind: "frame" }>, scale = 1): Buffer {
   const W = 768, H = 512;
   const grain = grainOf(image.key);
   if (image.scene === "car") {
     const lamp = carX(image.mark, image.frames), cx = carX(image.frame, image.frames);
     // The car is narrower than one frame's step, so only one frame has it under the lamp.
-    return png(W, H, (x, y) => {
+    return scaled(W, H, scale, (x, y) => {
       if (inCircle(x, y, cx + 38, 395, 6) && x > cx + 32) return finish([250, 230, 120], grain);
       if (inCircle(x, y, cx - 24, 422, 10) || inCircle(x, y, cx + 24, 422, 10)) return finish([15, 15, 15], grain);
       if (Math.abs(x - cx) < 40 && y > 380 && y < 420) return finish([70, 72, 80], grain);
@@ -248,7 +252,7 @@ function drawFrame(image: Extract<Image, { kind: "frame" }>): Buffer {
     });
   }
   const sun = walkerX(image.mark, image.frames), cx = walkerX(image.frame, image.frames);
-  return png(W, H, (x, y) => {
+  return scaled(W, H, scale, (x, y) => {
     // Her head at y 250, in front of the sun; the sun is narrower than one frame's step.
     const her = person("her", "wide", { pos: "center" }, x - cx + 256, y + 310);
     if (her) return finish(her, grain);
@@ -259,12 +263,12 @@ function drawFrame(image: Extract<Image, { kind: "frame" }>): Buffer {
 }
 
 // A settings page: a top bar, a sidebar, and three rows (green, blue, orange dots) with a number each.
-function drawScreen(image: Extract<Image, { kind: "screen" }>): Buffer {
+function drawScreen(image: Extract<Image, { kind: "screen" }>, scale = 1): Buffer {
   const W = 768, H = 512;
   const grain = grainOf(image.key);
   const dots: Rgb[] = [[40, 170, 80], [50, 110, 220], [240, 140, 30]];
   const values = image.values.map((value, row) => glyphs(String(value), 470, 120 + row * 100 - 17, 5));
-  return png(W, H, (x, y) => {
+  return scaled(W, H, scale, (x, y) => {
     if (y < 44) return finish(x > 20 && x < 120 && y > 16 && y < 28 ? [200, 200, 205] : [45, 48, 55], grain);
     if (x < 150) return finish(x > 20 && x < 130 && (y - 70) % 60 < 22 && y < 380 ? [205, 207, 214] : [235, 236, 240], grain);
     if (x < 190 || x > 720 || y < 80 || y > 440) return finish([250, 250, 252], grain);
@@ -284,7 +288,7 @@ function drawScreen(image: Extract<Image, { kind: "screen" }>): Buffer {
 
 // A stick figure in black pen on white: one arm up (on the left of the picture), sitting on a chair, pointing to the
 // right, or jumping with both arms up.
-function drawSketch(image: Extract<Image, { kind: "sketch" }>): Buffer {
+function drawSketch(image: Extract<Image, { kind: "sketch" }>, scale = 1): Buffer {
   const W = 512, H = 512;
   const grain = grainOf(image.key);
   type Seg = [number, number, number, number];
@@ -297,21 +301,21 @@ function drawSketch(image: Extract<Image, { kind: "sketch" }>): Buffer {
     const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)));
     return Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)) < 3.5;
   };
-  return png(W, H, (x, y) => {
+  return scaled(W, H, scale, (x, y) => {
     const ring = Math.hypot(x - 256, y - 135);
     if ((ring > 38 && ring < 45) || body.some((seg) => near(x, y, seg))) return finish([25, 25, 25], grain);
     return finish([250, 250, 246], grain);
   });
 }
 
-export function draw(image: Image, images: Image[]): Buffer {
+export function draw(image: Image, images: Image[], scale = 1): Buffer {
   switch (image.kind) {
-    case "keyframe": return drawKeyframe(image);
-    case "sheet": return drawSheet(image);
-    case "frame": return drawFrame(image);
-    case "screen": return drawScreen(image);
-    case "sketch": return drawSketch(image);
-    case "resend": return draw(images.find((other) => other.key === image.of)!, images);
+    case "keyframe": return drawKeyframe(image, scale);
+    case "sheet": return drawSheet(image, scale);
+    case "frame": return drawFrame(image, scale);
+    case "screen": return drawScreen(image, scale);
+    case "sketch": return drawSketch(image, scale);
+    case "resend": return draw(images.find((other) => other.key === image.of)!, images, scale);
   }
 }
 

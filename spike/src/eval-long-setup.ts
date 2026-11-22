@@ -20,7 +20,8 @@ export const repo = resolve(here, "../..");
 export const evalRoot = join(repo, "local", "eval-long");
 // The eval's own Claude Code configuration folder: sign in once with
 //   CLAUDE_CONFIG_DIR=<repo>/local/eval-long/claude claude auth login
-export const claudeConfigDir = join(evalRoot, "claude");
+// v0.12: CAM_EVAL_CLAUDE_CONFIG names another one, e.g. the main checkout's from a git worktree, whose local/ is empty.
+export const claudeConfigDir = process.env.CAM_EVAL_CLAUDE_CONFIG?.trim() || join(evalRoot, "claude");
 
 // The plugin files an arm runs: this checkout, or the v0.9.1 release extracted once.
 function sourceOf(arm: Exclude<Arm, "off">): string {
@@ -38,8 +39,8 @@ function sourceOf(arm: Exclude<Arm, "off">): string {
 }
 
 // A copy of an arm's plugin pointed at its own engine port and data folder; the model's text in Chinese, as the
-// conversation is.
-export function preparePlugin(arm: Exclude<Arm, "off">, port: number, data: string): string {
+// conversation is (v0.12: or in `lang`).
+export function preparePlugin(arm: Exclude<Arm, "off">, port: number, data: string, lang: "zh" | "en" = "zh"): string {
   const source = sourceOf(arm);
   const root = join(evalRoot, "plugins", `${arm}-${port}`);
   rmSync(root, { recursive: true, force: true });
@@ -48,7 +49,7 @@ export function preparePlugin(arm: Exclude<Arm, "off">, port: number, data: stri
   if (arm === "v0.9.1") cpSync(join(repo, "hooks", "register.js"), join(root, "hooks", "register.js"));
   const manifest = JSON.parse(readFileSync(join(source, ".claude-plugin", "plugin.json"), "utf8"));
   const server = manifest.mcpServers.codex_attachment_manager;
-  server.env = { ...server.env, CAM_ENGINE_PORT: String(port), CAM_DATA_DIR: data, CAM_LANG: "zh" };
+  server.env = { ...server.env, CAM_ENGINE_PORT: String(port), CAM_DATA_DIR: data, CAM_LANG: lang };
   mkdirSync(join(root, ".claude-plugin"), { recursive: true });
   writeFileSync(join(root, ".claude-plugin", "plugin.json"), JSON.stringify(manifest, null, 2));
   const register = join(root, "hooks", "register.js");
@@ -60,9 +61,9 @@ export function preparePlugin(arm: Exclude<Arm, "off">, port: number, data: stri
 
 // The arm's engine, started from its plugin copy (the plugin's own service then finds it running and keeps it), with
 // every request written to <data>/p2/requests for the counts in the report.
-export async function startEngine(root: string, port: number, data: string): Promise<ChildProcess> {
+export async function startEngine(root: string, port: number, data: string, lang: "zh" | "en" = "zh"): Promise<ChildProcess> {
   if (await engineHealth(port)) throw new Error(`port ${port} is in use`);
-  const env = { ...process.env, CAM_DATA_DIR: data, CAM_LANG: "zh", CLAUDE_CONFIG_DIR: claudeConfigDir };
+  const env = { ...process.env, CAM_DATA_DIR: data, CAM_LANG: lang, CLAUDE_CONFIG_DIR: claudeConfigDir };
   const engine = spawn(process.execPath, [join(root, "plugin", "src", "proxy.ts"), "--port", String(port), "--stay", "--dump-requests"], { env, stdio: "ignore", windowsHide: true });
   for (let i = 0; i < 50 && !(await engineHealth(port)); i++) await sleep(200);
   if (!(await engineHealth(port))) throw new Error(`the engine on ${port} did not start`);
