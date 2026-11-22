@@ -12,9 +12,11 @@ import zlib from "node:zlib";
 import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.ts";
 import { rewriteBody } from "../../plugin/src/adapters/codex/engine.ts";
 import { rewriteClaudeBody } from "../../plugin/src/adapters/claude/engine.ts";
+import { parseBody } from "../../plugin/src/core/engine/transport.ts";
 import { featureNote } from "../../plugin/src/core/words.ts";
 import { writeSelection } from "../../plugin/src/core/selection.ts";
-import { awaitingLine } from "../../plugin/src/core/session.ts";
+import { autoChoice, awaitingLine, missedLine } from "../../plugin/src/core/session.ts";
+import { addNotes } from "../../plugin/src/core/notes.ts";
 import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
 import { png } from "./testkit.ts";
@@ -98,8 +100,66 @@ test("Claude: an image before Claude Code's interruption mark goes out once more
   assert.equal(p1.length > 0, true);
 });
 
+// v0.12: Claude Code wrote a session's first message to its transcript only after the request (gate 1, 2026-11-22), so
+// its images went out without ids and the model wrote no lines for them.
+test("v0.12: images sent before the transcript had them go out once more in the next turn, the newest five", () => {
+  const colors = Array.from({ length: 7 }, (_, at) => png(4, 4, () => [30 * at, 90, 160]).toString("base64"));
+  const t = transcript();
+  t.prompt([...colors.map((bytes) => image(bytes)), text("look")]);
+  t.assistant(text("Seven images."));
+  t.prompt("next");
+  const index = buildClaudeIndex("s", t.records);
+  const missed = new Set(index.images.map((entry) => entry.contentId));
+  assert.deepEqual(index.images.map((entry) => missedLine(index, entry, 2, new Set([index.images[0].contentId]))), [true, false, false, false, false, false, false]);
+  // Only in the turn right after, and only without a line.
+  assert.equal(missedLine(index, index.images[0], 3, missed), false);
+  const lined = buildClaudeIndex("s", [...t.records.slice(0, -1)]);
+  addNotes(lined.notes, "[//]: # (cam IMG-001 其他:色块｜蓝)", 1);
+  assert.equal(missedLine(lined, lined.images[0], 2, missed), false);
+  // All seven missed: the newest five go out again, the other two become placeholders.
+  const choice = autoChoice(index, 2, {}, true, missed);
+  assert.deepEqual([...choice.awaiting], index.images.slice(2).map((entry) => entry.key));
+  assert.deepEqual([...choice.leaveOut], index.images.slice(0, 2).map((entry) => entry.key));
+  // Nothing missed: the turn's images are left out as before.
+  assert.equal(autoChoice(index, 2, {}, true).awaiting.size, 0);
+});
+
+test("v0.12, Claude: an image the engine sent without its id goes out once more, labelled", () => {
+  const t = transcript();
+  t.prompt([image(pngA), text("look")]);
+  t.assistant(text("A square."));
+  t.prompt("next");
+  const index = buildClaudeIndex("s", t.records);
+  const home = mkdtempSync(join(tmpdir(), "cam-missed-claude-"));
+  const dir = mkdtempSync(join(tmpdir(), "cam-missed-sel-"));
+  const session = "11111111-2222-4333-8444-5555555555c0";
+  mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+  writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), t.records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  writeSelection({ threadId: session, unchecked: {}, auto: true, autoAt: "2026-11-22T00:00:00Z", autoSince: "2026-11-22T00:00:00Z" }, dir);
+  const body = Buffer.from(JSON.stringify({ model: "claude-haiku-5-5", messages: [
+    { role: "user", content: [image(pngA), text("look")] },
+    { role: "assistant", content: [text("A square.")] },
+    { role: "user", content: [text("next")] },
+  ] }));
+  const labels = (out: { body: Buffer }) => (JSON.parse(out.body.toString("utf8")).messages as Json[]).flatMap((message) => (Array.isArray(message.content) ? message.content : [])).filter((block: Json) => block.type === "text" && /^\[图片 IMG-/.test(block.text)).map((block: Json) => block.text.split("｜")[0]);
+  const again = rewriteClaudeBody(body, undefined, session, dir, home, {}, null, [], "zh", new Set([index.images[0].contentId]));
+  assert.deepEqual(again.report.replaced, []);
+  assert.deepEqual(labels(again), ["[图片 IMG-001 已提供，还没有特征行"]);
+  // A note after the turn's own message names it, at the end of the request.
+  const sent = JSON.parse(again.body.toString("utf8")).messages as Json[];
+  assert.equal(sent.at(-1)?.role, "system");
+  assert.match(JSON.stringify(sent.at(-1)?.content), /特征行说明：IMG-001 在它们那一轮没有写上特征行/);
+  assert.equal(sent.at(-2)?.content?.[0]?.text, "next");
+  const usual = rewriteClaudeBody(body, undefined, session, dir, home, {}, null, [], "zh");
+  assert.deepEqual(usual.report.replaced.map((entry: Json) => entry.id), ["IMG-001"]);
+  // The engine hands over both (proxy.ts): the missed images and its one parse of the body (transport.ts parseBody).
+  // The body itself is not read again, so one that would not parse proves the parse was used.
+  const both = rewriteClaudeBody(Buffer.from("not json"), undefined, session, dir, home, {}, null, [], "zh", new Set([index.images[0].contentId]), parseBody(body, undefined).parsed!);
+  assert.deepEqual(labels(both), ["[图片 IMG-001 已提供，还没有特征行"]);
+});
+
 test("the feature line note says how to write a missing line and how to correct a wrong one", () => {
-  assert.match(featureNote("zh"), /标着“\[图片 IMG-xxx 已提供，还没有特征行…\]”的图，是之前那一轮被打断、没来得及写特征行的/);
+  assert.match(featureNote("zh"), /标着“\[图片 IMG-xxx 已提供，还没有特征行…\]”的图，是之前那一轮没来得及写特征行的/);
   assert.match(featureNote("zh"), /开头加“更正：”/);
   assert.match(featureNote("en"), /"\[Image IMG-xxx included, no feature line yet…\]"/);
   assert.match(featureNote("en"), /starting with "corrected:"/);

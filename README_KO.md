@@ -45,6 +45,7 @@ https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md �
   <img src="docs/images/hero.png" alt="패널에서 이전 이미지를 자동으로 관리하고, 기억나는 특징으로 검색하고, 이미지를 미리 볼 수 있습니다." width="100%">
 </p>
 
+- **캐릭터와 장소별로 보기** — 이미지가 캐릭터, 장소, 화면, 문서로 나뉘고 이름마다 카드가 하나씩 만들어집니다. 카드를 열면 그 캐릭터의 설정화와 등장 컷, 또는 그 장소의 모든 이미지를 볼 수 있습니다.
 - **기억나는 단서로 이미지 찾기** — “비 오는 밤”이나 “얼굴이 가장 잘 나온 컷”처럼 기억나는 특징이나 의견으로 검색하세요.
 - **중요한 참고 이미지 고정하기** — 이미지를 열고 **Send every turn**(매번 보내기)을 선택하세요.
 - **보낼 이미지 직접 선택하기** — **Auto-select**(자동 선택)를 끈 다음, 다음 메시지에 포함할 이미지를 고르세요.
@@ -57,7 +58,11 @@ https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md �
 
 ## 테스트 결과
 
-Codex에서 키프레임 9개가 포함된 대화의 요청 크기가 42.4 MB까지 커졌고, Codex를 다시 시작하거나 대화를 압축한 뒤에는 요청을 전송할 수 없었습니다. 플러그인을 사용했을 때 같은 요청의 크기는 0.12 MB였습니다. 결과와 재현 방법은 [Codex 비교 테스트](eval/README.md)(영어)와 [Claude Code 장시간 작업 비교 테스트](eval/long-task/README.md)(영어)에서 확인할 수 있습니다.
+Codex에서 키프레임 9개가 포함된 대화의 요청 크기가 42.4 MB까지 커졌고, Codex를 다시 시작하거나 대화를 압축한 뒤에는 요청을 전송할 수 없었습니다. 플러그인을 사용했을 때 같은 요청의 크기는 0.12 MB였습니다.
+
+Claude Code(Sonnet)에서 이미지가 대화 안에만 있는 16턴짜리 단편 영상 작업을 압축한 뒤 그 이미지들에 대해 질문했습니다. 플러그인을 사용했을 때는 20문제를 모두 맞혔고, 사용하지 않았을 때는 8문제만 맞혔습니다. 비용은 거의 같았습니다.
+
+결과와 재현 방법은 [Codex 비교 테스트](eval/README.md)(영어), [Claude Code 압축 비교 테스트](eval/compaction/README.md)(영어), [Claude Code 장시간 작업 비교 테스트](eval/long-task/README.md)(영어)에서 확인할 수 있습니다.
 
 ## 설계: 캐시를 최대한 유지하기
 

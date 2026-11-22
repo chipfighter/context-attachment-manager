@@ -13,7 +13,10 @@
 // Thread P (user 2026-10-21): uploads whose file names and the user's words carry a scene number, a version and what the
 // image is for ("03场_书房_首帧_v2.png"), as in a user's MV task where GPT-6 copied them into the scene; the first part of
 // each feature line must be the place alone, the same place for the two images of the study.
-// Input: [--label name] [--lang zh|en] [--port 17893] [--threads F,K,P]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
+// Thread C (v0.12, docs/v0.12/plan.md §5 gate 1): one image per category, the user's words naming none: a heroine's
+// three views and her cat (characters, under the names the user gave), a keyframe of both (a place, listing both),
+// four screenshots (screen), a scanned contract page (document), a palette (other).
+// Input: [--label name] [--lang zh|en] [--port 17893] [--threads F,K,P,C]; CAM_TEST_MODEL, CAM_TEST_EFFORT.
 // Output: local/v08/features-<label>.json (synthetic images only).
 
 import { spawn } from "node:child_process";
@@ -27,9 +30,9 @@ import { engineHealth } from "../../plugin/src/engine.ts";
 import { languageFileOf } from "../../plugin/src/core/language.ts";
 import { rememberLang } from "../../plugin/src/adapters/codex/language.ts";
 import type { Lang } from "../../plugin/src/core/lang.ts";
-import { sceneOf } from "../../plugin/src/core/notes.ts";
+import { lineParts } from "../../plugin/src/core/notes.ts";
 import { loadThreadIndex } from "../../plugin/src/adapters/codex/thread-index.ts";
-import { archiveThreads, CORNER_IMAGES, png, runTurn, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
+import { archiveThreads, CATEGORY_IMAGES, CORNER_IMAGES, png, runTurn, TEST_EFFORT, TEST_MODEL, text } from "./testkit.ts";
 
 type Json = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -76,6 +79,13 @@ const SCRIPT = {
     notPlace: /\d|场|帧|线稿|草图|检查|参考|版/,
     // An acknowledgement such as "记下了" (sol, 2026-10-19) counts as mentioning the noting.
     talksAboutIt: /记录|记下|记住|已记|之后会参考|以后会参考|后续参考|会按这|特征行|cam\b|\[\/\/\]/,
+    // Thread C (v0.12): the user's words never name a category.
+    heroine: "林夏", pet: "阿橘",
+    castTurn: "这是女主角林夏的三视图，还有她养的猫，叫阿橘。简单看一下。",
+    shotTurn: "第一镜：林夏抱着阿橘站在书房窗边。这是生成的关键帧，简单看一下。",
+    screensTurn: "我在电脑的系统设置里调网络，这是一步步操作的四张截图，最后停在哪一步？",
+    documentTurn: "这是租房合同扫描件的第 3 页，红章盖在哪里？",
+    paletteTurn: "这是这部片子的色板，简单看一下。",
   },
   en: {
     name: (label: string, thread: string) => `[CAM test] feature line self-test ${thread} ${label}`,
@@ -95,6 +105,12 @@ const SCRIPT = {
     sketchAndStreet: "Here is the sketch of the same study scene, version 3, and the last frame outside the café, version 1. Take a quick look.",
     notPlace: /\d|scene|frame|sketch|draft|check|reference|version|\bv\d/i,
     talksAboutIt: /\bnot(?:e|ing)\b.*\b(?:line|feature|record)|feature line|record line|\bnoted\b|\bin mind\b|\bremember|refer to (?:this|it|these|them) later|\bcam\b|\[\/\/\]/i,
+    heroine: "Lin Xia", pet: "Mochi",
+    castTurn: "These are the three views of the heroine, Lin Xia, and her cat, Mochi. Take a quick look.",
+    shotTurn: "Shot 1: Lin Xia holds Mochi by the window of the study. This is the generated keyframe; take a quick look.",
+    screensTurn: "I was changing the network in my computer's settings; these are four screenshots, one per step. Which step did I stop at?",
+    documentTurn: "This is page 3 of the scanned lease. Where is the red stamp?",
+    paletteTurn: "This is the color palette of the film. Take a quick look.",
   },
 };
 
@@ -108,7 +124,7 @@ async function main(): Promise<void> {
   const label = option("--label", "run1");
   const lang: Lang = option("--lang", "zh") === "en" ? "en" : "zh";
   const port = Number(option("--port", "17893"));
-  const only = option("--threads", "F,K,P").split(",");
+  const only = option("--threads", "F,K,P,C").split(",");
   const words = SCRIPT[lang];
   const root = join(localRoot, "v08");
   const data = join(root, `data-${label}`);
@@ -120,6 +136,7 @@ async function main(): Promise<void> {
   writeFileSync(join(work, "f.png"), closeUp());
   // Thread P: three different images under the bait names (the same bytes twice would be a duplicate).
   [medium(), closeUp(), CORNER_IMAGES["a.png"]()].forEach((bytes, i) => writeFileSync(join(work, words.baitFiles[i]), bytes));
+  for (const [name, draw] of Object.entries(CATEGORY_IMAGES)) writeFileSync(join(work, name), draw());
   // What the panel would have told the plugin: Codex shows this language.
   rememberLang(lang, "codex", languageFileOf(data));
   const sessionsDir = join(codexHome(), "sessions");
@@ -212,6 +229,16 @@ async function main(): Promise<void> {
         turns.sketchAndStreet = await turn(id, words.sketchAndStreet, words.baitFiles.slice(1));
         return { threadId: id, turns, ...notesOf(id) };
       },
+      C: async () => {
+        const id = await start("C");
+        const turns: Json = {};
+        turns.cast = await turn(id, words.castTurn, ["linxia_sheet.png", "cat.png"]);
+        turns.shot = await turn(id, words.shotTurn, ["shot01.png"]);
+        turns.screens = await turn(id, words.screensTurn, ["settings_1.png", "settings_2.png", "settings_3.png", "settings_4.png"]);
+        turns.document = await turn(id, words.documentTurn, ["contract_p3.png"]);
+        turns.palette = await turn(id, words.paletteTurn, ["palette.png"]);
+        return { threadId: id, turns, ...notesOf(id) };
+      },
     };
     for (const name of only) if (threads[name]) result.threads[name] = await threads[name]();
   } finally {
@@ -223,7 +250,11 @@ async function main(): Promise<void> {
   const F = result.threads.F ?? null;
   const K = result.threads.K ?? null;
   const P = result.threads.P ?? null;
+  const C = result.threads.C ?? null;
   const idOf = (thread: Json, name: string) => (thread.images ?? []).find((image: Json) => image.name === name)?.id ?? null;
+  // v0.12: what a line says (core/notes.ts).
+  const partsOf = (thread: Json, name: string) => lineParts(thread.notes?.[idOf(thread, name) ?? ""]?.line ?? null);
+  const named = (parts: Json | null, name: string) => !!parts?.name && String(parts.name).includes(name);
   const lined = (thread: Json, id: string | null) => !!id && !!thread.notes?.[id]?.line;
   const rated = (thread: Json, id: string | null) => !!id && (thread.notes?.[id]?.ratings ?? []).length > 0;
   const replies = (thread: Json) => Object.values(thread.turns as Record<string, Json>);
@@ -254,9 +285,24 @@ async function main(): Promise<void> {
     } : {}),
     ...(P ? {
       pLinesForAll: words.baitFiles.every((name) => lined(P, idOf(P, name))),
-      // The place alone: no scene number, version or purpose from the file names or the user's words.
-      placesClean: words.baitFiles.every((name) => { const place = sceneOf(P.notes?.[idOf(P, name) ?? ""]?.line ?? null); return !!place && !words.notPlace.test(place); }),
-      samePlace: sceneOf(P.notes?.[idOf(P, words.baitFiles[0]) ?? ""]?.line ?? null) === sceneOf(P.notes?.[idOf(P, words.baitFiles[1]) ?? ""]?.line ?? null),
+      // The place alone: no scene number, version or purpose from the file names or the user's words. v0.12: as the
+      // name of a place.
+      placesClean: words.baitFiles.every((name) => { const parts = partsOf(P, name); return parts?.category === "place" && !!parts.name && !words.notPlace.test(parts.name); }),
+      samePlace: !!partsOf(P, words.baitFiles[0])?.name && partsOf(P, words.baitFiles[0])?.name === partsOf(P, words.baitFiles[1])?.name,
+    } : {}),
+    ...(C ? {
+      cLinesForAll: Object.keys(CATEGORY_IMAGES).every((name) => lined(C, idOf(C, name))),
+      // The heroine's three views and her cat are characters, under the names the user gave.
+      cSheetIsCharacter: partsOf(C, "linxia_sheet.png")?.category === "character" && named(partsOf(C, "linxia_sheet.png"), words.heroine),
+      cCatIsCharacter: partsOf(C, "cat.png")?.category === "character" && named(partsOf(C, "cat.png"), words.pet),
+      // The keyframe is a place, named without the shot number, with both characters listed.
+      cShotIsPlace: partsOf(C, "shot01.png")?.category === "place" && !!partsOf(C, "shot01.png")?.name && !words.notPlace.test(partsOf(C, "shot01.png")!.name!),
+      cShotLists: [words.heroine, words.pet].every((name) => (partsOf(C, "shot01.png")?.characters ?? []).some((listed: string) => listed.includes(name))),
+      cScreens: ["settings_1.png", "settings_2.png", "settings_3.png", "settings_4.png"].every((name) => partsOf(C, name)?.category === "screen"),
+      cDocument: partsOf(C, "contract_p3.png")?.category === "document",
+      cPalette: partsOf(C, "palette.png")?.category === "other",
+      cQuiet: replies(C).every((t) => !words.talksAboutIt.test(t.visible ?? "")),
+      cRecordsFirst: replies(C).every((t) => !endsWithRecord(String(t.reply ?? ""))),
     } : {}),
   };
   mkdirSync(root, { recursive: true });

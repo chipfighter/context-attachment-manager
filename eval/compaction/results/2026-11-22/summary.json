@@ -1,0 +1,687 @@
+{
+  "label": "2026-11-22",
+  "rows": [
+    {
+      "arm": "off",
+      "forced": 1,
+      "compactions": [
+        {
+          "why": "threshold",
+          "afterTurn": 14,
+          "before": 110671
+        },
+        {
+          "why": "before the questions",
+          "afterTurn": 16,
+          "before": 26826
+        }
+      ],
+      "conversation": {
+        "right": 8,
+        "of": 20
+      },
+      "file": {
+        "right": 4,
+        "of": 4
+      },
+      "action": {
+        "right": 2,
+        "of": 2
+      },
+      "largest": 110671,
+      "perTurn": 52765,
+      "cacheShare": 93.3,
+      "costUsd": 3.1,
+      "weekly": {
+        "start": 0.03,
+        "end": 0.04
+      },
+      "fiveHour": {
+        "start": 0.26,
+        "end": 0.29
+      },
+      "curve": [
+        12574,
+        19370,
+        26169,
+        29251,
+        33945,
+        40849,
+        45244,
+        52129,
+        69542,
+        81006,
+        86036,
+        90737,
+        97560,
+        110671,
+        22323,
+        26826
+      ],
+      "fetches": 0
+    },
+    {
+      "arm": "v0.12",
+      "forced": 0,
+      "compactions": [
+        {
+          "why": "before the questions",
+          "afterTurn": 16,
+          "before": 37281
+        }
+      ],
+      "conversation": {
+        "right": 20,
+        "of": 20
+      },
+      "file": {
+        "right": 4,
+        "of": 4
+      },
+      "action": {
+        "right": 2,
+        "of": 2
+      },
+      "largest": 41859,
+      "perTurn": 27607,
+      "cacheShare": 82.1,
+      "costUsd": 3.012,
+      "weekly": {
+        "start": 0.03,
+        "end": 0.04
+      },
+      "fiveHour": {
+        "start": 0.26,
+        "end": 0.32
+      },
+      "curve": [
+        12430,
+        21422,
+        19494,
+        17086,
+        19504,
+        22890,
+        21801,
+        25156,
+        37471,
+        31371,
+        29051,
+        30088,
+        33444,
+        41364,
+        41859,
+        37281
+      ],
+      "fetches": 1
+    }
+  ],
+  "arms": [
+    {
+      "arm": "off",
+      "model": "claude-sonnet-5-5",
+      "effort": "medium",
+      "threshold": 100000,
+      "compactions": [
+        {
+          "why": "threshold",
+          "afterTurn": 14,
+          "before": 110671
+        },
+        {
+          "why": "before the questions",
+          "afterTurn": 16,
+          "before": 26826
+        }
+      ],
+      "answers": [
+        [
+          {
+            "key": "M1",
+            "kind": "conversation",
+            "expected": "s02_v1.png",
+            "verdict": "none",
+            "said": null,
+            "fetched": [],
+            "reads": 6,
+            "reply": "我在查第 2 镜哪一版偏暗，但摘要里没记这一点，那三张图也没存在文件夹里，工具又不会再显示，所以我现在没法确定。要是你想知道，可以把三张图发给我，我看完马上告诉你文件名。"
+          },
+          {
+            "key": "M2",
+            "kind": "conversation",
+            "expected": "s06_v1.png",
+            "verdict": "ambiguous",
+            "said": "s06_v1.png,s06_v4.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s06_v1.png(s06_v4.png 是它的复制版,也戴帽子)"
+          },
+          {
+            "key": "M3",
+            "kind": "conversation",
+            "expected": "93",
+            "verdict": "wrong",
+            "said": "1",
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。摘要里没有第 2 镜哪一版戴帽子，也没有角落数字的记录，那几张图又不在文件夹里，我没法再看。把图发给我，我就能读出来。"
+          },
+          {
+            "key": "M4",
+            "kind": "conversation",
+            "expected": "28",
+            "verdict": "wrong",
+            "said": "1",
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。摘要里没记下第 3 张截图的种子数值，那几张图我现在也看不到。你把截图重新发一次，我就能读出来。"
+          },
+          {
+            "key": "Q3",
+            "kind": "conversation",
+            "expected": "s03_v3.png",
+            "verdict": "right",
+            "said": "s03_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s03_v3.png"
+          },
+          {
+            "key": "Q4",
+            "kind": "conversation",
+            "expected": "s06_v3.png",
+            "verdict": "right",
+            "said": "s06_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s06_v3.png"
+          },
+          {
+            "key": "Q5",
+            "kind": "conversation",
+            "expected": "s09_v1.png",
+            "verdict": "right",
+            "said": "s09_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s09_v1.png"
+          },
+          {
+            "key": "Q6",
+            "kind": "conversation",
+            "expected": "s05_v3.png",
+            "verdict": "none",
+            "said": null,
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。摘要里没记第 5 镜哪一版男主站在右边,图我现在也看不到。"
+          },
+          {
+            "key": "Q8",
+            "kind": "file",
+            "expected": "clip1_06.png",
+            "verdict": "right",
+            "said": "clip1_06.png",
+            "fetched": [],
+            "reads": 8,
+            "reply": "clip1_06.png"
+          },
+          {
+            "key": "D1",
+            "kind": "file",
+            "expected": "左",
+            "verdict": "right",
+            "said": "左",
+            "fetched": [],
+            "reads": 0,
+            "reply": "左"
+          },
+          {
+            "key": "Q12",
+            "kind": "conversation",
+            "expected": "s05_v2.png",
+            "verdict": "right",
+            "said": "s05_v2.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s05_v2.png"
+          },
+          {
+            "key": "Q2",
+            "kind": "conversation",
+            "expected": "s03_v1.png",
+            "verdict": "none",
+            "said": null,
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。摘要里没记第 3 镜哪一版女主没打伞，图我现在也看不到。"
+          },
+          {
+            "key": "A1",
+            "kind": "action",
+            "expected": "s03_v3",
+            "verdict": "right",
+            "said": "s03_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "已生成 s03_v4.png:女主打着紫红色伞,红裙、黑长发,表情平静,雨夜光线偏暗,右下角有数字 64。"
+          }
+        ],
+        [
+          {
+            "key": "M1",
+            "kind": "conversation",
+            "expected": "s02_v1.png",
+            "verdict": "none",
+            "said": null,
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。第 2 镜三版哪一版偏暗，摘要里没记，那几张图现在也看不到。"
+          },
+          {
+            "key": "M2",
+            "kind": "conversation",
+            "expected": "s06_v1.png",
+            "verdict": "ambiguous",
+            "said": "s06_v1.png,s06_v4.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s06_v1.png(s06_v4.png 是它的复制版,也戴帽子)"
+          },
+          {
+            "key": "M3",
+            "kind": "conversation",
+            "expected": "93",
+            "verdict": "wrong",
+            "said": "1",
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。摘要里没记第 2 镜哪一版戴帽子,也没记角落里的数字,那几张图我现在也看不到。"
+          },
+          {
+            "key": "M4",
+            "kind": "conversation",
+            "expected": "28",
+            "verdict": "wrong",
+            "said": "1",
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。第 3 张截图的种子数值没有记录下来,图我现在也看不到。你重新发一次,我就能读出来。"
+          },
+          {
+            "key": "Q3",
+            "kind": "conversation",
+            "expected": "s03_v3.png",
+            "verdict": "right",
+            "said": "s03_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s03_v3.png"
+          },
+          {
+            "key": "Q4",
+            "kind": "conversation",
+            "expected": "s06_v3.png",
+            "verdict": "right",
+            "said": "s06_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s06_v3.png"
+          },
+          {
+            "key": "Q5",
+            "kind": "conversation",
+            "expected": "s09_v1.png",
+            "verdict": "right",
+            "said": "s09_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s09_v1.png"
+          },
+          {
+            "key": "Q6",
+            "kind": "conversation",
+            "expected": "s05_v3.png",
+            "verdict": "none",
+            "said": null,
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。第 5 镜哪一版男主站在右边,没有记录,图我现在也看不到。"
+          },
+          {
+            "key": "Q8",
+            "kind": "file",
+            "expected": "clip1_06.png",
+            "verdict": "right",
+            "said": "clip1_06.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "clip1_06.png"
+          },
+          {
+            "key": "D1",
+            "kind": "file",
+            "expected": "左",
+            "verdict": "right",
+            "said": "左",
+            "fetched": [],
+            "reads": 0,
+            "reply": "左"
+          },
+          {
+            "key": "Q12",
+            "kind": "conversation",
+            "expected": "s05_v2.png",
+            "verdict": "right",
+            "said": "s05_v2.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s05_v2.png"
+          },
+          {
+            "key": "Q2",
+            "kind": "conversation",
+            "expected": "s03_v1.png",
+            "verdict": "wrong",
+            "said": "s03_v4.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "我不知道。第 3 镜哪一版没打伞,没有记录,图我现在也看不到。只能确定 s03_v4.png 打了伞。"
+          },
+          {
+            "key": "A1",
+            "kind": "action",
+            "expected": "s03_v3",
+            "verdict": "right",
+            "said": "s03_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "这次返回的还是 s03_v4.png,和上一次完全一样,没有出新版本。图里女主仍打着紫红色伞,红裙、黑长发,右下角数字 64。"
+          }
+        ]
+      ]
+    },
+    {
+      "arm": "v0.12",
+      "model": "claude-sonnet-5-5",
+      "effort": "medium",
+      "threshold": 100000,
+      "compactions": [
+        {
+          "why": "before the questions",
+          "afterTurn": 16,
+          "before": 37281
+        }
+      ],
+      "answers": [
+        [
+          {
+            "key": "M1",
+            "kind": "conversation",
+            "expected": "s02_v1.png",
+            "verdict": "right",
+            "said": "s02_v1.png",
+            "fetched": [],
+            "reads": 1,
+            "reply": "s02_v1.png"
+          },
+          {
+            "key": "M2",
+            "kind": "conversation",
+            "expected": "s06_v1.png",
+            "verdict": "right",
+            "said": "s06_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s06_v1.png"
+          },
+          {
+            "key": "M3",
+            "kind": "conversation",
+            "expected": "93",
+            "verdict": "right",
+            "said": "93",
+            "fetched": [
+              [
+                "IMG-005"
+              ]
+            ],
+            "reads": 0,
+            "reply": "93"
+          },
+          {
+            "key": "M4",
+            "kind": "conversation",
+            "expected": "28",
+            "verdict": "right",
+            "said": "28",
+            "fetched": [],
+            "reads": 0,
+            "reply": "28"
+          },
+          {
+            "key": "Q3",
+            "kind": "conversation",
+            "expected": "s03_v3.png",
+            "verdict": "right",
+            "said": "s03_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s03_v3.png"
+          },
+          {
+            "key": "Q4",
+            "kind": "conversation",
+            "expected": "s06_v3.png",
+            "verdict": "right",
+            "said": "s06_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s06_v3.png"
+          },
+          {
+            "key": "Q5",
+            "kind": "conversation",
+            "expected": "s09_v1.png",
+            "verdict": "right",
+            "said": "s09_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s09_v1.png"
+          },
+          {
+            "key": "Q6",
+            "kind": "conversation",
+            "expected": "s05_v3.png",
+            "verdict": "right",
+            "said": "s05_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s05_v3.png"
+          },
+          {
+            "key": "Q8",
+            "kind": "file",
+            "expected": "clip1_06.png",
+            "verdict": "right",
+            "said": "clip1_06.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "clip1_06.png"
+          },
+          {
+            "key": "D1",
+            "kind": "file",
+            "expected": "左",
+            "verdict": "right",
+            "said": "左",
+            "fetched": [],
+            "reads": 0,
+            "reply": "左"
+          },
+          {
+            "key": "Q12",
+            "kind": "conversation",
+            "expected": "s05_v2.png",
+            "verdict": "right",
+            "said": "s05_v2.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s05_v2.png"
+          },
+          {
+            "key": "Q2",
+            "kind": "conversation",
+            "expected": "s03_v1.png",
+            "verdict": "right",
+            "said": "s03_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s03_v1.png"
+          },
+          {
+            "key": "A1",
+            "kind": "action",
+            "expected": "s03_v3",
+            "verdict": "right",
+            "said": "s03_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "新生成了 s03_v4.png，参考的是 s03_v3。构图和 v3 一致：女主居中、红裙黑长发、头顶紫红雨伞，右上有黄色灯光，雨丝还在。整体比 v3 偏暖，光比 v2 柔，没有黑帽。右下角有数字 64，可能是多余的。"
+          }
+        ],
+        [
+          {
+            "key": "M1",
+            "kind": "conversation",
+            "expected": "s02_v1.png",
+            "verdict": "right",
+            "said": "s02_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s02_v1.png"
+          },
+          {
+            "key": "M2",
+            "kind": "conversation",
+            "expected": "s06_v1.png",
+            "verdict": "right",
+            "said": "s06_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s06_v1.png"
+          },
+          {
+            "key": "M3",
+            "kind": "conversation",
+            "expected": "93",
+            "verdict": "right",
+            "said": "93",
+            "fetched": [],
+            "reads": 0,
+            "reply": "93"
+          },
+          {
+            "key": "M4",
+            "kind": "conversation",
+            "expected": "28",
+            "verdict": "right",
+            "said": "28",
+            "fetched": [],
+            "reads": 0,
+            "reply": "28"
+          },
+          {
+            "key": "Q3",
+            "kind": "conversation",
+            "expected": "s03_v3.png",
+            "verdict": "right",
+            "said": "s03_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s03_v3.png"
+          },
+          {
+            "key": "Q4",
+            "kind": "conversation",
+            "expected": "s06_v3.png",
+            "verdict": "right",
+            "said": "s06_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s06_v3.png"
+          },
+          {
+            "key": "Q5",
+            "kind": "conversation",
+            "expected": "s09_v1.png",
+            "verdict": "right",
+            "said": "s09_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s09_v1.png"
+          },
+          {
+            "key": "Q6",
+            "kind": "conversation",
+            "expected": "s05_v3.png",
+            "verdict": "right",
+            "said": "s05_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s05_v3.png"
+          },
+          {
+            "key": "Q8",
+            "kind": "file",
+            "expected": "clip1_06.png",
+            "verdict": "right",
+            "said": "clip1_06.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "clip1_06.png"
+          },
+          {
+            "key": "D1",
+            "kind": "file",
+            "expected": "左",
+            "verdict": "right",
+            "said": "左",
+            "fetched": [],
+            "reads": 0,
+            "reply": "左"
+          },
+          {
+            "key": "Q12",
+            "kind": "conversation",
+            "expected": "s05_v2.png",
+            "verdict": "right",
+            "said": "s05_v2.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s05_v2.png"
+          },
+          {
+            "key": "Q2",
+            "kind": "conversation",
+            "expected": "s03_v1.png",
+            "verdict": "right",
+            "said": "s03_v1.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "s03_v1.png"
+          },
+          {
+            "key": "A1",
+            "kind": "action",
+            "expected": "s03_v3",
+            "verdict": "right",
+            "said": "s03_v3.png",
+            "fetched": [],
+            "reads": 0,
+            "reply": "新生成了 s03_v4.png，参考的是 s03_v3。女主居中，红裙，黑长发，头顶紫红雨伞，右上有黄色灯光，背景有雨丝。头发看着偏深棕，嘴是一条平线。右下角有数字 64，可能是多余的。"
+          }
+        ]
+      ]
+    }
+  ]
+}

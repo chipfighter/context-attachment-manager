@@ -2,6 +2,51 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.12.0] - 2026-11-22
+
+The panel lets you browse images by character, place, screen and document. Long turns full of screenshots stay small, and image generation through a proxy no longer gets cut off.
+
+### New
+
+- **Browse by character and place.** The panel sorts images into Characters, Places, Screens, Documents and Other, with one card per name. A character's card shows their design images first, then the shots they appear in. A place's card shows every image of that place, and a screen's card groups screenshots by page. **Timeline** keeps the turn-by-turn list. A search shows matches from every category.
+- **The model names what each image shows.** When it first sees an image, the model starts the image's note with a category and a name, such as a character's name or a place. It also lists the characters in the picture, and it can cover a run of near-identical screenshots with one note. The panel sorts images by these notes, and after a compaction the model uses them to tell the images apart. Notes from earlier versions are still sorted.
+- **Long turns of screenshots.** When tools return many screenshots in one turn, as in computer use, the older ones in that turn become placeholders in batches of ten, and the newest five stay. The model can fetch any of them back.
+- **A tidier panel.** The request card is now one line at the bottom; click it for the details. Images are no longer grayed out when automatic selection is on. The preview has a **Copy ID** button.
+
+### Fixed
+
+- **Image generation through a proxy.** Some proxies close a connection that stays quiet for 60 seconds, which cut off long image generations and long thinking. The local proxy now keeps one HTTP/2 connection open to the service and pings it while it waits. Requests also start faster.
+- **The local proxy stays up.** On Windows it no longer stops when Codex closes the plugin's process. It also keeps running after unexpected errors, and Codex no longer starts extra copies of it when it is just busy.
+- **Images in a session's first message.** In Claude Code, these sometimes went out before Claude Code had saved them, so the model never noted them. The next turn now asks for their notes.
+- **Codex tasks with several branches.** After you went back to an earlier point in a Codex task, the panel could fail to load the task's images. It now finds the branch Codex is using. Thanks to [@IbukiFuko](https://github.com/IbukiFuko) for the fix ([#21](https://github.com/chipfighter/context-attachment-manager/pull/21)).
+
+### After updating
+
+- **Codex**: quit Codex first, then rerun the installer and start Codex again. This version changes how the local proxy starts. See the [update instructions](https://github.com/chipfighter/context-attachment-manager/blob/v0.12.0/INSTALL.md#update).
+- **Claude Desktop**: update the plugin and start a new Code session.
+- In tasks you already have, each image's placeholder changes once, because notes can now be a bit longer. The first message after the update is processed again from those images onward.
+
+### How we tested
+
+- **Compaction eval.** In Claude Code on Sonnet 5.5, we ran a 16-turn short-film task whose images exist only in the conversation, compacted it, and then asked about the images. With the plugin it got 20 of 20 right; without it, 8 of 20. Its largest request was 41,859 tokens instead of 110,671, at about the same cost. See the [compaction comparison](https://github.com/chipfighter/context-attachment-manager/blob/v0.12.0/eval/compaction/README.md).
+- **Notes in Claude Code.** Haiku 5.5 and Sonnet 5.5 wrote the new notes: a category and a name for every image, characters listed, ratings recorded. They also kept the notes out of their replies.
+- **Screenshots in one turn.** In Claude Code on Sonnet 5.5, the model paged through 25 screenshots in one turn. Every request was accepted, and each carried at most 14 originals from that turn. The model found the page it was asked about, and on the next turn it fetched an earlier screenshot back.
+- **Proxy.** We tested the HTTP/2 connection through a real proxy against both services. The connection survived 75 seconds of silence, and reusing it cut a request's start from 562 ms to 115 ms.
+- **Codex.** We could not run the Codex self-tests for this version, because our test quota had run out. The release checks cover plugin startup, installation, upgrade and removal on Windows, macOS and Linux.
+
+<details>
+<summary>Technical details</summary>
+
+- Feature lines: `[//]: # (cam IMG-015 place: rainy street | Lin Xia, ginger cat | medium shot, red umbrella)`. The categories are character, place, screen, document and other (in Chinese 角色、场景、界面、文档、其他). An id range (`IMG-020~IMG-034`) covers a run of screenshots. `lineParts` in `core/notes.ts` reads a line, and lines in the v0.8–v0.11 form are still read. Placeholders cut lines at 40 wide characters instead of 30.
+- Panel data: each image carries `group` (category, card, page, characters, run) instead of `scene`. The views and cards are built in `panel.html`.
+- Screenshots within a turn: `inTurnOut` in `core/session.ts` keeps the newest 5 tool images of the current turn and leaves out the older ones in batches of 10. Their placeholders say “this turn”, and in Claude a batch shares one note.
+- Late images: when the engine sends an image before the transcript has it (`lateContent`), it remembers the content for the session. The next turn sends the image once more as “included, no feature line yet”, with a note naming it; at most 5 images are sent this way.
+- Upstream (`core/engine/upstream.ts`): an HTTP/2 session per service with a PING every 15 seconds. A request known not to have reached the service is retried once, and a connection attempt times out after 20 seconds. A response cut off midway is not passed on as complete. Services that only speak HTTP/1.1 use the previous path; `CAM_UPSTREAM_H2=0` turns HTTP/2 off.
+- Engine lifecycle: writing logs and statistics no longer throws, and renames are retried on Windows. Uncaught errors are logged as `engine-error`, and the engine keeps running. A health check that times out while the port still accepts connections counts as busy, and only one process at a time may start the engine. Proxy settings are reread every minute. On Windows the engine starts through WMI (`Win32_Process.Create`), outside the plugin server's job object; `CAM_ENGINE_START=child` keeps the previous way. A request body is decoded and parsed once.
+- Codex branches (#21): when a thread has several latest rollout segments, the index reads `threads.rollout_path` from Codex's state database (`state_5.sqlite` under `sqlite_home`), read-only through `node:sqlite`, and follows that segment. If the lookup fails, the index reports the ambiguity as before.
+
+</details>
+
 ## [0.11.5] - 2026-11-20
 
 CAM reads Windows proxy settings without opening a terminal window.

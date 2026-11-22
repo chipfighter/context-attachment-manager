@@ -10,13 +10,13 @@ import test from "node:test";
 import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.ts";
 import { rewriteMessages } from "../../plugin/src/adapters/claude/claude-rewrite.ts";
 import { findImages, type ImageRef } from "../../plugin/src/adapters/protocols/openai-responses/images.ts";
-import { addNotes, notesBy, sceneOf, type Notes } from "../../plugin/src/core/notes.ts";
+import { addNotes, copyNotes, lineParts, notesBy, sceneOf, withoutRecords, type Notes } from "../../plugin/src/core/notes.ts";
 import { autoPlaceholder, clip, featureNote, plainPlaceholder, type Described } from "../../plugin/src/core/words.ts";
 import { rewriteItems } from "../../plugin/src/adapters/protocols/openai-responses/rewrite.ts";
 import { buildIndex, writesNotes, type Parsed } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { claudeTurnTexts } from "../../plugin/src/adapters/claude/panel.ts";
 import { loadPanelState } from "../../plugin/src/adapters/codex/panel.ts";
-import { panelStateOf } from "../../plugin/src/panel/panel-state.ts";
+import { groupOf, panelStateOf } from "../../plugin/src/panel/panel-state.ts";
 import { image, pngA, pngB, text, transcript } from "./claude-fixtures.ts";
 import { assistant, line, sampleSessions, THREAD, turn } from "./testfixtures.ts";
 import { png } from "./testkit.ts";
@@ -234,8 +234,9 @@ test("a subagent's model writes no feature lines; the user's own task does, also
   assert.equal(writesNotes(sessions, "01a15100-0000-7000-8000-000000000009"), true, "no rollout yet");
 });
 
-// The panel searches and groups by these and never shows them (docs/v0.8/plan.md).
-test("the panel's data: each image's scene and noted words, and per turn what was said, without the record lines", () => {
+// The panel searches and groups by these and never shows them (docs/v0.8/plan.md); v0.12: it groups by the category and
+// card, and shows the card's name.
+test("the panel's data: each image's group and noted words, and per turn what was said, without the record lines", () => {
   const long = "很长的一段话".repeat(60);
   const options = sampleSessions(
     turn("t3") +
@@ -244,8 +245,9 @@ test("the panel's data: each image's scene and noted words, and per turn what wa
     assistant(`[//]: # (cam IMG-001 深蓝雨夜｜近景，正脸)\n[//]: # (cam IMG-002 评价：太暗)\n\n明白。${long}`, "t3"),
   );
   const state = loadPanelState(THREAD, options);
-  assert.deepEqual(state.images.map((image) => [image.id, image.scene, image.search]), [
-    ["IMG-001", "深蓝雨夜", "深蓝雨夜｜近景，正脸"],
+  const place = { category: "place", card: "深蓝雨夜", part: null, page: null, characters: [], run: null };
+  assert.deepEqual(state.images.map((image) => [image.id, image.group, image.search]), [
+    ["IMG-001", place, "深蓝雨夜｜近景，正脸"],
     ["IMG-002", null, "太暗"],
     ["IMG-003", null, ""],
   ]);
@@ -264,7 +266,11 @@ test("the panel's data: each image's scene and noted words, and per turn what wa
   const index = buildClaudeIndex("s", t.records);
   assert.deepEqual(claudeTurnTexts(index.chain), { "1": "看这张 {\"file_path\":\"C:\\\\work\\\\b.png\"} A white room.", "2": "Too bright" });
   const claude = panelStateOf("s", index, new Set(), null, null, true, [], true, claudeTurnTexts(index.chain));
-  assert.deepEqual([claude.images[0].scene, claude.images[0].search], ["white room", "white room | wide shot"]);
+  assert.deepEqual([claude.images[0].group?.card, claude.images[0].search], ["white room", "white room | wide shot"]);
+  // v0.12: a line in the new form, and one of a run.
+  assert.deepEqual(groupOf({ line: "场景:书房｜林夏、阿橘｜中景", ratings: [] }), { category: "place", card: "书房", part: null, page: null, characters: ["林夏", "阿橘"], run: null });
+  assert.deepEqual(groupOf({ line: "界面:淘宝·订单页｜填地址", ratings: [], run: "IMG-020~IMG-023" }), { category: "screen", card: "淘宝", part: "订单页", page: null, characters: [], run: "IMG-020~IMG-023" });
+  assert.equal(groupOf(undefined), null);
 });
 
 test("v0.10: a correction replaces the feature line; a line under another numbering is translated or dropped", () => {
@@ -282,4 +288,64 @@ test("v0.10: a correction replaces the feature line; a line under another number
   addNotes(mapped, "[//]: # (cam IMG-001 书房｜窗边)\n[//]: # (cam IMG-002 评价：太暗)\n[//]: # (cam IMG-003 门口｜白天)", 7, (id) => ({ "IMG-001": "IMG-095", "IMG-002": "IMG-096" } as Record<string, string>)[id] ?? null);
   assert.deepEqual([...mapped.keys()], ["IMG-095", "IMG-096"]);
   assert.deepEqual(mapped.get("IMG-096")?.ratings, [{ turn: 7, text: "太暗" }]);
+});
+
+// v0.12 (docs/v0.12/plan.md §2): a feature line names its category and name, and may list the characters in the picture.
+test("feature lines: category, name, characters and features; the old form still counts", () => {
+  assert.deepEqual(lineParts("场景:雨夜街头｜林夏、阿橘｜中景，打红伞"), { category: "place", name: "雨夜街头", card: "雨夜街头", part: null, page: null, characters: ["林夏", "阿橘"], features: "中景，打红伞" });
+  assert.deepEqual(lineParts("角色：阿橘｜三视图，白底"), { category: "character", name: "阿橘", card: "阿橘", part: null, page: null, characters: [], features: "三视图，白底" });
+  assert.deepEqual(lineParts("界面:淘宝·订单页｜弹窗，地址未填"), { category: "screen", name: "淘宝·订单页", card: "淘宝", part: "订单页", page: null, characters: [], features: "弹窗，地址未填" });
+  assert.deepEqual(lineParts("文档:租房合同 第3页｜扫描件，红章"), { category: "document", name: "租房合同 第3页", card: "租房合同", part: null, page: 3, characters: [], features: "扫描件，红章" });
+  assert.deepEqual(lineParts("其他:色板｜五色，冷蓝调"), { category: "other", name: "色板", card: "色板", part: null, page: null, characters: [], features: "五色，冷蓝调" });
+  // English, with " | " between the parts; "none" lists nobody; a name list may use commas or "and".
+  assert.deepEqual(lineParts("place: rainy street | Lin Xia and the cat | medium shot, red umbrella"), { category: "place", name: "rainy street", card: "rainy street", part: null, page: null, characters: ["Lin Xia", "the cat"], features: "medium shot, red umbrella" });
+  assert.deepEqual(lineParts("screen: Settings - Network | none | Wi-Fi list")?.characters, []);
+  assert.equal(lineParts("screen: Settings - Network | none | Wi-Fi list")?.card, "Settings");
+  assert.equal(lineParts("document: Lease.pdf p. 12 | signature page")?.page, 12);
+  assert.equal(lineParts("document: Lease.pdf p. 12 | signature page")?.card, "Lease.pdf");
+  // The same name twice in the list counts once.
+  assert.deepEqual(lineParts("场景:书房｜林夏，林夏｜近景")?.characters, ["林夏"]);
+  // A screen or a document lists no characters: a third part is more features (Haiku 5.5, gate 1).
+  assert.deepEqual(lineParts("document: lease p. 3 | scanned, red stamp | page of dark lines"), { category: "document", name: "lease p. 3", card: "lease", part: null, page: 3, characters: [], features: "scanned, red stamp｜page of dark lines" });
+  assert.deepEqual(lineParts("界面:淘宝·订单页｜弹窗｜地址未填")?.characters, []);
+  // The v0.8–v0.11 form: a place, or what an image set nowhere is.
+  assert.deepEqual(lineParts("深蓝雨夜｜近景，正脸"), { category: "place", name: "深蓝雨夜", card: "深蓝雨夜", part: null, page: null, characters: [], features: "近景，正脸" });
+  assert.equal(lineParts("角色｜正面近景")?.category, "character");
+  assert.equal(lineParts("角色｜正面近景")?.name, null);
+  assert.deepEqual([lineParts("网页｜搜索结果")?.category, lineParts("文档｜第一页")?.category, lineParts("物品｜红伞")?.name, lineParts("多个地点｜九宫格")?.name], ["screen", "document", "物品", "分镜"]);
+  assert.deepEqual([lineParts("web page | results")?.category, lineParts("several places | grid")?.name, lineParts("object | umbrella")?.category], ["screen", "storyboard", "other"]);
+  // A colon after a word that is no category: the old form, a place.
+  assert.equal(lineParts("咖啡店:外景｜白天")?.name, "咖啡店:外景");
+  assert.equal(lineParts("咖啡店:外景｜白天")?.category, "place");
+  assert.equal(lineParts(null), null);
+  assert.equal(lineParts("  "), null);
+});
+
+test("one feature line for a run of screenshots: each image gets it, with the run", () => {
+  const notes = notesOf([
+    "[//]: # (cam IMG-020~IMG-023 界面:淘宝·订单页｜逐步填写地址)",
+    "[//]: # (cam IMG-030～032 界面:淘宝·支付页｜输入密码前)",
+    "[//]: # (cam IMG-040-IMG-041 界面:设置｜两张)",
+    "[//]: # (cam IMG-050~IMG-049 界面:倒过来｜只算第一张)",
+    "[//]: # (cam IMG-060~IMG-999 界面:太长｜只算第一张)",
+  ].join("\n"), 4);
+  assert.deepEqual([...notes.keys()], ["IMG-020", "IMG-021", "IMG-022", "IMG-023", "IMG-030", "IMG-031", "IMG-032", "IMG-040", "IMG-041", "IMG-050", "IMG-060"]);
+  assert.deepEqual(notes.get("IMG-022"), { line: "界面:淘宝·订单页｜逐步填写地址", ratings: [], run: "IMG-020~IMG-023" });
+  assert.equal(notes.get("IMG-031")?.run, "IMG-030~IMG-032");
+  assert.equal(notes.get("IMG-041")?.run, "IMG-040~IMG-041");
+  assert.deepEqual(notes.get("IMG-050"), { line: "界面:倒过来｜只算第一张", ratings: [] });
+  assert.deepEqual(notes.get("IMG-060"), { line: "界面:太长｜只算第一张", ratings: [] });
+  // A rating for the run goes to each; a correction of one image takes it out of the run.
+  addNotes(notes, "[//]: # (cam IMG-020~IMG-021 评价：太乱)\n[//]: # (cam IMG-023 更正：界面:淘宝·确认页｜提交前)", 5);
+  assert.deepEqual(notes.get("IMG-021")?.ratings, [{ turn: 5, text: "太乱" }]);
+  assert.deepEqual(notes.get("IMG-023"), { line: "界面:淘宝·确认页｜提交前", ratings: [] });
+  // The run stays through a copy and through what a placeholder shows.
+  assert.equal(copyNotes(notes).get("IMG-022")?.run, "IMG-020~IMG-023");
+  assert.equal(notesBy(notes.get("IMG-021"), 4)?.run, "IMG-020~IMG-023");
+  // The user does not see run lines either.
+  assert.equal(withoutRecords("[//]: # (cam IMG-020~IMG-023 界面:淘宝｜填地址)\n\n好了。"), "好了。");
+  // Ids a resumed transcript numbered from its own start are mapped one by one.
+  const mapped = new Map<string, Notes>();
+  addNotes(mapped, "[//]: # (cam IMG-001~IMG-003 界面:设置｜三张)", 2, (id) => (id === "IMG-002" ? null : id.replace("IMG-00", "IMG-09")));
+  assert.deepEqual([...mapped.keys()], ["IMG-091", "IMG-093"]);
 });

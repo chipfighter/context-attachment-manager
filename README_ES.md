@@ -45,6 +45,7 @@ Después, reinicia el agente. En Claude Desktop, inicia una nueva sesión de Cod
   <img src="docs/images/hero.png" alt="Panel para gestionar automáticamente las imágenes anteriores, buscarlas por detalles que recuerdes y abrir una vista previa." width="100%">
 </p>
 
+- **Explora por personaje y lugar.** Las imágenes se ordenan en personajes, lugares, pantallas y documentos, con una tarjeta por nombre. Abre una tarjeta para ver los diseños de un personaje y las tomas en las que aparece, o todas las imágenes de un lugar.
 - **Busca una imagen** por un detalle o un comentario que recuerdes, como «noche lluviosa» o «la mejor cara».
 - **Ten siempre a mano una imagen de referencia.** Ábrela y marca **Send every turn** (Enviar en cada turno).
 - **Elige las imágenes manualmente.** Desactiva **Auto-select** (Selección automática) y elige cuáles se enviarán con tu próximo mensaje.
@@ -57,7 +58,11 @@ El complemento se ejecuta localmente. Tus imágenes originales y el historial de
 
 ## Cómo lo probamos
 
-En Codex, una conversación con nueve fotogramas clave llegó a 42,4 MB y ya no se podía enviar después de reiniciar el agente o compactar la conversación. Con el complemento, las mismas solicitudes ocupaban 0,12 MB. Los resultados y los pasos para reproducirlos están en la [comparativa en Codex](eval/README.md) y la [comparativa de una tarea larga en Claude Code](eval/long-task/README.md), ambas en inglés.
+En Codex, una conversación con nueve fotogramas clave llegó a 42,4 MB y ya no se podía enviar después de reiniciar el agente o compactar la conversación. Con el complemento, las mismas solicitudes ocupaban 0,12 MB.
+
+En Claude Code con Sonnet, compactamos una tarea de un cortometraje de 16 turnos, con imágenes que solo existen en la conversación, y después preguntamos por esas imágenes. Con el complemento acertó las 20 preguntas; sin él, 8 de 20. El coste fue casi el mismo.
+
+Los resultados y los pasos para reproducirlos están en la [comparativa en Codex](eval/README.md), la [comparativa de compactación en Claude Code](eval/compaction/README.md) y la [comparativa de una tarea larga en Claude Code](eval/long-task/README.md), todas en inglés.
 
 ## Diseño: conservar la caché
 
