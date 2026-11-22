@@ -10,6 +10,7 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +21,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 // build and version are missing on engines from before v0.1-3.
 export type Health = { ok: true; service: string; pid: number; startedAt: string; port: number; build?: string | null; version?: string | null; routingVersion?: number; routingPort?: number };
-export type EngineState = "running" | "started" | "replaced" | "failed";
+// v0.11.6: "busy", an engine holds the port but did not answer in time; it is left alone (see probeEngine).
+export type EngineState = "running" | "started" | "replaced" | "failed" | "busy";
 export type EngineBindFailure = { port: number; host: string; code: string };
 
 export function isEngineHealth(value: unknown): value is Health {
@@ -38,6 +40,35 @@ export async function engineHealth(port = DEFAULT_PORT, timeoutMs = 800, client?
   } catch {
     return null;
   }
+}
+
+// v0.11.6: what answers on the port. A health check that times out does not prove the engine is gone: one busy for a
+// second (a large request being rewritten, a machine under load, or the asking process itself busy) answers late.
+// Starting another engine then only fails to bind (2026-11-22: about 1,800 such starts in a month, 574 of them ending
+// "port unavailable", several at once each time). "busy": the port takes connections (the system accepts them even
+// while the engine's own work holds it up) but no answer came in time, or the engine is still starting; "other":
+// something else answers there; "free": nothing listens.
+export type Probe = { kind: "engine"; health: Health } | { kind: "busy" } | { kind: "other" } | { kind: "free" };
+export async function probeEngine(port = DEFAULT_PORT, timeoutMs = 800, client?: string): Promise<Probe> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/__cam/health`, { signal: AbortSignal.timeout(timeoutMs), ...(client ? { headers: { "x-cam-client": client } } : {}) });
+    // An engine answers 503 until both its ports are bound.
+    if (response.status === 503) return { kind: "busy" };
+    const body = await response.json().catch(() => null);
+    return isEngineHealth(body) ? { kind: "engine", health: body } : { kind: "other" };
+  } catch {
+    return (await portOpen(port, 300)) ? { kind: "busy" } : { kind: "free" };
+  }
+}
+
+export function portOpen(port: number, timeoutMs = 300): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: "127.0.0.1", port });
+    const done = (open: boolean) => { clearTimeout(timer); socket.destroy(); resolve(open); };
+    const timer = setTimeout(() => done(false), timeoutMs);
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
 }
 
 // Which code a runtime folder holds: a hash of its .ts files, subfolders included (v0.11), line endings normalised (a
@@ -113,10 +144,15 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // The build of each runtime folder, read again once for every different build a running engine reports.
 const knownBuilds = new Map<string, { build: string | null; against: string | null | undefined }>();
 
-export async function ensureEngine(options: { port?: number; waitMs?: number; extraArgs?: string[]; dir?: string; force?: boolean; client?: string } = {}): Promise<{ state: EngineState; health: Health | null; replaced?: Health; bindFailure?: EngineBindFailure }> {
+export async function ensureEngine(options: { port?: number; waitMs?: number; extraArgs?: string[]; dir?: string; force?: boolean; client?: string; patienceMs?: number } = {}): Promise<{ state: EngineState; health: Health | null; replaced?: Health; bindFailure?: EngineBindFailure }> {
   const port = options.port ?? DEFAULT_PORT;
   const dir = options.dir ?? here;
-  const existing = await engineHealth(port, 800, options.client);
+  let probe = await probeEngine(port, 800, options.client);
+  // v0.11.6: no answer in time, but something holds the port: asked again with more patience; still busy, it is left
+  // alone this round (see probeEngine).
+  if (probe.kind === "busy") probe = await probeEngine(port, options.patienceMs ?? 5000, options.client);
+  if (probe.kind === "busy") return { state: "busy", health: null };
+  const existing = probe.kind === "engine" ? probe.health : null;
   let replaced: Health | undefined;
   if (existing) {
     const known = knownBuilds.get(dir);

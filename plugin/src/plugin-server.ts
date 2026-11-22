@@ -330,7 +330,9 @@ function main(): void {
     if (process.env.CAM_NO_ENGINE === "1") return;
     const result = await ensureEngine({ port: enginePort, client: HOST });
     const replaced = result.replaced ? { replacedPid: result.replaced.pid, replacedBuild: result.replaced.build ?? null } : {};
-    if (result.state !== "running" || engineState !== "running") log({ event: "engine", host: HOST, state: result.state, enginePid: result.health?.pid ?? null, build: result.health?.build ?? null, ...replaced });
+    // v0.11.6: a busy engine (engine.ts, probeEngine) is noted once, not every round while it lasts.
+    const unchanged = (result.state === "running" || result.state === "busy") && result.state === engineState;
+    if (!unchanged) log({ event: "engine", host: HOST, state: result.state, enginePid: result.health?.pid ?? null, build: result.health?.build ?? null, ...replaced });
     engineState = result.state;
     engineRunning = result.state !== "failed";
   };
