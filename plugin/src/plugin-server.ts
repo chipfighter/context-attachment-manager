@@ -20,8 +20,11 @@
 // one the call names (the mod passes it), else the one Claude Code started this service for (CLAUDE_CODE_SESSION_ID).
 // v0.7 — in a side chat (kept in memory only, so without a rollout) cam_view_image fetches from the task the chat was
 // forked from, which its calls name; the panel switches automatic selection for a task's subagents and side chats.
+// v0.13 — keeps the plugin up to date (core/update.ts): in Codex and under Claude Code, about once a day, the latest
+// release is installed with the platform's own command line, for its next start; cam_update is the panel's switch.
 // Input: MCP JSON-RPC over stdio. Env: CAM_ENGINE_PORT (default 17891), CAM_NO_ENGINE=1 (tests), CAM_DATA_DIR,
-// CAM_HOST. Output: tool results; <data dir>/plugin-server.jsonl (events and counts only, no conversation content).
+// CAM_HOST, CAM_AUTO_UPDATE=0 (no updates). Output: tool results; <data dir>/plugin-server.jsonl (events and counts
+// only, no conversation content).
 
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -29,7 +32,10 @@ import { createInterface } from "node:readline";
 import { codexHome } from "./adapters/codex/codexconfig.ts";
 import { bindThread, isUserThread, newThreads, resolveThread } from "./adapters/codex/binding.ts";
 import { claudeStartedAt, loadClaudeIndex } from "./adapters/claude/claude-index.ts";
-import { DEFAULT_PORT, ensureEngine } from "./engine.ts";
+import { DEFAULT_PORT, ensureEngine, versionOf } from "./engine.ts";
+import { changeUpdate, startUpdater, updateView } from "./core/update.ts";
+import { codexPlatform } from "./adapters/codex/update.ts";
+import { claudePlatform } from "./adapters/claude/update.ts";
 import { isEntryPoint } from "./core/entry.ts";
 import { currentLang, rememberLang } from "./adapters/codex/language.ts";
 import { langOf } from "./core/language.ts";
@@ -98,6 +104,14 @@ export function toolsFor(lang: Lang) {
       title: say(lang, "tool.bind.title"),
       description: say(lang, "tool.bind.description"),
       inputSchema: { type: "object", properties: { ...shared, target: { type: "string" } }, required: ["target"] },
+      _meta: APP_ONLY,
+    },
+    // v0.13: the panel's switch for updating the plugin by itself, and the "updated" note it has shown.
+    {
+      name: "cam_update",
+      title: say(lang, "tool.update.title"),
+      description: say(lang, "tool.update.description"),
+      inputSchema: { type: "object", properties: { ...shared, auto: { type: "boolean" }, seen: { type: "string" } } },
       _meta: APP_ONLY,
     },
     // For the model (no app-only visibility); its words are text for the model, so they live in core/words.ts.
@@ -184,13 +198,19 @@ function newTasks(sessionsDir: string, shown: unknown): Json[] {
 export function callTool(name: string, args: Json, meta: Json | undefined, sessionsDir = join(codexHome(), "sessions")): Json {
   // The panel sends the language it shows; calls without one (Codex's first call, the model's) get the remembered one.
   const lang = langOf(args.lang) ?? currentLang();
+  // v0.13: about the plugin, not a task.
+  if (name === "cam_update") {
+    if (fromModel(meta)) throw new Error(say(lang, "call.modelSetup"));
+    changeUpdate("codex", { auto: typeof args.auto === "boolean" ? args.auto : undefined, seen: typeof args.seen === "string" ? args.seen : undefined });
+    return { content: [{ type: "text", text: say(lang, "call.update") }], structuredContent: { update: updateView("codex", versionOf()) } };
+  }
   if (name === "cam_panel" && langOf(args.lang) && !fromModel(meta)) rememberLang(lang, args.langSource === "codex" ? "codex" : "system");
   const own = threadOf(args, meta);
   if (!own) throw new Error(say(lang, "call.noThread"));
   // A panel switched to a new thread (v0.1-10) keeps sending its own thread id; its calls are about the new one.
   const threadId = resolveThread(own, sessionsDir);
   const options = { sessionsDir };
-  const panel = (state: PanelState, extra: Json = {}) => ({ ...state, engineRunning, setup: setupState(), ...(threadId === own ? {} : { switchedFrom: own }), ...extra });
+  const panel = (state: PanelState, extra: Json = {}) => ({ ...state, engineRunning, setup: setupState(), update: updateView("codex", versionOf()), ...(threadId === own ? {} : { switchedFrom: own }), ...extra });
   if (name === "cam_panel") {
     const state = loadPanelState(threadId, options);
     // Only the panel page says when it was on screen; Codex's own first call does not, and gets no list.
@@ -351,6 +371,14 @@ function main(): void {
   setTimeout(supervise, Math.floor(Math.random() * 400));
   // Short enough that a crashed engine is back within Codex's own retry window.
   setInterval(supervise, 3000);
+  // v0.13: the plugin keeps itself up to date where it was installed from GitHub (core/update.ts); each check that ran
+  // leaves a line.
+  if (HOST === "codex" || HOST === "claude") {
+    startUpdater(HOST, () => (HOST === "codex" ? codexPlatform() : claudePlatform()), {
+      running: versionOf(),
+      onResult: (outcome) => { if (outcome.ran) log({ event: "update", host: HOST, ...outcome.status }); },
+    });
+  }
   process.stdin.on("close", () => { log({ event: "stdin-closed" }); process.exit(0); });
   createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", (line) => {
     if (!line.trim()) return;
