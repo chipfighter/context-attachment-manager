@@ -13,7 +13,8 @@
 // ?demo=filter for the filter bar open with PDF pages picked, ?demo=filtered for the same folded away, v0.2;
 // ?thread=auto for the same task with automatic selection on, IMG-002 pinned and a last turn in which the model fetched
 // IMG-004 and IMG-007, v0.3; ?thread=v08 for keyframes of one character in two scenes with the model's feature lines,
-// and ?thread=v08m for the same in manual mode, v0.8; ?thread=scenes for 28 scenes, more filters than two rows hold).
+// and ?thread=v08m for the same in manual mode, v0.8; ?thread=scenes for 28 scenes, more filters than two rows hold;
+// ?thread=v12 for a short film's task in v0.12's feature lines, every category, with &v=<view> and ?demo=card&n=<card>).
 // The demo task has a name, as if the user had renamed it in Codex (v0.1-9). Its last two turns (v0.2) hold comments on
 // a PDF and on a web page, as Codex desktop attaches them, and an image a tool returned.
 // Everything is written to a temporary folder, including a Codex home of its own: nothing in the user's Codex home is
@@ -24,7 +25,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { png, testImages } from "../src/testkit.ts";
+import { CATEGORY_IMAGES, png, testImages } from "../src/testkit.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.argv[process.argv.indexOf("--port") + 1]) || 17895;
@@ -287,12 +288,46 @@ for (let k = 0; k < 10; k++) {
 }
 writeFileSync(join(day, `rollout-2026-09-24T14-00-00-${SCENES}.jsonl`), scenesLog);
 
+// ?thread=v12 (docs/v0.12/plan.md §3): a short film's task in the new feature lines: a heroine and her cat (character
+// sheets, then keyframes listing them), three places, a storyboard and a palette, a run of screenshots on a generation
+// site noted in one line, two scanned contract pages, a rating, and a last image the model has not noted yet.
+const V12 = `${THREAD.slice(0, -4)}a120`;
+const DAY = [150, 190, 230], SUN = [255, 250, 230];
+const site = (step: number) => png(1280, 720, (x, y) => (y < 44 ? [32, 33, 36] : x < 220 ? [244, 244, 245]
+  : y > 80 && y < 120 + step * 40 && x > 260 && x < 900 && (y - 80) % 40 < 30 ? [215 - step * 8, 225, 245] : y > 600 && x > 980 && x < 1180 && y < 650 ? [60, 110, 230] : [255, 255, 255]));
+const gallery = (seed: number) => png(1280, 720, (x, y) => (y < 44 ? [32, 33, 36] : x < 220 ? [244, 244, 245]
+  : (x - 260) % 250 < 220 && (y - 80) % 210 < 180 && y > 80 ? [(x * seed) % 120 + 60, (y * 3 + seed * 40) % 160 + 50, 170] : [255, 255, 255]));
+const board = png(900, 600, (x, y) => (x % 300 < 6 || y % 200 < 6 ? [60, 60, 66] : [[230, 214, 190], [40, 50, 90], [150, 190, 230]][Math.floor(x / 300)]));
+const page2 = png(512, 724, (x, y) => (y > 560 && y < 564 && x > 90 && x < 260 ? [40, 40, 45] : x > 60 && x < 452 - ((y * 11) % 70) && y > 80 && y < 500 && (y - 80) % 28 < 9 ? [70, 70, 75] : [238, 234, 224]));
+const V12_REPLIES = [
+  "[//]: # (cam IMG-001 角色:林夏｜三视图，白底，蓝色连衣裙)\n[//]: # (cam IMG-002 角色:阿橘｜正面，橘猫，薄荷绿底)\n\n两张设定都看了。",
+  "[//]: # (cam IMG-003 场景:书房｜林夏、阿橘｜中景，窗边，暖光)\n[//]: # (cam IMG-004 场景:书房｜林夏｜近景，侧脸，台灯)\n[//]: # (cam IMG-005 场景:书房｜林夏｜远景，书架，夜)\n\n书房三张好了。",
+  "[//]: # (cam IMG-006 场景:雨夜街头｜林夏｜中景，打伞，霓虹)\n[//]: # (cam IMG-007 场景:雨夜街头｜林夏｜远景，街道，积水)\n[//]: # (cam IMG-008 场景:雨夜街头｜林夏、阿橘｜近景，猫在怀里)\n\n雨夜三张好了。",
+  "[//]: # (cam IMG-009 场景:咖啡店外｜林夏｜全身，白天，橱窗)\n[//]: # (cam IMG-010 场景:咖啡店外｜远景，空镜，街角)\n\n咖啡店外两张好了。",
+  "[//]: # (cam IMG-011 其他:分镜｜三格，三个场景)\n[//]: # (cam IMG-012 其他:色板｜五色，冷蓝加橙)\n\n分镜和色板都看了。",
+  "[//]: # (cam IMG-013~IMG-018 界面:生图平台·提交页｜逐步填写提示词和参数)\n[//]: # (cam IMG-019 界面:生图平台·作品页｜生成结果，六张缩略图)\n[//]: # (cam IMG-020 界面:生图平台·作品页｜第二页结果)\n\n已经在平台上提交了，结果在作品页。",
+  "[//]: # (cam IMG-021 文档:拍摄合同 第1页｜扫描件，条款)\n[//]: # (cam IMG-022 文档:拍摄合同 第2页｜扫描件，签名栏)\n[//]: # (cam IMG-004 评价：侧脸最好)\n\n合同两页都看了，签名栏在第 2 页下方。",
+];
+let v12Log = line("session_meta", { id: V12 }) +
+  turn("w1") + ask("msg_w1", "w1", "这是女主林夏的三视图，还有她的猫阿橘。", [["林夏三视图.png", CATEGORY_IMAGES["linxia_sheet.png"]()], ["阿橘.png", CATEGORY_IMAGES["cat.png"]()]]) + say(V12_REPLIES[0], "w1") +
+  turn("w2") + ask("msg_w2", "w2", "第一场书房：出三张。") + made("h1", "study-1.png", keyframe(WARM, LAMP, "medium", 0.4), "书房 中景") + made("h2", "study-2.png", keyframe(WARM, LAMP, "close", 0.55), "书房 近景 侧脸") + made("h3", "study-3.png", keyframe(WARM, LAMP, "wide", 0.6), "书房 远景") + say(V12_REPLIES[1], "w2") +
+  turn("w3") + ask("msg_w3", "w3", "第二场雨夜街头：出三张。") + made("h4", "rain-a.png", keyframe(NIGHT, NEON, "medium", 0.66, true), "雨夜 中景 打伞") + made("h5", "rain-b.png", keyframe(NIGHT, NEON, "wide", 0.4), "雨夜 远景") + made("h6", "rain-c.png", keyframe(NIGHT, NEON, "close", 0.5), "雨夜 近景 抱猫") + say(V12_REPLIES[2], "w3") +
+  turn("w4") + ask("msg_w4", "w4", "第三场咖啡店外：两张。") + made("h7", "cafe-1.png", keyframe(DAY, SUN, "medium", 0.35), "咖啡店外 全身") + made("h8", "cafe-2.png", keyframe(DAY, SUN, "wide", 0.7), "咖啡店外 空镜") + say(V12_REPLIES[3], "w4") +
+  turn("w5") + ask("msg_w5", "w5", "这是分镜和色板。", [["分镜.png", board], ["色板.png", CATEGORY_IMAGES["palette.png"]()]]) + say(V12_REPLIES[4], "w5") +
+  turn("w6") + ask("msg_w6", "w6", "去生图平台上把第二场提交一下。");
+for (let n = 0; n < 6; n++) v12Log += toolImage(`cu${n}`, "const s = await tools.computer__screenshot({}); image(s);", site(n));
+v12Log += toolImage("cu6", "const s = await tools.computer__screenshot({}); image(s);", gallery(3)) + toolImage("cu7", "const s = await tools.computer__screenshot({}); image(s);", gallery(7)) + say(V12_REPLIES[5], "w6") +
+  turn("w7") + ask("msg_w7", "w7", "这是拍摄合同的扫描件，签名栏在哪？书房那张侧脸最好。", [["合同-1.png", CATEGORY_IMAGES["contract_p3.png"]()], ["合同-2.png", page2]]) + say(V12_REPLIES[6], "w7") +
+  turn("w8") + ask("msg_w8", "w8", "雨夜再出一张俯拍。") + made("h9", "rain-d.png", keyframe(NIGHT, NEON, "wide", 0.55), "雨夜 俯拍");
+writeFileSync(join(day, `rollout-2026-09-24T15-00-00-${V12}.jsonl`), v12Log);
+
 // Their names, as Codex keeps them next to the sessions folder (the panel's title).
 writeFileSync(join(root, "session_index.jsonl"), `${JSON.stringify({ id: THREAD, thread_name: "海报配色调整", updated_at: "2026-09-24T10:00:00Z" })}
 ${JSON.stringify({ id: MANY, thread_name: "产品图批量修图", updated_at: "2026-09-24T12:00:00Z" })}
 ${JSON.stringify({ id: AUTO, thread_name: "海报配色调整", updated_at: "2026-09-24T10:30:00Z" })}
 ${V08_TASKS.flatMap(([auto, manual, w]) => [auto, manual].map((id) => JSON.stringify({ id, thread_name: w.name, updated_at: "2026-09-24T13:00:00Z" }))).join("\n")}
 ${JSON.stringify({ id: SCENES, thread_name: "宣传片第三场", updated_at: "2026-09-24T14:00:00Z" })}
+${JSON.stringify({ id: V12, thread_name: "短片《雨夜》素材", updated_at: "2026-09-24T15:00:00Z" })}
 `);
 
 // New tasks the user starts after opening the panel on a new chat (?newtask=): Codex files them in today's folder.
@@ -315,7 +350,7 @@ function startTasks(count: number): void {
 }
 
 const { callTool, resetSetupBaseline } = await import("../../plugin/src/plugin-server.ts");
-const { imageSizesOf } = await import("../../plugin/src/proxy.ts");
+const { imageSizesOf } = await import("../../plugin/src/adapters/codex/engine.ts");
 const { recordRequest } = await import("../../plugin/src/core/request-stats.ts");
 const { connectDirectly, useEngine } = await import("../../plugin/src/adapters/codex/setup.ts");
 const { requestStatsDirOf } = await import("../../plugin/src/core/paths.ts");
@@ -425,7 +460,7 @@ const HOST = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><tit
   const fresh = params.get("thread") === "fresh" ? Math.random().toString(16).slice(2, 6).padEnd(4, "0") : null;
   // ?thread=v08 and v08m with ?lang=en: the same task in English.
   const english = params.get("thread")?.startsWith("v08") && params.get("lang") === "en" ? "&en=1" : "";
-  const query = fresh ? "?fresh=" + fresh : ["gap", "many", "auto", "v08", "v08m", "scenes"].includes(params.get("thread")) ? "?" + params.get("thread") + "=1" + english : "";
+  const query = fresh ? "?fresh=" + fresh : ["gap", "many", "auto", "v08", "v08m", "scenes", "v12"].includes(params.get("thread")) ? "?" + params.get("thread") + "=1" + english : "";
   const call = (name, args) => fetch("/call" + query, { method: "POST", body: JSON.stringify({ name, arguments: args }) }).then((r) => r.json());
   window.addEventListener("message", async (event) => {
     const m = event.data;
@@ -442,10 +477,12 @@ const HOST = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><tit
     setTimeout(() => {
       if (params.get("demo") === "preview") d.querySelector('.tile[data-id="' + (params.get("id") || "IMG-004") + '"]')?.click();
       if (params.get("demo") === "disabled") d.querySelector("#plugin .off")?.click();
-      if (params.get("demo") === "details") d.querySelector("#more")?.click();
+      if (params.get("demo") === "details") d.querySelector("#cardHead")?.click();
       if (params.get("demo") === "search") { const input = d.querySelector("#search"); input.value = params.get("q") || "脸"; input.dispatchEvent(new Event("input")); }
-      if (params.get("demo") === "scene") d.querySelector('.chip[data-chip^="scene:"]')?.click();
-      if (params.get("demo") === "jump") { d.querySelector("#more")?.click(); setTimeout(() => d.querySelector("#fetchedIds .idbtn, #needs .idbtn")?.click(), 300); }
+      // v0.12: &v=character|place|screen|document|other|timeline picks a view; ?demo=card also opens its card &n= (0 first).
+      if (params.get("v")) d.querySelector('.chip[data-chip="' + params.get("v") + '"]')?.click();
+      if (params.get("demo") === "card") setTimeout(() => d.querySelectorAll(".group")[Number(params.get("n") || 0)]?.click(), 200);
+      if (params.get("demo") === "jump") { d.querySelector("#cardHead")?.click(); setTimeout(() => d.querySelector("#fetchedIds .idbtn, #needs .idbtn")?.click(), 300); }
     }, 900);
     // The user sends the first message on this new chat (or two tasks start at once).
     if (params.get("newtask")) setTimeout(() => fetch("/newtask?count=" + params.get("newtask"), { method: "POST" }), 1500);
@@ -498,8 +535,9 @@ createServer((request, response) => {
       const v08 = new URL(request.url, "http://x").searchParams.has("v08");
       const v08m = new URL(request.url, "http://x").searchParams.has("v08m");
       const scenes = new URL(request.url, "http://x").searchParams.has("scenes");
+      const v12 = new URL(request.url, "http://x").searchParams.has("v12");
       const [v08Task, v08mTask] = V08_TASKS[new URL(request.url, "http://x").searchParams.has("en") ? 1 : 0];
-      const threadMeta = fresh && /^[0-9a-f]{4}$/.test(fresh) ? { threadId: freshId, thread_id: freshId } : gap ? { threadId: GAP, thread_id: GAP } : many ? manyMeta : auto ? autoMeta : v08 ? metaOf(v08Task) : v08m ? metaOf(v08mTask) : scenes ? metaOf(SCENES) : meta;
+      const threadMeta = fresh && /^[0-9a-f]{4}$/.test(fresh) ? { threadId: freshId, thread_id: freshId } : gap ? { threadId: GAP, thread_id: GAP } : many ? manyMeta : auto ? autoMeta : v08 ? metaOf(v08Task) : v08m ? metaOf(v08mTask) : scenes ? metaOf(SCENES) : v12 ? metaOf(V12) : meta;
       try { reply(200, "application/json", JSON.stringify(callTool(name, args ?? {}, threadMeta, sessionsDir))); }
       catch (error) { reply(200, "application/json", JSON.stringify({ isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }] })); }
     });

@@ -323,17 +323,19 @@ test("the image preview supports Ctrl+wheel zoom and preserves keyboard and back
 
   const byId = new Map<string, El>();
   const reg = (el: El) => { if (el.id) byId.set(el.id, el); return el; };
-  for (const id of ["title", "refresh", "plugin", "card", "meterLabel", "meterValue", "meterFull", "meterBarBox", "meterBar", "nextLine", "nextLabel", "nextValue", "details", "lastLine", "lastLabel", "lastValue", "fetchedLine", "fetchedLabel", "fetchedIds", "childrenLine", "childrenLabel", "childrenValue", "needs", "searchBox", "search", "chips", "main", "status"]) {
+  for (const id of ["title", "refresh", "plugin", "card", "cardBody", "meterLabel", "meterValue", "meterFull", "meterBarBox", "meterBar", "nextLine", "nextLabel", "nextValue", "lastLine", "lastLabel", "lastValue", "fetchedLine", "fetchedLabel", "fetchedIds", "childrenLine", "childrenLabel", "childrenValue", "needs", "searchBox", "search", "views", "main", "status"]) {
     reg(new El(id === "search" ? "input" : id === "refresh" ? "button" : "div", id));
   }
-  reg(new El("button", "more")).append(new El("span"));
+  reg(new El("button", "cardHead", "card-head"));
   const auto = reg(new El("label", "auto", "switch")); auto.hidden = true; auto.append(new El("span", "", "auto-label"), new El("input"));
   const viewer = reg(new El("div", "viewer", "viewer")); viewer.hidden = true;
   const viewerTop = new El("div", "", "viewer-top");
   const viewerTitle = new El("div", "", "viewer-title");
   viewerTitle.append(reg(new El("span", "viewerId", "vid")), reg(new El("span", "viewerName", "vname")));
   const viewerClose = reg(new El("button", "viewerClose", "icon-btn"));
-  viewerTop.append(viewerTitle, viewerClose);
+  // v0.12: the copy button sits before the close button.
+  const viewerCopy = reg(new El("button", "viewerCopy", "viewer-copy"));
+  viewerTop.append(viewerTitle, viewerCopy, viewerClose);
   const viewerStage = reg(new El("div", "viewerStage", "viewer-stage"));
   const viewerBottom = new El("div", "", "viewer-bottom");
   const viewerCheck = reg(new El("label", "viewerCheck", "check"));
@@ -419,9 +421,9 @@ test("the image preview supports Ctrl+wheel zoom and preserves keyboard and back
   assert.equal(keydown("Tab").defaultPrevented, true);
   assert.equal(documentObj.activeElement, viewerInput, "Tab moves from close button to checkbox");
   assert.equal(keydown("Tab").defaultPrevented, true);
-  assert.equal(documentObj.activeElement, viewerClose, "Tab wraps from checkbox back to close button");
+  assert.equal(documentObj.activeElement, viewerCopy, "Tab wraps from checkbox back to the copy button");
   assert.equal(keydown("Tab", true).defaultPrevented, true);
-  assert.equal(documentObj.activeElement, viewerInput, "Shift+Tab wraps from close button to checkbox");
+  assert.equal(documentObj.activeElement, viewerInput, "Shift+Tab wraps from the copy button to checkbox");
   assert.equal(keydown("Tab", true).defaultPrevented, true);
   assert.equal(documentObj.activeElement, viewerClose, "Shift+Tab moves from checkbox back to close button");
 
@@ -439,7 +441,7 @@ test("the image preview supports Ctrl+wheel zoom and preserves keyboard and back
   wheel(-100);
   assert.deepEqual([viewer.hidden, viewerInput.disabled, documentObj.activeElement], [false, true, viewerClose]);
   assert.equal(keydown("Tab").defaultPrevented, true);
-  assert.equal(documentObj.activeElement, viewerClose, "Tab skips disabled checkbox");
+  assert.equal(documentObj.activeElement, viewerCopy, "Tab skips disabled checkbox");
   assert.equal(keydown("Tab", true).defaultPrevented, true);
   assert.equal(documentObj.activeElement, viewerClose, "Shift+Tab skips disabled checkbox");
 

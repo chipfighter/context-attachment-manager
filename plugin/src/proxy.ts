@@ -192,6 +192,16 @@ async function main(): Promise<void> {
   // v0.10: per session, where the conversation requests sent last had their cache marks, newest first
   // (anthropic-messages/cache.ts); memory only.
   const sentPrefixes = new Map<string, SentPrefix[]>();
+  // v0.12: per session, the contents of images that went out before the transcript had them, so without ids (the
+  // report's lateContent): the next turn sends them once more for their feature lines (core/session.ts missedLine).
+  // Memory only; an engine restarted in between just leaves them out.
+  const missedImages = new Map<string, Set<string>>();
+  const rememberMissed = (sessionId: string, contents: string[]) => {
+    const kept = [...(missedImages.get(sessionId) ?? []), ...contents].slice(-50);
+    missedImages.delete(sessionId);
+    missedImages.set(sessionId, new Set(kept));
+    for (const key of missedImages.keys()) if (missedImages.size > 50) missedImages.delete(key);
+  };
   const rememberPrefix = (sessionId: string, prefix: SentPrefix) => {
     const kept = [prefix, ...(sentPrefixes.get(sessionId) ?? [])].slice(0, REMEMBERED);
     sentPrefixes.delete(sessionId);
@@ -477,7 +487,7 @@ async function main(): Promise<void> {
       const original = Buffer.concat(chunks);
       const encoding = req.headers["content-encoding"] as string | undefined;
       const rewriteNow = (): { body: Buffer; report: Json; attempts?: ClaudeAttempt[]; prefix?: SentPrefix } => {
-        try { return coreRewrite ? rewritePlatformRequest(core!.name, path, original, encoding, coreSession, dataDir(), currentLang()) : claudeRewrite ?rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking, sentPrefixes.get(claudeSession!) ?? [], currentLang()) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
+        try { return coreRewrite ? rewritePlatformRequest(core!.name, path, original, encoding, coreSession, dataDir(), currentLang()) : claudeRewrite ? rewriteClaudeBody(original, encoding, claudeSession!, undefined, undefined, undefined, thinking, sentPrefixes.get(claudeSession!) ?? [], currentLang(), missedImages.get(claudeSession!)) : rewriteBody(original, encoding, identity.threadId!, sessionsDir, selectionDir, identity.turnId, identity.forkedFrom); }
         catch (error) { return { body: original, report: { skipped: `rewrite failed: ${String(error)}` } }; }
       };
       let out = rewriteNow();
@@ -485,6 +495,8 @@ async function main(): Promise<void> {
       // they go out with their ids now and the model can note them in this reply.
       let waited = 0;
       for (; claudeRewrite && out.report?.late && waited < LATE_WAIT_MS; waited += LATE_STEP_MS) { await sleep(LATE_STEP_MS); out = rewriteNow(); }
+      // v0.12: still not there: they go out without ids, and the next turn sends them once more for their lines.
+      if (claudeRewrite && Array.isArray(out.report?.lateContent) && out.report.lateContent.length) rememberMissed(claudeSession!, out.report.lateContent);
       const withWait = (report: Json) => (waited ? { ...report, waitedMs: waited } : report);
       const attempts: Attempt[] = out.attempts?.length ? out.attempts.map((attempt) => ({ ...attempt, report: withWait(attempt.report), edited: attempt.body !== original })) : [{ body: out.body, report: withWait(out.report), edited: out.body !== original, prefix: out.prefix }];
       send(attempts);

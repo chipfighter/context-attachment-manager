@@ -70,6 +70,50 @@ export const CORNER_IMAGES: Record<string, () => Buffer> = {
   "c.png": () => { const five = digit("5", 442, 30); return png(512, 512, (x, y) => (five(x, y) ? [250, 140, 20] : y > 120 && y < 400 && Math.abs(x - 256) < (y - 120) * 0.6 ? [255, 255, 255] : [120, 50, 160])); },
 };
 
+// v0.12 (docs/v0.12/plan.md §5 gate 1): one image per category, for the feature line tests on both platforms. A
+// heroine's three views on white; her cat; a keyframe of both in the study; four screenshots of a settings page, one
+// step apart; a scanned contract page with a red stamp; a palette of five colors.
+const inCircle = (x: number, y: number, cx: number, cy: number, r: number) => (x - cx) ** 2 + (y - cy) ** 2 < r * r;
+const SKIN: Rgb = [235, 190, 160], HAIR: Rgb = [60, 40, 30], SHIRT: Rgb = [40, 90, 170], DARK: Rgb = [30, 30, 30], CAT: Rgb = [230, 140, 50];
+const catAt = (x: number, y: number, cx: number, cy: number, s: number): Rgb | null => {
+  if (inCircle(x, y, cx - 0.25 * s, cy - 0.12 * s, 0.07 * s) || inCircle(x, y, cx + 0.25 * s, cy - 0.12 * s, 0.07 * s)) return DARK;
+  const ear = (ex: number) => y < cy - 0.35 * s && y > cy - 0.75 * s && Math.abs(x - ex) < (y - (cy - 0.75 * s)) * 0.6;
+  if (ear(cx - 0.45 * s) || ear(cx + 0.45 * s) || inCircle(x, y, cx, cy, 0.6 * s) || (y > cy && inCircle(x, y, cx, cy + 0.9 * s, 0.75 * s))) return CAT;
+  return null;
+};
+const screen = (step: number) => () => png(800, 500, (x, y) => {
+  if (y < 36) return [60, 60, 70];
+  if (x < 200) return y >= 60 + step * 40 && y < 92 + step * 40 ? [70, 120, 220] : [235, 235, 240];
+  if (y >= 80 && y < 440 && (y - 80) % 60 < 30 && x > 240 && x < 740) return (y - 80) / 60 < step + 1 ? [200, 215, 240] : [245, 245, 245];
+  return [252, 252, 252];
+});
+export const CATEGORY_IMAGES: Record<string, () => Buffer> = {
+  "linxia_sheet.png": () => png(768, 512, (x, y) => {
+    for (const cx of [128, 384, 640]) {
+      if (inCircle(x, y, cx, 130, 45)) return y < 105 ? HAIR : SKIN;
+      if (y >= 175 && y < 400 && Math.abs(x - cx) < 45 + (y - 175) * 0.12) return SHIRT;
+      if (y >= 400 && y < 480 && (Math.abs(x - cx + 18) < 10 || Math.abs(x - cx - 18) < 10)) return DARK;
+    }
+    return [250, 250, 250];
+  }),
+  "cat.png": () => png(512, 512, (x, y) => catAt(x, y, 256, 200, 160) ?? [190, 220, 200]),
+  "shot01.png": () => png(768, 512, (x, y) => {
+    if (x >= 470 && x < 700 && y >= 60 && y < 300) return x % 115 < 6 || y % 120 < 6 ? [90, 70, 50] : [170, 200, 235];
+    const kitty = catAt(x, y, 300, 330, 55);
+    if (kitty) return kitty;
+    if (inCircle(x, y, 230, 170, 40)) return y < 148 ? HAIR : SKIN;
+    if (y >= 210 && y < 500 && Math.abs(x - 230) < 50 + (y - 210) * 0.1) return SHIRT;
+    return y > 430 ? [120, 90, 60] : [215, 200, 175];
+  }),
+  "settings_1.png": screen(0), "settings_2.png": screen(1), "settings_3.png": screen(2), "settings_4.png": screen(3),
+  "contract_p3.png": () => png(512, 724, (x, y) => {
+    if ((inCircle(x, y, 380, 600, 55) && !inCircle(x, y, 380, 600, 47)) || inCircle(x, y, 380, 600, 20)) return [200, 30, 30];
+    if (x > 60 && x < 452 - ((y * 7) % 90) && y > 80 && y < 520 && (y - 80) % 28 < 9) return [70, 70, 75];
+    return [238, 234, 224];
+  }),
+  "palette.png": () => png(640, 200, (x) => ([[20, 40, 80], [40, 90, 150], [90, 150, 200], [200, 220, 235], [230, 120, 60]] as Rgb[])[Math.min(4, Math.floor(x / 128))]),
+};
+
 // A number in the reply, as a numeral or a word, ignoring image ids.
 const NUMBER_WORDS: Record<number, RegExp> = { 3: /三|three/i, 5: /五|five/i, 7: /七|seven/i, 10: /十|ten\b/i, 12: /十二|twelve/i };
 export const says = (reply: string, n: number) => {

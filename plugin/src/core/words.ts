@@ -25,7 +25,8 @@ import type { Notes, Rating } from "./notes.ts";
 
 // notes (v0.8): what the model noted about the image, shown in its placeholder. awaiting (v0.10): an image of an
 // interrupted turn sent once more for its feature line (thread-index.ts, awaitingLine); its label says so.
-export type Described = { id: string; name: string | null; label: string | null; kind: ImageKind; turn: number | null; width: number | null; height: number | null; notes?: Notes; awaiting?: boolean };
+// v0.12: now, an image of the current turn left out in it (core/session.ts inTurnOut): its heading says 本轮.
+export type Described = { id: string; name: string | null; label: string | null; kind: ImageKind; turn: number | null; width: number | null; height: number | null; notes?: Notes; awaiting?: boolean; now?: boolean };
 
 type FetchWords = { title: string; description: string; ids: string; missing: (id: string) => string; unavailable: (id: string) => string; off: string };
 type Words = {
@@ -33,8 +34,9 @@ type Words = {
   // v0.10: the source in a compact line (compactLine), shorter.
   kindShort: Record<ImageKind, string>; sameShort: (id: string) => string;
   omitted: string; notRepeated: string; included: string; separator: string;
-  // v0.10: the label of an image sent once more for its feature line (Described.awaiting).
-  includedAwaiting: string;
+  // v0.10: the label of an image sent once more for its feature line (Described.awaiting). v0.12, Claude: a short note
+  // after the turn's own message naming them (Haiku 5.5 left them out with the label alone, 2026-11-22).
+  includedAwaiting: string; awaitingNote: (ids: string[]) => string;
   heading: (id: string, label: string | null, state: string, fields: string[]) => string;
   plain: (id: string) => string; duplicate: (id: string, where: string) => string; note: string;
   autoPlain: (id: string) => string; autoNote: string; copy: (id: string) => string; fetch: FetchWords;
@@ -69,6 +71,7 @@ const WORDS: Record<Lang, Words> = {
     notRepeated: "未重复提供",
     included: "已提供",
     includedAwaiting: "已提供，还没有特征行",
+    awaitingNote: (ids) => `特征行说明：${ids.join("、")} 在它们那一轮没有写上特征行，原图这一轮再提供一次（前面标着“已提供，还没有特征行”）。请在这一轮最后那条回复的开头，也给它们各写一行。`,
     separator: "，",
     heading: (id, label, state, fields) => `[图片 ${id}${label ? `（${label}）` : ""} ${state}｜${fields.join("｜")}]`,
     // v0.8: shorter; the context management note says why the image is left out (it was "原图被用户省略以节省上下文，情况
@@ -147,18 +150,30 @@ const WORDS: Record<Lang, Words> = {
     // with nothing to note gets no lines (Haiku wrote an empty one). 2026-10-21 (user): the first part is the place, not
     // the "scene": in a user's MV task GPT-6 read 场景 as a film scene and named it after the scene number and what the
     // image was for ("04场店外线稿", "04场店外局部核对"), 28 scenes for 52 images.
+    // v0.12 (docs/v0.12/plan.md §2, user 2026-11-22): the line starts with one of five categories and a name, so the
+    // panel can group by them, lists the characters in the picture, and may stand for a run of screenshots.
     featureNote: [
       "特征行说明（来自用户安装的上下文素材管理工具）：这个任务里的每张图都有编号，写在图前面的“[图片 IMG-xxx …]”里。用户装这个工具，是为了让你以后（包括对话压缩之后）还能认出每张图、记得用户对它们的评价。所以请在每一轮最后那条回复的开头（不要写在中途调用工具时说的话里），先给这一轮新出现的每张图写一行特征，空一行再写正文，格式是：",
-      "[//]: # (cam IMG-015 地点｜看得见的特征)",
-      "- 先写地点，再写看得见的特征（景别、主体、角度、光线、颜色、构图），一共 30 字以内，例如“[//]: # (cam IMG-015 街头｜近景，正脸，雨夜，霓虹反光)”。",
-      "- 地点写这张画面发生在哪儿，具体到能和别处分开，比如“书房”“咖啡店外”“地铁站台”；特写看不出来时，按你知道的写。场次编号、版本、用途（首帧、线稿、检查图之类）都不写进地点；时间、天气写在后面的特征里。",
-      "- 一张图里有好几个地点的（分镜、抽帧拼图）写“多个地点”；不在任何地方的，写它是什么：角色、物品、文档、网页。",
-      "- 同一个地点沿用你之前用过的叫法。",
+      "[//]: # (cam IMG-015 类别:名字｜画面里的角色｜看得见的特征)",
+      "- 类别只用这五个：角色、场景、界面、文档、其他。名字说明这张图属于哪个角色、哪个地点或哪个界面；画面里没有角色时，省掉中间那段。看得见的特征写景别、主体、角度、光线、颜色、构图。整行 40 字以内。例如：",
+      "  [//]: # (cam IMG-015 场景:雨夜街头｜林夏、橘猫｜中景，打红伞，霓虹反光)",
+      "  [//]: # (cam IMG-016 角色:橘猫｜三视图，白底)",
+      "  [//]: # (cam IMG-017 界面:淘宝·订单页｜弹窗，地址未填)",
+      "  [//]: # (cam IMG-018 文档:租房合同 第3页｜扫描件，红章)",
+      "  [//]: # (cam IMG-019 其他:色板｜五色，冷蓝调)",
+      "- 角色：反复出现、长相要保持一致的对象，人、动物、机器人、怪物、吉祥物都算，做产品片时产品也算。名字用用户起的；没起名就按外观叫，比如“橘猫”“红色机器人”。角色的设定图（脸部特写、多视图、全身）类别写角色。",
+      "- 场景：故事里的地点。名字写画面发生在哪儿，具体到能和别处分开，比如“书房”“咖啡店外”“地铁站台”；特写看不出来时，按你知道的写。场次编号、版本、用途（首帧、线稿、检查图之类）都不写进名字；时间、天气写在特征里。",
+      "- 界面：电脑、手机或浏览器上的画面，包括操作截图、网页、App、设计稿。名字写“应用或网站·页面”，比如“淘宝·订单页”“系统设置·网络”；写网站的名字，不写网址。",
+      "- 文档：PDF 页面、扫描件、幻灯片、图纸、表格。名字写文件名或文档名，后面跟页码，比如“租房合同 第3页”。",
+      "- 其他：分镜和抽帧拼图、色板、情绪板、图表、单独拍的物品这类。名字写它是什么，比如“分镜”“色板”。",
+      "- 画面里的角色：写出现在画面里的角色的名字，用“、”隔开；只写反复出现的角色，不写路人。",
+      "- 同一个角色、地点、界面，沿用你之前用过的名字。",
+      "- 同一个界面连续几张、只有细小变化的截图，可以合写一行，编号写成范围，例如“[//]: # (cam IMG-020~IMG-034 界面:淘宝·订单页｜逐步填写收货地址)”。只有截图可以这样写；关键帧、抽帧还是一张写一行。",
       "- 只写看得见的东西，不写“好看”“像谁”这类判断。每张图只写一次，以后不改。用户上传的、你生成的、你查看的、工具返回的图都要写；用 cam_view_image 取回的图和没有编号的图不用写。",
-      "- 标着“[图片 IMG-xxx 已提供，还没有特征行…]”的图，是之前那一轮被打断、没来得及写特征行的，这一轮再提供一次：也给它写一行。",
-      "- 写过的特征行有错（比如用户指出了），照同样的格式整行重写，开头加“更正：”，例如“[//]: # (cam IMG-005 更正：角色｜正面近景，左眉有疤)”，它会替换原来那一行。",
+      "- 标着“[图片 IMG-xxx 已提供，还没有特征行…]”的图，是之前那一轮没来得及写特征行的（比如那一轮被打断了），这一轮再提供一次：也给它写一行。",
+      "- 写过的特征行有错（比如用户指出了），照同样的格式整行重写，开头加“更正：”，例如“[//]: # (cam IMG-005 更正：角色:林夏｜正面近景，左眉有疤)”，它会替换原来那一行。",
       "- 用户评价某张图时（包括隔了几轮才说），先确定是哪一张，再照用户的原话记一行，15 字以内，例如“[//]: # (cam IMG-003 评价：太暗)”。评价是用户自己的看法，你不认同也照记。拿不准是哪一张就不记，可以在正文里问用户指的是哪一张，但不要提记录的事。用户只是评价、没有提要求时，正文简短回应评价本身就行，不要说明你记了什么、对应到了哪张图。",
-      "- 这些行写在正文前面，和正文之间空一行，一张图写一行；括号里不要用半角括号。这一轮没有新图、也没有评价时，不写这些行。这些行只给这个工具读，用户在界面上看不到。正文照常回答，不用提到这些行；用户评价图片时，也不用回应记录这件事，比如“记下了”“我会记住”“之后会参考”。",
+      "- 这些行写在正文前面，和正文之间空一行，一张图写一行（合写的连续截图除外）；括号里不要用半角括号。这一轮没有新图、也没有评价时，不写这些行。这些行只给这个工具读，用户在界面上看不到。正文照常回答，不用提到这些行；用户评价图片时，也不用回应记录这件事，比如“记下了”“我会记住”“之后会参考”。",
       "- 以后被省略的图，占位里会带着你写的特征和记下的评价，对话压缩之后也还在。要选图时先看这些；拿不准时，先把原图要回来看（怎么要，见“上下文管理说明”），或者问用户是哪一张。",
     ].join("\n"),
     notes: (line, ratings) => [
@@ -178,6 +193,7 @@ const WORDS: Record<Lang, Words> = {
     notRepeated: "not repeated",
     included: "included",
     includedAwaiting: "included, no feature line yet",
+    awaitingNote: (ids) => `Feature line note: ${ids.length > 1 ? `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]}` : ids[0]} got no feature line in their turn; their originals are included once more in this turn (marked "included, no feature line yet"). Begin this turn's last reply with a line for each of them too.`,
     separator: ", ",
     heading: (id, label, state, fields) => `[Image ${id}${label ? ` (${label})` : ""} ${state} | ${fields.join(" | ")}]`,
     plain: (id) => `To see it again, write "need ${id}" in your reply.`,
@@ -231,16 +247,26 @@ const WORDS: Record<Lang, Words> = {
     },
     featureNote: [
       "Feature line note (from the context asset manager the user installed): every image in this task has an ID, written in the \"[Image IMG-xxx …]\" line before it. The user installed this tool so that you can still tell the images apart later, also after the conversation is compacted, and remember what the user said about each. So begin the last reply of every turn (not what you say between tool calls) with one feature line for each image that is new in this turn, then a blank line, then your reply, in this form:",
-      "[//]: # (cam IMG-015 place | visible features)",
-      "- First the place, then what can be seen (shot size, subject, angle, light, colors, composition), about 15 words at most, for example \"[//]: # (cam IMG-015 street | close-up, facing the camera, rainy night, neon reflections)\".",
-      "- The place is where the picture is set, specific enough to tell it apart, such as \"study\", \"outside the café\" or \"subway platform\"; for a close-up that doesn't show it, write what you know. No scene numbers, versions or what the image is for (first frame, sketch, check); time of day and weather go in the features.",
-      "- An image of several places (a storyboard, a contact sheet) gets \"several places\"; one set nowhere gets what it is: character, object, document, web page.",
-      "- For a place you named before, reuse that name.",
+      "[//]: # (cam IMG-015 category: name | characters in the picture | visible features)",
+      "- Use only these five categories: character, place, screen, document, other. The name says which character, place or screen the image belongs to; leave out the middle part when no character is in the picture. The visible features are shot size, subject, angle, light, colors, composition. About 20 words at most for the whole line. For example:",
+      "  [//]: # (cam IMG-015 place: rainy street | Lin Xia, ginger cat | medium shot, red umbrella, neon reflections)",
+      "  [//]: # (cam IMG-016 character: ginger cat | three views, white background)",
+      "  [//]: # (cam IMG-017 screen: Amazon · checkout | dialog open, address empty)",
+      "  [//]: # (cam IMG-018 document: lease p. 3 | scanned, red stamp)",
+      "  [//]: # (cam IMG-019 other: palette | five colors, cool blue)",
+      "- character: something that keeps coming back and must look the same each time: a person, an animal, a robot, a creature, a mascot, or the product in a product film. Use the name the user gave it; without one, name it by its looks, such as \"ginger cat\" or \"red robot\". A character's design images (face close-ups, turnarounds, full body) get the category character.",
+      "- place: a location in the story. The name says where the picture is set, specific enough to tell it apart, such as \"study\", \"outside the café\" or \"subway platform\"; for a close-up that doesn't show it, write what you know. No scene numbers, versions or what the image is for (first frame, sketch, check); time of day and weather go in the features.",
+      "- screen: what a computer, phone or browser shows: screenshots of using it, web pages, apps, design mockups. The name is \"app or site · page\", such as \"Amazon · checkout\" or \"Settings · Network\"; the site's name, not its address.",
+      "- document: PDF pages, scans, slides, drawings, tables. The name is the file or document, then the page, such as \"lease p. 3\".",
+      "- other: storyboards and contact sheets, palettes, mood boards, charts, a single object on its own, and the like. The name says what it is, such as \"storyboard\" or \"palette\".",
+      "- Characters in the picture: the names of the characters it shows, separated by commas; only characters that keep coming back, no passers-by.",
+      "- For a character, place or screen you named before, reuse that name.",
+      "- Several screenshots in a row of the same screen with only small changes may share one line, with the IDs as a range, for example \"[//]: # (cam IMG-020~IMG-034 screen: Amazon · checkout | filling in the address step by step)\". Only screenshots; keyframes and video frames still get a line each.",
       "- Only what can be seen; no judgments such as \"beautiful\" or \"looks like someone\". One line per image, written once and never changed. Write one for the images the user uploaded, the ones you generated or viewed, and those in tool results; not for images you fetched with cam_view_image or images without an ID.",
-      "- An image marked \"[Image IMG-xxx included, no feature line yet…]\" is from an earlier turn that was interrupted before you wrote its line; it is included once more in this turn: write its line too.",
-      "- If a feature line you wrote turns out wrong (for example, the user points it out), write the whole line again in the same form, starting with \"corrected:\", for example \"[//]: # (cam IMG-005 corrected: character | front close-up, scar on the left eyebrow)\"; it replaces the old one.",
+      "- An image marked \"[Image IMG-xxx included, no feature line yet…]\" is from an earlier turn that ended without its line (for example, the turn was interrupted); it is included once more in this turn: write its line too.",
+      "- If a feature line you wrote turns out wrong (for example, the user points it out), write the whole line again in the same form, starting with \"corrected:\", for example \"[//]: # (cam IMG-005 corrected: character: Lin Xia | front close-up, scar on the left eyebrow)\"; it replaces the old one.",
       "- When the user rates an image, even turns later, first make sure which one it is, then note the user's own words in a line of about 8 words at most, for example \"[//]: # (cam IMG-003 rated: too dark)\". The rating is the user's own view: note it even if you see it differently. If you are not sure which image it is, do not note it; you may ask the user which one they mean, without mentioning the noting. When the user only rates images and asks for nothing, a short reply to what they said is enough; do not explain what you noted or which image you matched it to.",
-      "- Put these lines before your reply with a blank line after them, one image per line, and no parentheses inside them. In a turn with no new image and no rating, write none of these lines. These lines are for this tool only; the user does not see them on screen. Answer as usual and do not mention these lines; when the user rates an image, do not acknowledge the noting either, such as \"noted\", \"I'll keep that in mind\" or \"I'll refer to this later\".",
+      "- Put these lines before your reply with a blank line after them, one image per line (except a run of screenshots sharing one), and no parentheses inside them. In a turn with no new image and no rating, write none of these lines. These lines are for this tool only; the user does not see them on screen. Answer as usual and do not mention these lines; when the user rates an image, do not acknowledge the noting either, such as \"noted\", \"I'll keep that in mind\" or \"I'll refer to this later\".",
       "- Images left out later carry your feature line and the ratings you noted in their placeholders, also after a compaction. Check them when you pick an image; when unsure, get the original back first (the \"Context management note\" says how) or ask the user which one.",
     ].join("\n"),
     notes: (line, ratings) => [
@@ -258,7 +284,7 @@ export const omissionNote = (lang: Lang) => WORDS[lang].note;
 
 function heading(words: Words, image: Described, state: string): string {
   const fields = [image.name ?? words.unnamed, words.kind[image.kind]];
-  if (image.turn !== null) fields.push(words.turn(image.turn));
+  if (image.turn !== null) fields.push(image.now ? words.thisTurn : words.turn(image.turn));
   if (image.width && image.height) fields.push(`${image.width}×${image.height}`);
   return words.heading(image.id, image.label, state, fields);
 }
@@ -272,7 +298,7 @@ const CLIP_AT = /[，。；、！？,.;!?｜|：:\s]/u;
 const WIDE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
 // A rating keeps as much as a feature line: they are the user's own words, and only a few per session (a long replay
 // lost half of one at 15, 2026-10-31).
-const CAPS = { line: 30, rating: 30 };
+const CAPS = { line: 40, rating: 30 };
 export function clip(text: string, max: number): string {
   const chars = [...text.trim()];
   let width = 0;
@@ -318,10 +344,12 @@ export const newImageWord = (lang: Lang) => WORDS[lang].newImage;
 // v0.4, Claude Code only: the note also speaks of tool results, and a short note follows each message holding omitted
 // images, naming them. Codex's words stay as they are.
 export const claudeNote = (lang: Lang, auto = false) => `${auto ? WORDS[lang].autoNote : WORDS[lang].note}\n${WORDS[lang].toolNote}`;
-export function hereNote(images: Described[], lang: Lang = "zh", auto = false): string {
+// v0.12: several, the images were in more than one message above (a batch of this turn's screenshots).
+export function hereNote(images: Described[], lang: Lang = "zh", auto = false, several = false): string {
   const words = WORDS[lang];
   const list = images.map((image) => words.listItem(image.id, image.name, words.kind[image.kind])).join(words.separator);
-  return auto ? words.hereAuto(list) : words.here(list);
+  const text = auto ? words.hereAuto(list) : words.here(list);
+  return several ? text.replace("上面这条消息里的", "上面几条消息里的").replace("in the message above", "in the messages above") : text;
 }
 
 // v0.5, Claude Code only: the note after the message holding a compaction summary, listing the images from before it
@@ -370,6 +398,8 @@ export function autoPlaceholder(image: Described, lang: Lang = "zh"): string {
 
 // v0.8: the feature line note, for a task's own requests (not a side chat's or a subagent's).
 export const featureNote = (lang: Lang) => WORDS[lang].featureNote;
+// v0.12, Claude: the note naming the images sent once more for their lines (anthropic-messages/rewrite.ts).
+export const awaitingNote = (ids: string[], lang: Lang) => WORDS[lang].awaitingNote(ids);
 
 // The line cam_view_image puts before each image it returns. Without Codex's own label ("[Image #3]"), which numbers
 // images within their message and means nothing here: GPT-6 Luna once read it as the digit asked about.

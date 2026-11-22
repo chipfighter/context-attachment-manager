@@ -83,7 +83,9 @@ export const LATE_STEP_MS = 100;
 // CAM_EXPERIMENT_BLOCK_BINDING (experiments only, docs/v0.4/tasks.md T04-01): asks Anthropic to check thinking with
 // that prefix_mismatch_behavior, as for an account created from 2026-08-31; the report names the beta header to add.
 // v0.11: lang, the language of the text for the model; the engine passes the one the core and Codex's setting choose.
-export function rewriteClaudeBody(original: Buffer, encoding: string | undefined, sessionId: string, dir = claudeSelectionDirOf(), home = claudeHome(), env = process.env, thinking: ThinkingRecord | null = null, previous: SentPrefix[] = [], lang: Lang = currentLang()): { body: Buffer; report: Json; attempts: ClaudeAttempt[]; prefix?: SentPrefix } {
+// v0.12: missed, the contents of images the engine sent before the transcript had them (report.lateContent): in the
+// next turn they go out once more for their feature lines (core/session.ts missedLine).
+export function rewriteClaudeBody(original: Buffer, encoding: string | undefined, sessionId: string, dir = claudeSelectionDirOf(), home = claudeHome(), env = process.env, thinking: ThinkingRecord | null = null, previous: SentPrefix[] = [], lang: Lang = currentLang(), missed: ReadonlySet<string> = new Set()): { body: Buffer; report: Json; attempts: ClaudeAttempt[]; prefix?: SentPrefix } {
   const asIs = (report: Json) => ({ body: original, report, attempts: [] });
   const decoded = decodeBody(original, encoding);
   if (!decoded) return asIs({ skipped: "undecodable body" });
@@ -99,7 +101,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
   const copies = earlierCopies(index, current);
   // v0.3: automatic selection (core/session.ts); v0.10: images of an interrupted turn without a feature line yet are
   // sent once more.
-  const chosen = selection.auto ? autoChoice(index, current, selection.pinned ?? {}, true) : null;
+  const chosen = selection.auto ? autoChoice(index, current, selection.pinned ?? {}, true, missed) : null;
   const leaveOut = chosen?.leaveOut ?? new Set(Object.keys(selection.unchecked));
   const awaiting = chosen?.awaiting ?? new Set<string>();
   const pixels = (ref: RequestImage) => (ref.key ? index.byKey.get(ref.key)?.pixelSha256 : undefined) ?? pixelHashOfData(ref, ref.block.source.data);
@@ -147,6 +149,7 @@ export function rewriteClaudeBody(original: Buffer, encoding: string | undefined
     ...(report.featureAt !== undefined ? { featureAt: report.featureAt, labeled: report.labeled ?? 0 } : {}),
     ...(report.unknown ? { unknown: report.unknown } : {}),
     ...(report.late ? { late: report.late } : {}),
+    ...(report.lateContent ? { lateContent: report.lateContent } : {}),
   };
   const changed = report.replaced.length > 0 || report.copies.length > 0 || compacted !== null || report.featureAt !== undefined;
   // Once the engine has sent the session a changed history, thinking made after it may be in every later request, even
