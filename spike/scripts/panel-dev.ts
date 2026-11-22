@@ -321,6 +321,83 @@ v12Log += toolImage("cu6", "const s = await tools.computer__screenshot({}); imag
   turn("w8") + ask("msg_w8", "w8", "雨夜再出一张俯拍。") + made("h9", "rain-d.png", keyframe(NIGHT, NEON, "wide", 0.55), "雨夜 俯拍");
 writeFileSync(join(day, `rollout-2026-09-24T15-00-00-${V12}.jsonl`), v12Log);
 
+// ?thread=showcase (v0.12, for the README's screenshots): a period short film's task in the new feature lines: two
+// heroines with their sheets, six places, a pencil sketch and two scanned pages of notes. With --images the keyframes are
+// real ones from a folder kept out of the repository (local/); without, drawn stand-ins. Automatic selection on, the
+// first sheet sent every turn, and a last turn in which the model fetched two images. ?lang=en: the same task in English.
+const SHOWCASE = `${THREAD.slice(0, -4)}a130`;
+const SHOWCASE_EN = `${THREAD.slice(0, -4)}a131`;
+const shown = {
+  sheets: [real("reference.png", keyframe([210, 206, 200], [210, 206, 200], "medium")), real("shuyue-front.png", keyframe([200, 204, 210], [200, 204, 210], "close")), real("shuyue-side.png", keyframe([200, 204, 210], [200, 204, 210], "close", 0.4))],
+  street: ["rain-1.png", "rain-2.png", "rain-3.png", "rain-4.png"].map((name, i) => real(name, keyframe(NIGHT, NEON, (["medium", "wide", "close", "close"] as const)[i], 0.5 + i * 0.05, i === 0))),
+  study: ["warm-1.png", "warm-2.png", "warm-3.png", "warm-4.png"].map((name, i) => real(name, keyframe(WARM, LAMP, (["medium", "close", "medium", "wide"] as const)[i], 0.45))),
+  shuyue: ["courtyard.png", "corridor.png"].map((name, i) => real(name, keyframe([70, 90, 110], [200, 210, 220], "wide", 0.4 + i * 0.2))),
+  railing: [1, 2, 3, 4, 5].map((n) => real(`railing-${n}.png`, keyframe([20, 28, 60], LAMP, n === 1 ? "close" : n === 5 ? "wide" : "medium", 0.6))),
+  sketch: real("sketch.png", sketch),
+  more: ["rain-5.png", "rain-6.png", "rain-7.png"].map((name, i) => real(name, keyframe(NIGHT, NEON, (["medium", "wide", "close"] as const)[i], 0.55))),
+  notes: [real("notes-1.png", CATEGORY_IMAGES["contract_p3.png"]()), real("notes-2.png", page2)],
+};
+const SHOWCASE_TEXT = {
+  zh: {
+    name: "古装短片《雨巷》",
+    files: ["青禾设定.png", "书月正脸.png", "书月侧脸.png", "线稿.png", "导演笔记-1.png", "导演笔记-2.png"],
+    asks: ["这是两位女主的设定：青禾一张，书月正脸和侧脸各一张。", "第一场雨夜长街，青禾撑伞走过：出四张。", "第二场烛光书房，再加一张灯笼长廊。", "书月的两场：雾中庭院、雨中回廊。",
+      "月下栏杆这一镜多出几版，我来挑。", "这是我画的线稿，构图按它来。", "雨夜长街补三张：回头、积水倒影、近景正脸。第一场那张特写的脸最好。", "导演笔记的扫描件，第二页对光线有要求。",
+      "按笔记的光线要求，用最好的那张脸出海报。"],
+    prompts: ["雨夜长街 中景 撑伞", "雨夜长街 远景", "雨夜长街 近景 侧脸", "雨夜长街 特写 正脸", "烛光书房 中景 托腮", "烛光书房 近景", "烛光书房 背影 窗格", "灯笼长廊 全身",
+      "雾中庭院 全身", "雨中回廊 中景", "月下栏杆 近景", "月下栏杆 中景", "月下栏杆 回望", "月下栏杆 托腮", "月下栏杆 远景", "雨夜长街 回头", "雨夜长街 积水倒影", "雨夜长街 近景 正脸"],
+    replies: [
+      "[//]: # (cam IMG-001 角色:青禾｜设定图，半身正面，白色交领衫)\n[//]: # (cam IMG-002 角色:书月｜设定图，正脸，浅灰立领衫)\n[//]: # (cam IMG-003 角色:书月｜设定图，四分之三侧脸)\n\n两位的设定都看了。",
+      "[//]: # (cam IMG-004 场景:雨夜长街｜青禾｜中景，撑伞，灯笼)\n[//]: # (cam IMG-005 场景:雨夜长街｜青禾｜远景，长街，红灯笼)\n[//]: # (cam IMG-006 场景:雨夜长街｜青禾｜近景，侧脸，雨丝)\n[//]: # (cam IMG-007 场景:雨夜长街｜青禾｜特写，正脸，湿发)\n\n四张都好了。",
+      "[//]: # (cam IMG-008 场景:烛光书房｜青禾｜中景，托腮，烛台)\n[//]: # (cam IMG-009 场景:烛光书房｜青禾｜近景，暖光，灯笼虚化)\n[//]: # (cam IMG-010 场景:烛光书房｜青禾｜背影，窗格，黄昏)\n[//]: # (cam IMG-011 场景:灯笼长廊｜青禾｜全身，长廊，灯笼)\n\n书房三张和长廊一张好了。",
+      "[//]: # (cam IMG-012 场景:雾中庭院｜书月｜全身，细雨，青瓦)\n[//]: # (cam IMG-013 场景:雨中回廊｜书月｜中景，回廊，雨帘)\n\n两场都好了。",
+      "[//]: # (cam IMG-014 场景:月下栏杆｜书月｜近景，倚栏，满月)\n[//]: # (cam IMG-015 场景:月下栏杆｜书月｜中景，倚栏，灯火)\n[//]: # (cam IMG-016 场景:月下栏杆｜书月｜中景，回望，屋檐)\n[//]: # (cam IMG-017 场景:月下栏杆｜书月｜中景，托腮，夜色)\n[//]: # (cam IMG-018 场景:月下栏杆｜书月｜远景，倚栏，城郭)\n\n五版都在这里。",
+      "[//]: # (cam IMG-019 其他:线稿｜青禾｜铅笔，半身，构图线)\n\n线稿收到，构图照它来。",
+      "[//]: # (cam IMG-020 场景:雨夜长街｜青禾｜中景，回头，木栏)\n[//]: # (cam IMG-021 场景:雨夜长街｜青禾｜俯拍，积水倒影，灯笼)\n[//]: # (cam IMG-022 场景:雨夜长街｜青禾｜近景，正脸，暖色灯笼)\n[//]: # (cam IMG-007 评价：脸最好)\n\n三张都好了。",
+      "[//]: # (cam IMG-023 文档:导演笔记 第1页｜扫描件，人物和布景)\n[//]: # (cam IMG-024 文档:导演笔记 第2页｜扫描件，晨光机位)\n\n第二页要求晨光从窗外斜进来，人物不站在窗正中。",
+      "海报用 IMG-007 的正脸，光线按 IMG-024 的要求从左上斜进来。",
+    ],
+    fetched: ["[图片 IMG-007 取回的原图｜rain-4.png｜生成的图片｜第 2 轮｜505×505]", "[图片 IMG-024 取回的原图｜导演笔记-2.png｜用户上传｜第 8 轮｜509×720]"],
+  },
+  en: {
+    name: "Rain Lane, a period short film",
+    files: ["qinghe-sheet.png", "shuyue-front.png", "shuyue-side.png", "sketch.png", "director-notes-1.png", "director-notes-2.png"],
+    asks: ["Here are the two heroines: a sheet for Qinghe, and Shuyue from the front and from the side.", "Scene 1, the rainy street: Qinghe walks by under an umbrella. Make four shots.",
+      "Scene 2, the candlelit study, and one more in the lantern corridor.", "Shuyue's two scenes: the misty courtyard and the rainy veranda.", "Give me a few versions of the moonlit railing shot to pick from.",
+      "Here is my pencil sketch. Follow its composition.", "Three more on the rainy street: looking back, the puddle reflection, and a close-up facing the camera. The extreme close-up from scene 1 has the best face.",
+      "Scans of the director's notes. Page 2 asks for a certain light.", "Make the poster from the best face, lit the way the notes ask."],
+    prompts: ["rainy street, medium shot, umbrella", "rainy street, wide shot", "rainy street, close-up, profile", "rainy street, extreme close-up", "candlelit study, medium shot", "candlelit study, close-up",
+      "candlelit study, from behind, lattice window", "lantern corridor, full length", "misty courtyard, full length", "rainy veranda, medium shot", "moonlit railing, close-up", "moonlit railing, medium shot",
+      "moonlit railing, looking back", "moonlit railing, chin in hand", "moonlit railing, wide shot", "rainy street, looking back", "rainy street, puddle reflection", "rainy street, close-up, facing the camera"],
+    replies: [
+      "[//]: # (cam IMG-001 character: Qinghe | character sheet, half-length, white robe)\n[//]: # (cam IMG-002 character: Shuyue | character sheet, front, pale grey collar)\n[//]: # (cam IMG-003 character: Shuyue | character sheet, three-quarter view)\n\nI have both sheets.",
+      "[//]: # (cam IMG-004 place: Street | Qinghe | medium shot, umbrella, lanterns)\n[//]: # (cam IMG-005 place: Street | Qinghe | wide shot, long street, red lanterns)\n[//]: # (cam IMG-006 place: Street | Qinghe | close-up, profile, rain)\n[//]: # (cam IMG-007 place: Street | Qinghe | extreme close-up, facing the camera, wet hair)\n\nAll four are ready.",
+      "[//]: # (cam IMG-008 place: Study | Qinghe | medium shot, chin in hand, candle)\n[//]: # (cam IMG-009 place: Study | Qinghe | close-up, warm light, blurred lanterns)\n[//]: # (cam IMG-010 place: Study | Qinghe | from behind, lattice window, dusk)\n[//]: # (cam IMG-011 place: Corridor | Qinghe | full length, corridor, lanterns)\n\nThree in the study and one in the corridor.",
+      "[//]: # (cam IMG-012 place: Courtyard | Shuyue | full length, drizzle, grey tiles)\n[//]: # (cam IMG-013 place: Veranda | Shuyue | medium shot, veranda, curtain of rain)\n\nBoth scenes are ready.",
+      "[//]: # (cam IMG-014 place: Railing | Shuyue | close-up, leaning on the railing, full moon)\n[//]: # (cam IMG-015 place: Railing | Shuyue | medium shot, railing, lights below)\n[//]: # (cam IMG-016 place: Railing | Shuyue | medium shot, looking back, eaves)\n[//]: # (cam IMG-017 place: Railing | Shuyue | medium shot, chin in hand, night)\n[//]: # (cam IMG-018 place: Railing | Shuyue | wide shot, railing, rooftops)\n\nHere are five versions.",
+      "[//]: # (cam IMG-019 other: Pencil sketch | Qinghe | pencil, half-length, guide lines)\n\nGot the sketch; I'll follow its composition.",
+      "[//]: # (cam IMG-020 place: Street | Qinghe | medium shot, looking back, wooden railing)\n[//]: # (cam IMG-021 place: Street | Qinghe | high angle, puddle reflection, lanterns)\n[//]: # (cam IMG-022 place: Street | Qinghe | close-up, facing the camera, warm lanterns)\n[//]: # (cam IMG-007 rated: best face)\n\nAll three are ready.",
+      "[//]: # (cam IMG-023 document: Director's notes p. 1 | scan, cast and set)\n[//]: # (cam IMG-024 document: Director's notes p. 2 | scan, morning light)\n\nPage 2 asks for morning light slanting in through the window, with the character off its center.",
+      "The poster uses the face from IMG-007, lit from the upper left as IMG-024 asks.",
+    ],
+    fetched: ["[Image IMG-007 fetched original | rain-4.png | generated image | turn 2 | 505×505]", "[Image IMG-024 fetched original | director-notes-2.png | uploaded | turn 8 | 509×720]"],
+  },
+};
+for (const [id, w] of [[SHOWCASE, SHOWCASE_TEXT.zh], [SHOWCASE_EN, SHOWCASE_TEXT.en]] as const) {
+  let n = 0;
+  const gen = (bytes: Buffer) => { const k = n++; return made(`sh${k}`, `shot-${k + 1}.png`, bytes, w.prompts[k]); };
+  writeFileSync(join(day, `rollout-2026-09-24T16-00-00-${id}.jsonl`), line("session_meta", { id }) +
+    turn("r1") + ask("msg_r1", "r1", w.asks[0], [[w.files[0], shown.sheets[0]], [w.files[1], shown.sheets[1]], [w.files[2], shown.sheets[2]]]) + say(w.replies[0], "r1") +
+    turn("r2") + ask("msg_r2", "r2", w.asks[1]) + shown.street.map(gen).join("") + say(w.replies[1], "r2") +
+    turn("r3") + ask("msg_r3", "r3", w.asks[2]) + shown.study.map(gen).join("") + say(w.replies[2], "r3") +
+    turn("r4") + ask("msg_r4", "r4", w.asks[3]) + shown.shuyue.map(gen).join("") + say(w.replies[3], "r4") +
+    turn("r5") + ask("msg_r5", "r5", w.asks[4]) + shown.railing.map(gen).join("") + say(w.replies[4], "r5") +
+    turn("r6") + ask("msg_r6", "r6", w.asks[5], [[w.files[3], shown.sketch]]) + say(w.replies[5], "r6") +
+    turn("r7") + ask("msg_r7", "r7", w.asks[6]) + shown.more.map(gen).join("") + say(w.replies[6], "r7") +
+    turn("r8") + ask("msg_r8", "r8", w.asks[7], [[w.files[4], shown.notes[0]], [w.files[5], shown.notes[1]]]) + say(w.replies[7], "r8") +
+    turn("r9") + ask("msg_r9", "r9", w.asks[8]) + fetchedBy("cr9", [[w.fetched[0], shown.street[3]], [w.fetched[1], shown.notes[1]]]) + say(w.replies[8], "r9"));
+}
+
 // Their names, as Codex keeps them next to the sessions folder (the panel's title).
 writeFileSync(join(root, "session_index.jsonl"), `${JSON.stringify({ id: THREAD, thread_name: "海报配色调整", updated_at: "2026-09-24T10:00:00Z" })}
 ${JSON.stringify({ id: MANY, thread_name: "产品图批量修图", updated_at: "2026-09-24T12:00:00Z" })}
@@ -328,6 +405,8 @@ ${JSON.stringify({ id: AUTO, thread_name: "海报配色调整", updated_at: "202
 ${V08_TASKS.flatMap(([auto, manual, w]) => [auto, manual].map((id) => JSON.stringify({ id, thread_name: w.name, updated_at: "2026-09-24T13:00:00Z" }))).join("\n")}
 ${JSON.stringify({ id: SCENES, thread_name: "宣传片第三场", updated_at: "2026-09-24T14:00:00Z" })}
 ${JSON.stringify({ id: V12, thread_name: "短片《雨夜》素材", updated_at: "2026-09-24T15:00:00Z" })}
+${JSON.stringify({ id: SHOWCASE, thread_name: SHOWCASE_TEXT.zh.name, updated_at: "2026-09-24T16:00:00Z" })}
+${JSON.stringify({ id: SHOWCASE_EN, thread_name: SHOWCASE_TEXT.en.name, updated_at: "2026-09-24T16:00:00Z" })}
 `);
 
 // New tasks the user starts after opening the panel on a new chat (?newtask=): Codex files them in today's folder.
@@ -374,6 +453,17 @@ for (const [auto, manual] of V08_TASKS) {
   callTool("cam_set_selection", { uncheck: ["IMG-003", "IMG-008", "IMG-009"] }, metaOf(manual), sessionsDir);
 }
 callTool("cam_set_selection", { auto: true }, metaOf(SCENES), sessionsDir);
+// The showcase: automatic selection on, Qinghe's sheet sent every turn; its last request (turn 9) left out every image
+// of earlier turns but the sheet, and carried the two the model fetched.
+for (const id of [SHOWCASE, SHOWCASE_EN]) {
+  callTool("cam_set_selection", { auto: true }, metaOf(id), sessionsDir);
+  callTool("cam_set_selection", { check: ["IMG-001"], mode: "auto" }, metaOf(id), sessionsDir);
+  const items = readFileSync(join(day, `rollout-2026-09-24T16-00-00-${id}.jsonl`), "utf8").trim().split("\n").map((raw) => JSON.parse(raw)).filter((record) => record.type === "response_item").map((record) => record.payload);
+  const sizes = imageSizesOf(items);
+  const before = Object.values(sizes).reduce((sum, chars) => sum + chars, 0) + 180_000;
+  const replaced = Array.from({ length: 23 }, (_, i) => ({ id: `IMG-${String(i + 2).padStart(3, "0")}`, mode: "plain" }));
+  recordRequest(id, { at: new Date(Date.now() - 2 * 60_000).toISOString(), transport: "http", turnId: "r9", decodedBytes: before, imageSizes: sizes, rewrite: { auto: true, replaced, decodedBefore: before, decodedAfter: Math.round(before * 0.09) } }, requestStatsDirOf(process.env.CAM_DATA_DIR));
+}
 
 // What the engine would have recorded: the last full request came in turn 3 (turn 4's images are new since) and had
 // IMG-001, IMG-005 and IMG-006 replaced. ?stats=skipped|websocket|none shows the other cases.
@@ -459,8 +549,8 @@ const HOST = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><tit
   // Each page load gets a thread of its own, so a switch made on an earlier load does not carry over.
   const fresh = params.get("thread") === "fresh" ? Math.random().toString(16).slice(2, 6).padEnd(4, "0") : null;
   // ?thread=v08 and v08m with ?lang=en: the same task in English.
-  const english = params.get("thread")?.startsWith("v08") && params.get("lang") === "en" ? "&en=1" : "";
-  const query = fresh ? "?fresh=" + fresh : ["gap", "many", "auto", "v08", "v08m", "scenes", "v12"].includes(params.get("thread")) ? "?" + params.get("thread") + "=1" + english : "";
+  const english = (params.get("thread")?.startsWith("v08") || params.get("thread") === "showcase") && params.get("lang") === "en" ? "&en=1" : "";
+  const query = fresh ? "?fresh=" + fresh : ["gap", "many", "auto", "v08", "v08m", "scenes", "v12", "showcase"].includes(params.get("thread")) ? "?" + params.get("thread") + "=1" + english : "";
   const call = (name, args) => fetch("/call" + query, { method: "POST", body: JSON.stringify({ name, arguments: args }) }).then((r) => r.json());
   window.addEventListener("message", async (event) => {
     const m = event.data;
@@ -536,8 +626,10 @@ createServer((request, response) => {
       const v08m = new URL(request.url, "http://x").searchParams.has("v08m");
       const scenes = new URL(request.url, "http://x").searchParams.has("scenes");
       const v12 = new URL(request.url, "http://x").searchParams.has("v12");
-      const [v08Task, v08mTask] = V08_TASKS[new URL(request.url, "http://x").searchParams.has("en") ? 1 : 0];
-      const threadMeta = fresh && /^[0-9a-f]{4}$/.test(fresh) ? { threadId: freshId, thread_id: freshId } : gap ? { threadId: GAP, thread_id: GAP } : many ? manyMeta : auto ? autoMeta : v08 ? metaOf(v08Task) : v08m ? metaOf(v08mTask) : scenes ? metaOf(SCENES) : v12 ? metaOf(V12) : meta;
+      const showcase = new URL(request.url, "http://x").searchParams.has("showcase");
+      const english = new URL(request.url, "http://x").searchParams.has("en");
+      const [v08Task, v08mTask] = V08_TASKS[english ? 1 : 0];
+      const threadMeta = fresh && /^[0-9a-f]{4}$/.test(fresh) ? { threadId: freshId, thread_id: freshId } : gap ? { threadId: GAP, thread_id: GAP } : many ? manyMeta : auto ? autoMeta : v08 ? metaOf(v08Task) : v08m ? metaOf(v08mTask) : scenes ? metaOf(SCENES) : v12 ? metaOf(V12) : showcase ? metaOf(english ? SHOWCASE_EN : SHOWCASE) : meta;
       try { reply(200, "application/json", JSON.stringify(callTool(name, args ?? {}, threadMeta, sessionsDir))); }
       catch (error) { reply(200, "application/json", JSON.stringify({ isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }] })); }
     });
