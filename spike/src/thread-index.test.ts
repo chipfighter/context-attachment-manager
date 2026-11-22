@@ -7,10 +7,11 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import test from "node:test";
+import { join, toNamespacedPath } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import test, { type TestContext } from "node:test";
 import { zstdCompressSync } from "node:zlib";
 import { buildIndex, forkOrigin, hasRollout, loadThreadIndex, readThreadHistory, spawnParent, threadStartedAt, threadsStartedSince } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { setPixelCache } from "../../plugin/src/core/pixels.ts";
@@ -67,6 +68,75 @@ test("a later segment inherits its base segment only up to history_base.end_byte
   writeFileSync(join(day, `rollout-2026-09-24T10-05-00-${THREAD}_${segment}.jsonl`),
     line("session_meta", { id: THREAD, history_base: { thread_id: THREAD, end_byte_offset: Buffer.byteLength(first) } }) + turn("t2") + upload("msg_2", "t2", "b.png", blue));
   assert.deepEqual(loadThreadIndex(dir, THREAD).images.map((i) => [i.id, i.name]), [["IMG-001", "a.png"], ["IMG-002", "b.png"]]);
+});
+
+function branchedRollouts(t: TestContext) {
+  const root = mkdtempSync(join(tmpdir(), "cam-branches-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const dir = join(root, "sessions");
+  const day = join(dir, "2026", "09", "24");
+  mkdirSync(day, { recursive: true });
+
+  const baseFile = join(day, `rollout-2026-09-24T10-00-00-${THREAD}.jsonl`);
+  const registered = join(day, `rollout-2026-09-24T10-05-00-${THREAD}_01a0d301-0000-7000-8000-00000000000b.jsonl`);
+  const sibling = join(day, `rollout-2026-09-24T10-10-00-${THREAD}_01a0d301-0000-7000-8000-00000000000c.jsonl`);
+  const base = line("session_meta", { id: THREAD }) + turn("base") + upload("msg_base", "base", "inherited.png", red);
+  const continuation = line("session_meta", { id: THREAD, history_base: { thread_id: THREAD, end_byte_offset: Buffer.byteLength(base) } });
+  writeFileSync(baseFile, base + upload("msg_drop", "base", "after-cutoff.png", blue));
+  writeFileSync(registered, continuation + turn("registered") + upload("msg_registered", "registered", "registered.png", blue));
+  writeFileSync(sibling, continuation + turn("sibling") + upload("msg_sibling", "sibling", "sibling.png", blue));
+  utimesSync(registered, 1_800_000_000, 1_800_000_000);
+  utimesSync(sibling, 1_800_000_060, 1_800_000_060);
+  const sqlite = join(root, "sqlite");
+  mkdirSync(sqlite);
+  writeFileSync(join(root, "config.toml"), 'sqlite_home = "sqlite"\n');
+  return { root, dir, day, baseFile, registered, sibling, databasePath: join(sqlite, "state_5.sqlite") };
+}
+
+function registerRollout(databasePath: string, threadId: string, file: string): void {
+  const db = new DatabaseSync(databasePath);
+  try {
+    db.exec("CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL)");
+    db.prepare("INSERT OR REPLACE INTO threads (id, rollout_path) VALUES (?, ?)").run(threadId, file);
+  } finally {
+    db.close();
+  }
+}
+
+test("competing rollout heads follow the thread's registered path even when another is newer", (t) => {
+  const { root, dir, registered, sibling, databasePath } = branchedRollouts(t);
+  const originalSqliteHome = process.env.CODEX_SQLITE_HOME;
+  t.after(() => {
+    if (originalSqliteHome === undefined) delete process.env.CODEX_SQLITE_HOME;
+    else process.env.CODEX_SQLITE_HOME = originalSqliteHome;
+  });
+  process.env.CODEX_SQLITE_HOME = root;
+  registerRollout(join(root, "state_5.sqlite"), THREAD, sibling);
+  registerRollout(databasePath, THREAD, toNamespacedPath(registered));
+  const index = loadThreadIndex(dir, THREAD);
+  assert.deepEqual(index.images.map((i) => [i.id, i.name, i.turn]), [["IMG-001", "inherited.png", 1], ["IMG-002", "registered.png", 2]]);
+  assert.equal(index.turns, 2);
+  registerRollout(databasePath, THREAD, sibling);
+  assert.deepEqual(loadThreadIndex(dir, THREAD).images.map((i) => i.name), ["inherited.png", "sibling.png"]);
+});
+
+test("competing rollout heads still require a registration for this thread and one of its heads", (t) => {
+  const { dir, day, baseFile, registered, databasePath } = branchedRollouts(t);
+  const otherThread = "01a0d301-0000-7000-8000-0000000000aa";
+  const otherFile = join(day, `rollout-2026-09-24T10-15-00-${otherThread}.jsonl`);
+  writeFileSync(otherFile, line("session_meta", { id: otherThread }));
+
+  const assertAmbiguous = (message: string) =>
+    assert.throws(() => loadThreadIndex(dir, THREAD), /expected one latest rollout segment/, message);
+  assertAmbiguous("database absent");
+  assert.equal(existsSync(databasePath), false, "reading history does not create a database");
+
+  registerRollout(databasePath, otherThread, registered);
+  assertAmbiguous("only another thread's row matches");
+  registerRollout(databasePath, THREAD, otherFile);
+  assertAmbiguous("the registered file belongs to another thread");
+  registerRollout(databasePath, THREAD, baseFile);
+  assertAmbiguous("the registered file is an ancestor of both heads");
 });
 
 test("a fork inherits its parent's history up to the fork point, read from the parent's own file", () => {
