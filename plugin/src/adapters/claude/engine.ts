@@ -6,7 +6,7 @@
 // Input: request headers and bodies, the session's transcript and selection. Output: attempts to send and a report.
 
 import type { IncomingHttpHeaders } from "node:http";
-import { decodeBody, encodeBody, hasUnsafeInteger } from "../../core/engine/transport.ts";
+import { decodeBody, encodeBody, hasUnsafeInteger, type ParsedBody } from "../../core/engine/transport.ts";
 import { claudeSelectionDirOf } from "../../core/paths.ts";
 import type { Lang } from "../../core/lang.ts";
 import { currentLang } from "../../core/language.ts";
@@ -85,13 +85,14 @@ export const LATE_STEP_MS = 100;
 // v0.11: lang, the language of the text for the model; the engine passes the one the core and Codex's setting choose.
 // v0.12: missed, the contents of images the engine sent before the transcript had them (report.lateContent): in the
 // next turn they go out once more for their feature lines (core/session.ts missedLine).
-export function rewriteClaudeBody(original: Buffer, encoding: string | undefined, sessionId: string, dir = claudeSelectionDirOf(), home = claudeHome(), env = process.env, thinking: ThinkingRecord | null = null, previous: SentPrefix[] = [], lang: Lang = currentLang(), missed: ReadonlySet<string> = new Set()): { body: Buffer; report: Json; attempts: ClaudeAttempt[]; prefix?: SentPrefix } {
+// v0.12: `pre`, the body the engine already decoded and parsed (transport.ts, parseBody); it is not parsed again.
+export function rewriteClaudeBody(original: Buffer, encoding: string | undefined, sessionId: string, dir = claudeSelectionDirOf(), home = claudeHome(), env = process.env, thinking: ThinkingRecord | null = null, previous: SentPrefix[] = [], lang: Lang = currentLang(), missed: ReadonlySet<string> = new Set(), pre?: ParsedBody): { body: Buffer; report: Json; attempts: ClaudeAttempt[]; prefix?: SentPrefix } {
   const asIs = (report: Json) => ({ body: original, report, attempts: [] });
-  const decoded = decodeBody(original, encoding);
+  const decoded = pre?.decoded ?? decodeBody(original, encoding);
   if (!decoded) return asIs({ skipped: "undecodable body" });
-  const text = decoded.toString("utf8");
+  const text = pre?.text ?? decoded.toString("utf8");
   let json: Json;
-  try { json = JSON.parse(text); } catch { return asIs({ skipped: "unparsable body" }); }
+  try { json = pre?.json ?? JSON.parse(text); } catch { return asIs({ skipped: "unparsable body" }); }
   if (!Array.isArray(json.messages)) return asIs({ skipped: "no messages array" });
   if (hasUnsafeInteger(text)) return asIs({ skipped: "integer beyond 2^53 would change when re-serialized" });
   let index: ClaudeIndex;
