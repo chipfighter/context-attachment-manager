@@ -261,6 +261,7 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
 - **卸载**：先去掉带标记的块、恢复直连，再卸插件和市场。`uninstall.ps1` / `uninstall.sh` 不需要 Node 和插件文件。
 - **Windows PowerShell 5.1**：`irm … | iex` 按 Latin-1 解码，所以两个 `.ps1` 只用 ASCII。
 - **发布**：推送 `v<版本>` 标签后，`release.yml` 先在三个平台跑 CI，核对标签和插件版本一致，把标签写进四个脚本，建一个草稿 Release，说明取自 CHANGELOG.md。人工看过再发布。`releases/latest/download/<脚本>` 始终指向最新的发布。
+  - v0.13：发版准备时，`.claude-plugin/marketplace.json` 里插件来源的 `ref` 和 `version` 一起改成新标签（Claude Code 按它装、按它更新），`release.yml` 核对；两份清单的版本也要一致。发布之后它就是“最新的发布”，各人的插件在一天之内自己装上（第 13 节）。要回滚，把上一个版本标成最新发布，再把这个指针改回去。
 
 ## 10. 测试
 
@@ -390,7 +391,7 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
 - **取图工具**：插件服务以 `CAM_HOST=claude` 运行，只给模型 `cam_view_image`。Mod 把调用它的会话 id 补进参数（插件服务可能比 `/clear`、`/resume` 活得久），并在 `classic.PreToolUse` 里放行这一个工具：先让下面的钩子和设置判断，它们拒绝或要求询问时照旧。
 - **数据目录**：Claude 会话的勾选在 `claude/selection/`，请求统计在 `claude/requests/`，思考记录的哈希在 `claude/thinking/`，和 Codex 的分开。
 - **安装**：
-  - 仓库根目录同时是 Claude 插件市场（`.claude-plugin/marketplace.json` 指向仓库根目录），清单是 `.claude-plugin/plugin.json`：同一个 MCP 服务（`plugin/scripts/launch`，`CAM_HOST=claude`），另加 Mod（`hooks/hooks.json`）。
+  - 仓库根目录同时是 Claude 插件市场（`.claude-plugin/marketplace.json`；v0.13 起插件来源是本仓库的发布标签，之前是仓库根目录，见第 13 节），清单是 `.claude-plugin/plugin.json`：同一个 MCP 服务（`plugin/scripts/launch`，`CAM_HOST=claude`），另加 Mod（`hooks/hooks.json`）。
   - 用户运行 `claude plugin marketplace add chipfighter/context-attachment-manager` 和 `claude plugin install codex-attachment-manager@codex-attachment-manager`。装好的插件按版本缓存，代码改了要升版本才会重新安装。
   - Claude 桌面不带 Node。没装 Codex 时，启动脚本用 PATH 上 24 以上的 `node`，找不到就提示安装 Node 24。
 - **测试**：单元测试同第 10 节（`claude-*.test.ts`）。Mod 的界面和钩子用 Claude Code 自带的测试工具（`claude plugin test`）测。模型测试用真实的 Claude 桌面订阅会话，按 v0.4/plan.md 的约定用 Haiku 5.5，中英文都测。
@@ -400,3 +401,27 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
   - `Claude_Browser` 浏览器工具（v0.6 还用 `tabs_context`、`tabs_close`、`navigate`）；Mod 面板里的链接交给系统浏览器；桌面版在会话里发的附带请求。
   - v0.6：用户不在看这个会话、又 30 分钟没有新的一轮，桌面版就断开会话的自带浏览器、关掉它的标签页，Claude Code 进程照常运行（日志：一轮结束或用户离开会话时 `[WarmLifecycle:preview] Starting idle timeout … 1800s`，用户回来看时重新计时，到时 `Idle timeout reached`）；内存紧张时停掉闲置很久的进程，用到时再启动（`[CliGovernor] pressure evicting`）。时间变了，自动打开分不清谁关的。
   - 思考记录的前缀校验：替换历史里的一张图，之后的思考块就对不上了；2026-08-31 以后注册的账号直接拒绝。比较时不看 JSON 写法和键的顺序；去掉开头或末尾的思考可以，去掉中间的会让后面的失效，把去掉过的放回去，会让它不在期间产生的失效。
+
+## 13. 自动更新（v0.13）
+
+插件自己装新版本，修了 bug、加了功能，用户不用再跑一遍安装命令（用户 2026-11-23 定）。`core/update.ts` 管什么时候查、记了什么；装的步骤在 `adapters/codex/update.ts` 和 `adapters/claude/update.ts`，都用平台自己的命令行，不自己替换插件文件。
+
+- **指针**：GitHub 上最新发布的那个版本（`releases/latest`）。插件跟着它走，比装着的高就升，比装着的低也装（回滚：把上一个版本标成最新，大家下次检查时就退回去）。Claude 的插件市场另有一处指针：`.claude-plugin/marketplace.json` 把插件来源写成本仓库的发布标签（`source: github`、`ref`、`version`），每次发版都改成新标签，`release.yml` 核对它和标签一致。
+- **谁来查、多久查一次**：插件服务（Codex 里和 Claude Code 下都是），启动 2 分钟后第一次，之后每 6 小时看一眼；真去 GitHub 查，要距上次检查满 20 小时，上次失败或新版本还没装上时满 6 小时。整台机器一次只有一个在查（`state/update.lock`，15 分钟没放的算残留）。结果记在数据目录的 `state/update.json`，每次检查在 `plugin-server.jsonl` 留一行 `update`。
+- **查什么**：对 `https://github.com/chipfighter/context-attachment-manager/releases/latest` 发一个 HEAD 请求，走和引擎一样的出口代理（第 4 节），只读重定向地址里的标签。不带 Cookie，不发任何关于用户的信息。`CAM_UPDATE_LATEST=v<版本>` 跳过这一步（测试、或要钉住版本的机器）。
+- **只管从 GitHub 装的**：装着的版本和来源都问平台的命令行：Codex 用 `codex plugin list --json`（`marketplaceSource` 是 git、地址是本仓库），Claude 用 `claude plugin list --json` 和 `claude plugin marketplace list --json`（`repo` 是本仓库，改名前的旧名也算）。从本地文件夹装的（开发用的检出，例如 `cam install` 登记的仓库目录）一律不动。
+- **Codex 的步骤**：
+  1. 改 `config.toml` 里本插件市场那一节的 `ref`，指向新标签（先备份，整文件替换）。不用一行命令里“先删市场、再加”的办法：删掉市场后 Codex 就不再列出、不再加载这个插件，后台再加如果失败，下次启动 Codex 就连不上（2026-11-23 实测）。
+  2. `codex plugin marketplace upgrade`：Codex 刷新它的副本，并且自己就把新版本装进插件缓存。第一次偶尔没动（2026-11-23 见过一次），所以最多跑两次，并核对副本里插件的版本；还不对就把 `ref` 改回去，记为失败。
+  3. 装着的版本还不是新版本时，才 `codex plugin add`。Windows 上插件服务正跑在旧版本的目录里（这个检查本身就是），`plugin add` 要把旧目录挪开时报“拒绝访问（os error 5）”，而 `upgrade` 已经把新版本放在旁边了。
+  4. 外面包着 `preservingPluginCacheAsync`（第 9 节）：旧版本的文件补回来，还在跑的插件服务和引擎照常用。
+  - Codex 重启后用新版本。新版本的插件服务按第 5 节的规则换掉旧引擎。
+- **Claude Code 的步骤**：`claude plugin marketplace update codex-attachment-manager`，`claude plugin update codex-attachment-manager@codex-attachment-manager --scope user`，再读一次装着的版本：和指针一样记为已更新；还是旧的（市场里的指针还没改）记为“等待”，6 小时后再试。新开的会话用新版本，开着的会话不变。
+  - Claude Code 自己也能更新插件市场，但 Claude 桌面版启动会话时设了 `DISABLE_AUTOUPDATER=1`（2026-11-23 看到的），桌面版里它不跑，所以插件自己来。
+  - 命令行按顺序找：PATH 上的 `claude`，原生安装的 `~/.local/bin/claude`，Windows 上桌面版自带的那份（`%LOCALAPPDATA%\Claude-Data\…\claude-code\<版本>\…\claude.exe`，最新的）。运行时去掉把进程绑在会话上的环境变量（`CLAUDECODE`、`CLAUDE_CODE_SESSION_ID`、`CLAUDE_CODE_ENTRYPOINT` 等），`CLAUDE_CONFIG_DIR` 留着。
+- **开关**：面板里一个开关，两个平台共用（`state/update.json` 的 `auto`），默认开。`CAM_AUTO_UPDATE=0` 也能关。
+- **面板**：请求卡片展开后最后一行“插件版本”：版本号、状态（已是最新、新版本已装好待重启、上次没查成、本地文件夹装的不自动更新、已关闭）和开关。新版本装好、还没生效时一条提示；新版本跑起来后一条提示（“更新说明”在宿主的浏览器里打开发布页，打不开就复制链接；“知道了”记下看过的版本）。Codex 走 `cam_update` 工具，Claude 走引擎的 `/__cam/claude/update`；Claude 面板上的版本是引擎的。
+- **实测**（2026-11-23，一次性的 Codex home 和 Claude 配置目录）：
+  - Codex：v0.11.5 → v0.12.0，10 秒，期间有进程占着旧版本目录；旧目录的文件都在，`codex plugin list` 报 0.12.0。
+  - Claude：v0.11.5 → v0.12.0，15 秒；把指针改回 v0.11.5，两边都能退回去。
+  - 本机：Claude 装的是 GitHub 的市场，会更新；Codex 装的是本地仓库，跳过。经用户的代理查 GitHub，0.6 秒。
