@@ -12,6 +12,7 @@ import zlib from "node:zlib";
 import { buildClaudeIndex } from "../../plugin/src/adapters/claude/claude-index.ts";
 import { rewriteBody } from "../../plugin/src/adapters/codex/engine.ts";
 import { rewriteClaudeBody } from "../../plugin/src/adapters/claude/engine.ts";
+import { parseBody } from "../../plugin/src/core/engine/transport.ts";
 import { featureNote } from "../../plugin/src/core/words.ts";
 import { writeSelection } from "../../plugin/src/core/selection.ts";
 import { autoChoice, awaitingLine, missedLine } from "../../plugin/src/core/session.ts";
@@ -151,6 +152,10 @@ test("v0.12, Claude: an image the engine sent without its id goes out once more,
   assert.equal(sent.at(-2)?.content?.[0]?.text, "next");
   const usual = rewriteClaudeBody(body, undefined, session, dir, home, {}, null, [], "zh");
   assert.deepEqual(usual.report.replaced.map((entry: Json) => entry.id), ["IMG-001"]);
+  // The engine hands over both (proxy.ts): the missed images and its one parse of the body (transport.ts parseBody).
+  // The body itself is not read again, so one that would not parse proves the parse was used.
+  const both = rewriteClaudeBody(Buffer.from("not json"), undefined, session, dir, home, {}, null, [], "zh", new Set([index.images[0].contentId]), parseBody(body, undefined).parsed!);
+  assert.deepEqual(labels(both), ["[图片 IMG-001 已提供，还没有特征行"]);
 });
 
 test("the feature line note says how to write a missing line and how to correct a wrong one", () => {
