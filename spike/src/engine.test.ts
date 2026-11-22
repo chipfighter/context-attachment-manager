@@ -71,6 +71,8 @@ test("ensure starts one engine; a second start on the same port leaves it alone"
   const first = await ensureEngine({ port, extraArgs: ["--stay"] });
   assert.equal(first.state, "started");
   t.after(() => { try { process.kill(first.health!.pid); } catch { /* already gone */ } });
+  // v0.12: how it was started, for the plugin service's log.
+  assert.equal(first.start?.via, process.platform === "win32" && first.start?.wmiError === undefined ? "wmi" : "child");
   // v0.6: from now on new tasks and sessions have automatic selection on by default.
   assert.notEqual(autoDefaultSince(join(data, "selection")), null);
   assert.notEqual(autoDefaultSince(join(data, "claude", "selection")), null);

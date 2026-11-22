@@ -57,18 +57,24 @@ async function main(): Promise<boolean> {
     checks.toolsListed = TOOLS.every((tool) => summary.server?.tools.includes(tool));
     checks.panelListed = !!summary.server?.resources?.includes("ui://codex-attachment-manager/panel.html");
 
-    // 3. The MCP server starts the engine, which answers on loopback.
-    for (let i = 0; i < 40 && !health; i++) {
+    // 3. The MCP server starts the engine, which answers on loopback. v0.12: on Windows through WMI, which can take
+    // seconds on a fresh machine before the engine even runs (engine.ts), so this waits up to 30 s.
+    const begun = Date.now();
+    for (let i = 0; i < 120 && !health; i++) {
       health = await engineHealth(port);
       if (!health) await sleep(250);
     }
-    summary.engine = health ? { pid: health.pid, port: health.port } : null;
+    summary.engine = health ? { pid: health.pid, port: health.port, waitedMs: Date.now() - begun } : null;
     checks.engineStarted = !!health;
   } finally {
     await server.stop();
-    // On Windows the engine ends with the MCP server's job; elsewhere it would outlive this test.
+    // The engine outlives the MCP server (v0.12: on Windows too, started outside its job).
     if (health) try { process.kill(health.pid); } catch { /* already gone */ }
   }
+  // How the plugin's MCP servers started the engine, or why they could not (plugin-server.ts logs each start).
+  try {
+    summary.engineLog = readFileSync(join(data, "plugin-server.jsonl"), "utf8").split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line)).filter((entry) => entry.event === "engine");
+  } catch (error) { summary.engineLog = String(error); }
   const ok = Object.values(checks).every(Boolean);
   console.log(JSON.stringify({ ok, ...summary }, null, 2));
   return ok;

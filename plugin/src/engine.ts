@@ -166,6 +166,11 @@ let wmiFailed = false;
 // The longest a start through WMI may take. Usually about a second, but PowerShell's first call on a freshly started
 // machine can take several (Windows CI, 2026-11-22).
 const WMI_START_MS = 10_000;
+// v0.12: how an engine was started, for the plugin service's log: through WMI or as a child; how long the WMI start took,
+// and why it gave no engine when it did not (PowerShell would not start, it took too long, Win32_Process.Create's
+// return value, or the first line PowerShell wrote on its error output).
+export type StartNote = { via: "wmi" | "child"; wmiMs?: number; wmiError?: string };
+let lastWmiStart: { ms: number; error?: string } | null = null;
 
 // The new process gets this process's environment explicitly (WMI would give it the user's default one), on stdin, not
 // on a command line. Resolves with its process id, or null when it could not be started this way.
@@ -181,16 +186,28 @@ export function startOutsideJob(commandLine: string[], cwd: string, env: NodeJS.
     "",
   ].join("\n");
   return new Promise((resolve) => {
+    const begun = Date.now();
     let out = "";
+    let err = "";
     let settled = false;
-    const done = (pid: number | null) => { if (settled) return; settled = true; clearTimeout(timer); if (pid === null) wmiFailed = true; resolve(pid); };
-    const shell = spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
-    const timer = setTimeout(() => { shell.kill(); done(null); }, WMI_START_MS);
-    shell.on("error", () => done(null));
+    const done = (pid: number | null, error = "no process id") => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (pid === null) wmiFailed = true;
+      lastWmiStart = { ms: Date.now() - begun, ...(pid === null ? { error } : {}) };
+      resolve(pid);
+    };
+    const shell = spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    const timer = setTimeout(() => { shell.kill(); done(null, "timed out"); }, WMI_START_MS);
+    shell.on("error", (error) => done(null, `powershell: ${error.message}`));
     shell.stdout.on("data", (chunk) => { out += chunk; });
+    shell.stderr.on("data", (chunk) => { if (err.length < 4000) err += chunk; });
     shell.on("close", () => {
       const match = /started (\d+) (\d+)/.exec(out);
-      done(match && match[1] === "0" && Number(match[2]) > 0 ? Number(match[2]) : null);
+      if (match && match[1] === "0" && Number(match[2]) > 0) { done(Number(match[2])); return; }
+      const said = (text: string) => text.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+      done(null, (match ? `Win32_Process.Create returned ${match[1]}` : said(err) ?? said(out) ?? "no output").slice(0, 300));
     });
     shell.stdin.on("error", () => {});
     shell.stdin.end(script);
@@ -239,7 +256,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // The build of each runtime folder, read again once for every different build a running engine reports.
 const knownBuilds = new Map<string, { build: string | null; against: string | null | undefined }>();
 
-export async function ensureEngine(options: { port?: number; waitMs?: number; extraArgs?: string[]; dir?: string; force?: boolean; client?: string; patienceMs?: number } = {}): Promise<{ state: EngineState; health: Health | null; replaced?: Health; bindFailure?: EngineBindFailure }> {
+export async function ensureEngine(options: { port?: number; waitMs?: number; extraArgs?: string[]; dir?: string; force?: boolean; client?: string; patienceMs?: number } = {}): Promise<{ state: EngineState; health: Health | null; replaced?: Health; bindFailure?: EngineBindFailure; start?: StartNote }> {
   const port = options.port ?? DEFAULT_PORT;
   const dir = options.dir ?? here;
   let probe = await probeEngine(port, 800, options.client);
@@ -273,6 +290,7 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
     return { state: "failed", health: null, replaced };
   }
   let started: Started | null = null;
+  lastWmiStart = null;
   try {
     started = await startEngine(port, options.extraArgs, dir);
     // v0.12: the wait for the engine counts from here, once it is started. Counted from before, a slow start through
@@ -280,17 +298,25 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
     // 2026-11-22); `cam install` reports that as an engine that is not ready.
     const deadline = Date.now() + waitMs;
     let viaWmi = process.platform === "win32" && started.pid !== null && !wmiFailed && process.env.CAM_ENGINE_START !== "child";
+    const note = (): StartNote => ({ via: viaWmi ? "wmi" : "child", ...(lastWmiStart ? { wmiMs: lastWmiStart.ms, ...(lastWmiStart.error ? { wmiError: lastWmiStart.error } : {}) } : {}) });
     while (Date.now() < deadline) {
       await sleep(150);
       const health = await engineHealth(port);
-      if (health && health.pid !== replaced?.pid) return { state: replaced ? "replaced" : "started", health, replaced };
+      if (health && health.pid !== replaced?.pid) return { state: replaced ? "replaced" : "started", health, replaced, start: note() };
       if (started.bindFailure() || started.failed()) {
         // An engine WMI started that died at once (a policy ending it): this process starts them as before from now on.
-        if (viaWmi && !started.bindFailure()) { wmiFailed = true; viaWmi = false; started.release(); started = await startEngine(port, options.extraArgs, dir); continue; }
+        if (viaWmi && !started.bindFailure()) {
+          wmiFailed = true;
+          viaWmi = false;
+          lastWmiStart = { ms: lastWmiStart?.ms ?? 0, error: "the engine it started ended at once" };
+          started.release();
+          started = await startEngine(port, options.extraArgs, dir);
+          continue;
+        }
         break;
       }
     }
-    return { state: "failed", health: null, replaced, bindFailure: started.bindFailure() };
+    return { state: "failed", health: null, replaced, bindFailure: started.bindFailure(), start: note() };
   } finally {
     started?.release();
     unlock();
