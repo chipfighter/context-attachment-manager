@@ -1,4 +1,4 @@
-// v0.11.6: what keeps the engine up and its requests moving: telling a busy engine from a missing one, a connection
+// v0.12: what keeps the engine up and its requests moving: telling a busy engine from a missing one, a connection
 // setup that cannot hang, and bookkeeping that never throws. Loopback servers and temporary folders only.
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";

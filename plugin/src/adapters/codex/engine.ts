@@ -81,7 +81,7 @@ export function shownNotes(index: ThreadIndex, image: IndexedImage): Notes | und
 // the model fetched in an earlier turn.
 // v0.7: a side chat's request carries the history of the task it came from: that task's index, with every one of its
 // turns counting as earlier (sideChatSelection).
-// v0.11.6: `pre`, the body the engine already decoded and parsed (transport.ts, parseBody); it is not parsed again.
+// v0.12: `pre`, the body the engine already decoded and parsed (transport.ts, parseBody); it is not parsed again.
 export function rewriteBody(original: Buffer, encoding: string | undefined, threadId: string, sessionsDir: string, dir = selectionDir, turnId: string | null = null, forkedFrom: string | null = null, pre?: ParsedBody): { body: Buffer; report: Json } {
   const origin = sideChatOrigin(threadId, forkedFrom, sessionsDir);
   const side = origin ? sideChatSelection(origin, sessionsDir, dir) : null;

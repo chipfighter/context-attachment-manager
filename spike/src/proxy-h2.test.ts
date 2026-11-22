@@ -1,4 +1,4 @@
-// v0.11.6: the engine's HTTP/2 way to the services (plugin/src/core/engine/upstream.ts), against a real engine and a
+// v0.12: the engine's HTTP/2 way to the services (plugin/src/core/engine/upstream.ts), against a real engine and a
 // loopback HTTP/2 upstream. The child fixture replaces only the outbound TLS handshake (it agrees on "h2"); no remote
 // service or model is contacted.
 import assert from "node:assert/strict";

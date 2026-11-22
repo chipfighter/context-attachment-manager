@@ -57,13 +57,13 @@ export function macProxy(scutil: string): string | null {
   return null;
 }
 
-// v0.11.6: a connection that is neither up nor refused after this long (an outbound proxy that accepts the connection
+// v0.12: a connection that is neither up nor refused after this long (an outbound proxy that accepts the connection
 // and then never answers) counts as failed, so the request can be tried again instead of hanging.
 export const CONNECT_TIMEOUT_MS = 20_000;
 const ignore = () => {};
 
 // A TCP connection to the upstream (through the outbound proxy's CONNECT when there is one), then TLS. `alpn`: the
-// protocols offered in the TLS handshake (v0.11.6: ["h2", "http/1.1"] when the request may go over HTTP/2; the caller
+// protocols offered in the TLS handshake (v0.12: ["h2", "http/1.1"] when the request may go over HTTP/2; the caller
 // reads the server's choice from the socket's alpnProtocol). The signal cancels the setup only: once the connection is
 // up it no longer touches it, since an HTTP/2 connection outlives the request that opened it (upstream.ts).
 export function connectUpstream(via: { host: string; port: number } | null, upstream: string, signal?: AbortSignal, port = 443, secure = true, alpn: string[] = ["http/1.1"], timeoutMs = CONNECT_TIMEOUT_MS): Promise<net.Socket> {
@@ -110,7 +110,7 @@ export function connectUpstream(via: { host: string; port: number } | null, upst
   });
 }
 
-// v0.11.6: a request body decoded and parsed once by the engine, handed to the rewrite so it does not do it again.
+// v0.12: a request body decoded and parsed once by the engine, handed to the rewrite so it does not do it again.
 export type ParsedBody = { decoded: Buffer; text: string; json: Json };
 export function parseBody(body: Buffer, encoding: string | undefined): { decoded: Buffer | null; parsed: ParsedBody | null } {
   const decoded = decodeBody(body, encoding);
@@ -129,7 +129,7 @@ export function decodeBody(body: Buffer, encoding: string | undefined): Buffer |
   return null;
 }
 
-// v0.11.6: never throws. A log line that cannot be written (a full disk, a file another program holds) is lost; it used
+// v0.12: never throws. A log line that cannot be written (a full disk, a file another program holds) is lost; it used
 // to stop the engine, and every request going through it.
 export function log(entry: Json): void {
   try {

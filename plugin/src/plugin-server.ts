@@ -326,7 +326,7 @@ function main(): void {
   ensureStableIds(claudeSelectionDirOf());
   const send = (message: Json) => process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
   let engineState = "";
-  // v0.11.6: one check at a time: starting an engine can take longer than the 3 s between checks (a WMI start takes a
+  // v0.12: one check at a time: starting an engine can take longer than the 3 s between checks (a WMI start takes a
   // second, engine.ts), and a second check meanwhile would start another.
   let supervising = false;
   const supervise = async () => {
@@ -337,7 +337,7 @@ function main(): void {
   const superviseOnce = async () => {
     const result = await ensureEngine({ port: enginePort, client: HOST });
     const replaced = result.replaced ? { replacedPid: result.replaced.pid, replacedBuild: result.replaced.build ?? null } : {};
-    // v0.11.6: a busy engine (engine.ts, probeEngine) is noted once, not every round while it lasts.
+    // v0.12: a busy engine (engine.ts, probeEngine) is noted once, not every round while it lasts.
     const unchanged = (result.state === "running" || result.state === "busy") && result.state === engineState;
     if (!unchanged) log({ event: "engine", host: HOST, state: result.state, enginePid: result.health?.pid ?? null, build: result.health?.build ?? null, ...replaced });
     engineState = result.state;

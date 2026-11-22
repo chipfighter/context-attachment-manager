@@ -1,4 +1,4 @@
-// Purpose: v0.11.6 — how a request reaches its service, whatever the platform (docs/design.md section 4).
+// Purpose: v0.12 — how a request reaches its service, whatever the platform (docs/design.md section 4).
 // Over HTTP/2 when the service speaks it: connections stay open and the requests to one service share them, and each
 // connection sends a PING every 15 s. A proxy may end connections that carry nothing for a while: the user's ended
 // them after 60 s (2026-11-22, some routes after 20 s), and an image being generated sends nothing until it is done,

@@ -147,7 +147,7 @@ async function main(): Promise<void> {
   const port = Number(portIndex >= 0 ? process.argv[portIndex + 1] : DEFAULT_PORT);
   const providerPort = routingPort(port);
   let ready = false;
-  // One engine per machine: a second start leaves the running one alone. v0.11.6: also one that is busy and answers
+  // One engine per machine: a second start leaves the running one alone. v0.12: also one that is busy and answers
   // late (engine.ts, probeEngine), instead of trying to bind its port for a few seconds and failing.
   let running = await probeEngine(port);
   if (running.kind === "busy") running = await probeEngine(port, 5000);
@@ -160,7 +160,7 @@ async function main(): Promise<void> {
   const dumpDir = process.argv.includes("--dump-requests") ? join(dataDir(), "p2", "requests") : null;
   const sessionsDir = join(codexHome(), "sessions");
   setPixelCache(pixelCacheDirOf());
-  // v0.4: NO_PROXY may name one upstream host and not the other. v0.11.6: read again after a minute, so turning the
+  // v0.4: NO_PROXY may name one upstream host and not the other. v0.12: read again after a minute, so turning the
   // system proxy on or off (a VPN app does) reaches a running engine; it used to keep the setting it started with.
   const vias = new Map<string, { via: ReturnType<typeof outboundProxy>; at: number }>();
   const viaOf = (upstream: string) => {
@@ -172,7 +172,7 @@ async function main(): Promise<void> {
   };
   const via = viaOf(UPSTREAM_HOST);
   const startedAt = new Date().toISOString();
-  // v0.11.6: an error nothing else caught is logged and the engine carries on: each request is on its own, and exiting
+  // v0.12: an error nothing else caught is logged and the engine carries on: each request is on its own, and exiting
   // ended every request in flight, of every task and session, without a trace (2026-11-22: 238 engines in a month
   // ended with no log line). Many in a minute means something is badly wrong: then it exits, and a plugin service
   // starts a fresh engine.
@@ -385,7 +385,7 @@ async function main(): Promise<void> {
     let sentBody: Buffer | null = null;
     const dumpName = (suffix: string) => join(dumpDir!, `${new Date(started).toISOString().replaceAll(":", "-")}-${id}${suffix}`);
     const collect = () => req.on("data", (chunk: Buffer) => { chunks.push(chunk); requestBytes += chunk.length; });
-    // v0.11.6: a rewritten request's body, decoded and parsed once before the rewrite (which works on that parse): the
+    // v0.12: a rewritten request's body, decoded and parsed once before the rewrite (which works on that parse): the
     // log reads the body as the client sent it from here instead of decoding and parsing it a second time. `json` is a
     // shallow copy taken before the rewrite; the rewrites build new arrays and objects and leave the original ones as
     // they were, so it still holds what the client sent.
@@ -393,7 +393,7 @@ async function main(): Promise<void> {
     const finish = (error?: string) => {
       if (finished) return;
       finished = true;
-      // v0.11.6: whatever goes wrong here loses this request's log line and statistics, never the engine.
+      // v0.12: whatever goes wrong here loses this request's log line and statistics, never the engine.
       try {
         let decoded: Buffer | null;
         let json: Json | null = null;
@@ -437,7 +437,7 @@ async function main(): Promise<void> {
     res.once("close", () => {
       if (!res.writableFinished) { connecting.abort(); finish("client closed before the response ended"); }
     });
-    // v0.11.6: the request's body as the client sent it, whole: the client is on this machine, so waiting for all of it
+    // v0.12: the request's body as the client sent it, whole: the client is on this machine, so waiting for all of it
     // costs nothing, and a request that never reached the service can be sent again (upstream.ts).
     const hasBody = req.headers["content-length"] !== undefined || req.headers["transfer-encoding"] !== undefined;
     const send = (attempts: Attempt[], at = 0): void => {
@@ -457,7 +457,7 @@ async function main(): Promise<void> {
         // The client can cancel while the request is on its way.
         if (res.destroyed) { answer.cancel(); return; }
         status = answer.status;
-        // v0.11.6: how the request went out, for diagnosing (connectMs is 0 on a connection already open).
+        // v0.12: how the request went out, for diagnosing (connectMs is 0 on a connection already open).
         extra = { ...extra, proto: answer.proto, reused: answer.reused, connectMs: answer.connectMs, ttfbMs: Date.now() - started, ...(answer.retries ? { retries: answer.retries } : {}) };
         const headers = answer.headers;
         const stream = answer.body;
@@ -522,7 +522,7 @@ async function main(): Promise<void> {
         finish(String(error));
       });
     };
-    // v0.11.6: a header value Node will not send (an upstream's odd character) ends this request, not the engine.
+    // v0.12: a header value Node will not send (an upstream's odd character) ends this request, not the engine.
     const writeHead = (code: number, headers: Record<string, string | string[]>): boolean => {
       try { res.writeHead(code, headers); return true; } catch (error) {
         if (!res.headersSent) { try { res.writeHead(502, { "content-type": "text/plain" }); } catch { /* already gone */ } }
@@ -672,7 +672,7 @@ async function main(): Promise<void> {
     const failure = await listen(host, listenPort);
     if (!failure) continue;
     log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: `port ${listenPort} unavailable on ${host}`, code: failure.code });
-    // v0.11.6: an engine started through WMI (engine.ts) has no channel back: the reason goes into a file too.
+    // v0.12: an engine started through WMI (engine.ts) has no channel back: the reason goes into a file too.
     try {
       mkdirSync(join(dataDir(), "state"), { recursive: true });
       writeFileSync(startFailureFile(), JSON.stringify({ pid: process.pid, ...failure, at: new Date().toISOString() }));

@@ -8,7 +8,7 @@ const upstreamPort = Number(process.env.CAM_TEST_UPSTREAM_PORT);
 if (!upstreamPort) throw new Error("missing synthetic upstream port");
 // The proxy uses http.request over an already-connected TLS socket. A plain local socket exercises the same HTTP
 // lifecycle; only the TLS handshake is replaced, in this isolated child process.
-// v0.11.6: CAM_TEST_UPSTREAM_H2=1, the handshake agrees on HTTP/2 (ALPN "h2"), for an HTTP/2 upstream speaking it in
+// v0.12: CAM_TEST_UPSTREAM_H2=1, the handshake agrees on HTTP/2 (ALPN "h2"), for an HTTP/2 upstream speaking it in
 // the clear; otherwise no protocol is agreed and the engine uses HTTP/1.1, as with a service that offers no HTTP/2.
 tls.connect = ((_options: unknown, callback: () => void) => {
   const socket = net.connect(upstreamPort, "127.0.0.1", () => {

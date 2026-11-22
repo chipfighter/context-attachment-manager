@@ -22,7 +22,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 // build and version are missing on engines from before v0.1-3.
 export type Health = { ok: true; service: string; pid: number; startedAt: string; port: number; build?: string | null; version?: string | null; routingVersion?: number; routingPort?: number };
-// v0.11.6: "busy", an engine holds the port but did not answer in time; it is left alone (see probeEngine).
+// v0.12: "busy", an engine holds the port but did not answer in time; it is left alone (see probeEngine).
 export type EngineState = "running" | "started" | "replaced" | "failed" | "busy";
 export type EngineBindFailure = { port: number; host: string; code: string };
 
@@ -43,7 +43,7 @@ export async function engineHealth(port = DEFAULT_PORT, timeoutMs = 800, client?
   }
 }
 
-// v0.11.6: what answers on the port. A health check that times out does not prove the engine is gone: one busy for a
+// v0.12: what answers on the port. A health check that times out does not prove the engine is gone: one busy for a
 // second (a large request being rewritten, a machine under load, or the asking process itself busy) answers late.
 // Starting another engine then only fails to bind (2026-11-22: about 1,800 such starts in a month, 574 of them ending
 // "port unavailable", several at once each time). "busy": the port takes connections (the system accepts them even
@@ -118,7 +118,7 @@ export function shouldReplace(running: Health, own: { build: string | null; vers
   return newer > 0 || (force && newer === 0) || !running.build;
 }
 
-// v0.11.6: Node's diagnostic report when the engine dies of something no handler can catch (out of memory, a native
+// v0.12: Node's diagnostic report when the engine dies of something no handler can catch (out of memory, a native
 // crash), so such an end leaves a trace: in <data>/proxy/reports, without the environment (it may hold keys) and
 // network details. Only flags this Node knows, so an older one still starts the engine.
 export function reportFlags(root = dataDir()): string[] {
@@ -136,7 +136,7 @@ type Started = { pid: number | null; failed: () => boolean; bindFailure: () => E
 
 // Hidden, and its working folder is not the plugin's: Windows will not delete a folder a running process works in, and
 // Codex replaces the plugin's folder on every update and removes it on uninstall.
-// v0.11.6, Windows: started through WMI (Win32_Process.Create), so the engine is not in the job of the process that
+// v0.12, Windows: started through WMI (Win32_Process.Create), so the engine is not in the job of the process that
 // asked for it. Codex and Claude run each plugin service in a job that ends everything in it with the service, and the
 // engine one service started ended with it, cutting the requests in flight of every task and session (2026-11-22: 238
 // engines in a month ended that way or crashed, median life 4 minutes; the running one was in a job, its parent a
@@ -194,7 +194,7 @@ export function startOutsideJob(commandLine: string[], cwd: string, env: NodeJS.
   });
 }
 
-// v0.11.6: an engine started through WMI has no channel back; when it cannot bind its port it leaves the reason here
+// v0.12: an engine started through WMI has no channel back; when it cannot bind its port it leaves the reason here
 // (proxy.ts), for `cam install` to say.
 export const startFailureFile = (root = dataDir()) => join(root, "state", "engine-start-failure.json");
 function readStartFailure(pid: number): EngineBindFailure | undefined {
@@ -204,7 +204,7 @@ function readStartFailure(pid: number): EngineBindFailure | undefined {
   } catch { return undefined; }
 }
 
-// v0.11.6: one engine start at a time across processes (Codex starts several plugin services at once, and a WMI start
+// v0.12: one engine start at a time across processes (Codex starts several plugin services at once, and a WMI start
 // takes a second): the others wait for the engine the first one starts. A lock older than 20 s is left over.
 function takeStartLock(): (() => void) | null {
   const file = join(dataDir(), "state", "engine-start.lock");
@@ -240,7 +240,7 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
   const port = options.port ?? DEFAULT_PORT;
   const dir = options.dir ?? here;
   let probe = await probeEngine(port, 800, options.client);
-  // v0.11.6: no answer in time, but something holds the port: asked again with more patience; still busy, it is left
+  // v0.12: no answer in time, but something holds the port: asked again with more patience; still busy, it is left
   // alone this round (see probeEngine).
   if (probe.kind === "busy") probe = await probeEngine(port, options.patienceMs ?? 5000, options.client);
   if (probe.kind === "busy") return { state: "busy", health: null };
@@ -257,7 +257,7 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
     replaced = existing;
   }
   const deadline = Date.now() + (options.waitMs ?? 8000);
-  // v0.11.6: another process is starting one right now: wait for it instead of starting a second.
+  // v0.12: another process is starting one right now: wait for it instead of starting a second.
   const unlock = takeStartLock();
   if (!unlock) {
     while (Date.now() < deadline) {

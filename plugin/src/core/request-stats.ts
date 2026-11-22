@@ -25,7 +25,7 @@ export function readRequestStats(threadId: string, dir = requestStatsDirOf()): R
   }
 }
 
-// v0.11.6: best effort, never throws. On Windows the rename fails now and then while another program (an antivirus
+// v0.12: best effort, never throws. On Windows the rename fails now and then while another program (an antivirus
 // scan, a panel reading the file) has the file open; it is tried a few more times, and if it still fails this update
 // is lost. A throw here used to stop the engine, with every request going through it (2026-11-22: 238 engines in a
 // month ended without a trace).
