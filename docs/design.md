@@ -406,8 +406,8 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
 
 插件自己装新版本，修了 bug、加了功能，用户不用再跑一遍安装命令（用户 2026-11-23 定）。`core/update.ts` 管什么时候查、记了什么；装的步骤在 `adapters/codex/update.ts` 和 `adapters/claude/update.ts`，都用平台自己的命令行，不自己替换插件文件。
 
-- **指针**：GitHub 上最新发布的那个版本（`releases/latest`）。插件跟着它走，比装着的高就升，比装着的低也装（回滚：把上一个版本标成最新，大家下次检查时就退回去）。Claude 的插件市场另有一处指针：`.claude-plugin/marketplace.json` 把插件来源写成本仓库的发布标签（`source: github`、`ref`、`version`），每次发版都改成新标签，`release.yml` 核对它和标签一致。
-- **谁来查、多久查一次**：插件服务（Codex 里和 Claude Code 下都是），启动 2 分钟后第一次，之后每 6 小时看一眼；真去 GitHub 查，要距上次检查满 20 小时，上次失败或新版本还没装上时满 6 小时。整台机器一次只有一个在查（`state/update.lock`，15 分钟没放的算残留）。结果记在数据目录的 `state/update.json`，每次检查在 `plugin-server.jsonl` 留一行 `update`。
+- **指针**：GitHub 上最新发布的那个版本（`releases/latest`）。插件跟着它走，比装着的高就升，比装着的低也装（回滚：把上一个版本标成最新，大家下次检查时就退回去）。Claude 的插件市场另有一处指针：`.claude-plugin/marketplace.json` 把插件来源写成本仓库的 HTTPS 地址加发布标签（`source: url`、`url`、`ref`、`version`），每次发版都改成新标签，`release.yml` 核对它和标签一致、来源是这个 HTTPS 地址。
+- **谁来查、多久查一次**：插件服务（Codex 里和 Claude Code 下都是），启动 2 分钟后第一次，之后每 6 小时看一眼；真去 GitHub 查，要距上次检查满 20 小时，上次失败或新版本还没装上时满 6 小时。整台机器一次只有一个在查（`state/update.lock`；查的那个每分钟碰一下锁文件，15 分钟没碰过的算残留）。每条命令最多等 10 分钟（原来 3 分钟：用户机器上 `codex plugin list` 要 114 秒，它会刷新各个 git 插件市场）；到时还没完，连它启动的程序一起结束（Windows 上 `taskkill /T`，其他系统结束整个进程组）。结果记在数据目录的 `state/update.json`，每次检查在 `plugin-server.jsonl` 留一行 `update`。
 - **查什么**：对 `https://github.com/chipfighter/context-attachment-manager/releases/latest` 发一个 HEAD 请求，走和引擎一样的出口代理（第 4 节），只读重定向地址里的标签。不带 Cookie，不发任何关于用户的信息。`CAM_UPDATE_LATEST=v<版本>` 跳过这一步（测试、或要钉住版本的机器）。
 - **只管从 GitHub 装的**：装着的版本和来源都问平台的命令行：Codex 用 `codex plugin list --json`（`marketplaceSource` 是 git、地址是本仓库），Claude 用 `claude plugin list --json` 和 `claude plugin marketplace list --json`（`repo` 是本仓库，改名前的旧名也算）。从本地文件夹装的（开发用的检出，例如 `cam install` 登记的仓库目录）一律不动。
 - **Codex 的步骤**：
@@ -418,6 +418,7 @@ v0.11 起代码分成三层（[v0.11/plan.md](v0.11/plan.md)）：`core/` 是不
   - Codex 重启后用新版本。新版本的插件服务按第 5 节的规则换掉旧引擎。
 - **Claude Code 的步骤**：`claude plugin marketplace update codex-attachment-manager`，`claude plugin update codex-attachment-manager@codex-attachment-manager --scope user`，再读一次装着的版本：和指针一样记为已更新；还是旧的（市场里的指针还没改）记为“等待”，6 小时后再试。新开的会话用新版本，开着的会话不变。
   - Claude Code 自己也能更新插件市场，但 Claude 桌面版启动会话时设了 `DISABLE_AUTOUPDATER=1`（2026-11-23 看到的），桌面版里它不跑，所以插件自己来。
+  - 插件来源写 HTTPS 地址，不写 `source: github`：Claude Code（2.1.330）先试 `ssh -T git@github.com`，用户的 GitHub 密钥能用，`github` 来源就用 SSH 克隆。用户的机器上 SSH 直连 GitHub 能登录，但传数据卡住（浅克隆 90 秒什么也没下来）；HTTPS 走用户的代理，9 秒。手动更新和插件自己的更新都卡在这里，结束 `claude` 之后，它启动的 git 和 ssh 还在跑（2026-11-23）。插件市场本身 Claude Code 一直用 HTTPS 克隆；v0.13.0 之前插件来源是 `"./"`，就在插件市场那份副本里，不用另外下载。换成 `source: url` 之后，在一次性的配置里试过：从 `github` 来源装的 0.12.0 升到 0.13.0、退回 0.12.0、再升回去，都走 HTTPS，十几秒；版本相同时报“已是最新”，不重装。只改 main 上的市场文件就生效：插件自己更新时先刷新插件市场，读到的就是新写法。
   - 命令行按顺序找：PATH 上的 `claude`，原生安装的 `~/.local/bin/claude`，Windows 上桌面版自带的那份（`%LOCALAPPDATA%\Claude-Data\…\claude-code\<版本>\…\claude.exe`，最新的）。运行时去掉把进程绑在会话上的环境变量（`CLAUDECODE`、`CLAUDE_CODE_SESSION_ID`、`CLAUDE_CODE_ENTRYPOINT` 等），`CLAUDE_CONFIG_DIR` 留着。
 - **开关**：面板里一个开关，两个平台共用（`state/update.json` 的 `auto`），默认开。`CAM_AUTO_UPDATE=0` 也能关。
 - **面板**：请求卡片展开后最后一行“插件版本”：版本号、状态（已是最新、新版本已装好待重启、上次没查成、本地文件夹装的不自动更新、已关闭）和开关。新版本装好、还没生效时一条提示；新版本跑起来后一条提示（“更新说明”在宿主的浏览器里打开发布页，打不开就复制链接；“知道了”记下看过的版本）。Codex 走 `cam_update` 工具，Claude 走引擎的 `/__cam/claude/update`；Claude 面板上的版本是引擎的。

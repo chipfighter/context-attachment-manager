@@ -1,7 +1,9 @@
 // Purpose: v0.13 — keeping the plugin up to date in Claude Code (core/update.ts), with Claude Code's own command line:
 // `claude plugin marketplace update` refreshes its copy of this repository, whose marketplace.json names the release
-// to install (the plugin's source is this repository at a release tag, moved at every release, docs/design.md section
-// 11), and `claude plugin update` installs it. New sessions use it; running ones keep theirs. Claude Code can update
+// to install (the plugin's source is this repository's HTTPS address at a release tag, moved at every release,
+// docs/design.md section 13), and `claude plugin update` installs it. New sessions use it; running ones keep theirs.
+// The address is HTTPS, not a "github" source: Claude Code clones that over SSH wherever the user's GitHub key works,
+// and SSH straight to GitHub stalled on a machine whose HTTPS goes through a proxy (2026-11-23). Claude Code can update
 // plugins by itself, but Claude Desktop turns that off for the sessions it starts (DISABLE_AUTOUPDATER=1, seen
 // 2026-11-23), and those are where the panel is.
 // Installed another way (a local folder, another repository, another scope than the user's) it is left alone.

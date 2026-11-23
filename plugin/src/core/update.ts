@@ -11,8 +11,8 @@
 // Input: the platform's install (through its command line), GitHub's answer. Output: the platform's plugin cache,
 // through its command line; state/update.json in the data folder.
 
-import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { connectUpstream, outboundProxy, readSystemProxy } from "./engine/transport.ts";
 import { dataDir } from "./paths.ts";
@@ -146,16 +146,24 @@ export function due(status: HostStatus | undefined, now: number): boolean {
 }
 
 // One check at a time on the machine: Codex starts several plugin services at once, Claude Code one per session.
-// A lock older than 15 minutes is left over from a service that ended mid-way.
-function takeLock(root: string): (() => void) | null {
+// The holder touches the lock every minute while it works: a check may take a while (Codex's `plugin list` took 114 s on
+// a machine with several git marketplaces, 2026-11-23, and an update runs several commands). One not touched for 15
+// minutes is left over from a service that ended mid-way.
+export const LOCK_STALE_MS = 15 * 60_000;
+export function takeLock(root: string, refreshMs = 60_000): (() => void) | null {
   const file = join(root, "state", "update.lock");
-  const take = () => { writeFileSync(file, String(process.pid), { flag: "wx" }); return () => { try { unlinkSync(file); } catch { /* gone */ } }; };
+  const take = () => {
+    writeFileSync(file, String(process.pid), { flag: "wx" });
+    const keep = setInterval(() => { try { const now = new Date(); utimesSync(file, now, now); } catch { /* gone */ } }, refreshMs);
+    keep.unref?.();
+    return () => { clearInterval(keep); try { unlinkSync(file); } catch { /* gone */ } };
+  };
   try {
     mkdirSync(dirname(file), { recursive: true });
     return take();
   } catch {
     try {
-      if (Date.now() - statSync(file).mtimeMs > 15 * 60_000) { unlinkSync(file); return take(); }
+      if (Date.now() - statSync(file).mtimeMs > LOCK_STALE_MS) { unlinkSync(file); return take(); }
     } catch { /* another service took it */ }
     return null;
   }
@@ -235,6 +243,21 @@ export function changeUpdate(host: Host, change: { auto?: boolean; seen?: string
 
 // ---- running a platform's command line ----
 export type Ran = { ok: boolean; code: number | null; stdout: string; stderr: string };
+// How long one command may take. It runs in the background, so long enough for a slow network: Codex's `plugin list`
+// took 114 s on a machine with several git marketplaces (2026-11-23), against 3 minutes before.
+export const COMMAND_TIMEOUT_MS = 10 * 60_000;
+// A command still running at its time limit is stopped with everything it started: `claude plugin update` cloning over
+// SSH left its git and ssh running when only it was stopped (2026-11-23). On Windows taskkill stops the tree; elsewhere
+// the command leads its own process group.
+function stopTree(child: ChildProcess): void {
+  if (child.pid === undefined) return;
+  try {
+    if (process.platform === "win32") spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () => child.kill()).unref();
+    else process.kill(-child.pid, "SIGKILL");
+  } catch {
+    child.kill();
+  }
+}
 // Asynchronous: the plugin service keeps answering its platform meanwhile. An npm-installed command on Windows is a
 // .cmd shim, which only cmd.exe can start.
 export function runCommand(command: string, args: string[], options: { env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}): Promise<Ran> {
@@ -244,8 +267,8 @@ export function runCommand(command: string, args: string[], options: { env?: Nod
     let stderr = "";
     let settled = false;
     const done = (ran: Ran) => { if (!settled) { settled = true; clearTimeout(timer); resolve(ran); } };
-    const child = spawn(shim ? "cmd.exe" : command, shim ? ["/d", "/s", "/c", command, ...args] : args, { env: options.env ?? process.env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-    const timer = setTimeout(() => { child.kill(); done({ ok: false, code: null, stdout, stderr: `${stderr}\ntimed out` }); }, options.timeoutMs ?? 3 * 60_000);
+    const child = spawn(shim ? "cmd.exe" : command, shim ? ["/d", "/s", "/c", command, ...args] : args, { env: options.env ?? process.env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+    const timer = setTimeout(() => { stopTree(child); done({ ok: false, code: null, stdout, stderr: `${stderr}\ntimed out` }); }, options.timeoutMs ?? COMMAND_TIMEOUT_MS);
     child.stdout.on("data", (chunk) => { if (stdout.length < 1 << 20) stdout += chunk; });
     child.stderr.on("data", (chunk) => { if (stderr.length < 1 << 20) stderr += chunk; });
     child.on("error", (error) => done({ ok: false, code: null, stdout, stderr: String(error) }));
