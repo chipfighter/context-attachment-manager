@@ -94,3 +94,43 @@ test("Claude: the older screenshots of this turn go out as placeholders saying �
   const after = sent.indexOf(batch[0]);
   assert.equal(JSON.stringify(sent[after - 1].content).includes("toolu_9"), true, "right after the tenth screenshot's result");
 });
+
+// v0.13: Claude Code sent a turn's first request a moment before its prompt reached the transcript (2026-11-23, a
+// headless run): the records still ended with the model's reply, and the turn before's images went out whole once more.
+test("Claude: a turn's first request leaves out the turn before's images even before its prompt is recorded", () => {
+  const t = transcript();
+  t.prompt("看一下 a.png");
+  t.assistant({ type: "tool_use", id: "toolu_a", name: "Read", input: { file_path: "C:\w\a.png" } });
+  t.toolResult("toolu_a", [image(pngA)]);
+  t.assistant(text("一张红色的图。"));
+  t.prompt("它是什么颜色？");
+  const messages: Json[] = [
+    { role: "user", content: [text("看一下 a.png")] },
+    { role: "assistant", content: [{ type: "tool_use", id: "toolu_a", name: "Read", input: { file_path: "C:\w\a.png" } }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_a", content: [image(pngA)] }] },
+    { role: "assistant", content: [text("一张红色的图。")] },
+    { role: "user", content: [text("它是什么颜色？")] },
+    // Claude Code may put a system message after the prompt.
+    { role: "system", content: "<total_tokens>1000 tokens left</total_tokens>" },
+  ];
+  const session = "11111111-2222-4333-8444-5555555555d1";
+  const run = (records: Json[]) => {
+    const home = mkdtempSync(join(tmpdir(), "cam-turn-lag-"));
+    const dir = mkdtempSync(join(tmpdir(), "cam-turn-lag-sel-"));
+    mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+    writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+    writeSelection({ threadId: session, unchecked: {}, auto: true, autoAt: "2026-11-23T00:00:00Z", autoSince: "2026-11-23T00:00:00Z" }, dir);
+    const body = Buffer.from(JSON.stringify({ model: "claude-sonnet-5-5", tools: [{ name: "Read", input_schema: { type: "object" } }], messages }));
+    return rewriteClaudeBody(body, undefined, session, dir, home, {}, null, [], "zh").report;
+  };
+  // Recorded or not yet, the same request.
+  for (const records of [t.records, t.records.slice(0, -1)]) assert.deepEqual(run(records).replaced.map((entry: Json) => entry.id), ["IMG-001"]);
+  // Within the turn that read it (its tool result last), it stays.
+  const home = mkdtempSync(join(tmpdir(), "cam-turn-lag-own-"));
+  const dir = mkdtempSync(join(tmpdir(), "cam-turn-lag-own-sel-"));
+  mkdirSync(join(home, "projects", "D--work"), { recursive: true });
+  writeFileSync(join(home, "projects", "D--work", `${session}.jsonl`), t.records.slice(0, 3).map((record) => JSON.stringify(record)).join("\n") + "\n");
+  writeSelection({ threadId: session, unchecked: {}, auto: true, autoAt: "2026-11-23T00:00:00Z", autoSince: "2026-11-23T00:00:00Z" }, dir);
+  const own = rewriteClaudeBody(Buffer.from(JSON.stringify({ model: "claude-sonnet-5-5", tools: [{ name: "Read", input_schema: { type: "object" } }], messages: messages.slice(0, 3) })), undefined, session, dir, home, {}, null, [], "zh").report;
+  assert.deepEqual(own.replaced, []);
+});

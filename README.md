@@ -142,6 +142,10 @@ Yes. Every image has an ID such as `IMG-001`, and the model notes one line on ea
 
 Yes. When tools return many screenshots in one turn, the older ones become placeholders in batches and the newest few go out as they are. The model can note a run of similar screenshots in one line and fetch any of them back by its ID.
 
+### Does it handle PDFs?
+
+In Claude Code, yes. A PDF that Claude Code reads is sent again in full with every message. With **Auto-select** on, a PDF from an earlier turn goes out as a short placeholder with an ID such as `PDF-001`, and the model fetches only the pages it needs by ID and page number. Text PDFs and scans both work. Codex never sends PDF files themselves; pages turned into images there are managed like any other image.
+
 ### Are my images deleted, or sent anywhere else?
 
 No. The plugin runs on your computer. Your original images and chat history stay as they are, and requests go to the service your agent already uses. Apart from those requests, it asks GitHub about once a day whether there is a new version; that request carries nothing about you, and you can turn automatic updates off in the panel.

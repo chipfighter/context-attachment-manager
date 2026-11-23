@@ -142,6 +142,10 @@ Sí. Cada imagen tiene un identificador, como `IMG-001`, y el modelo anota una l
 
 Sí. Cuando las herramientas devuelven muchas capturas en un mismo turno, las más antiguas pasan a ser referencias por tandas y las más recientes se envían tal cual. El modelo puede anotar en una sola línea una serie de capturas parecidas y recuperar cualquiera de ellas por su identificador.
 
+### ¿Sirve para los PDF?
+
+En Claude Code, sí. Un PDF que Claude Code lee se vuelve a enviar entero con cada mensaje. Con **Auto-select** activado, un PDF de un turno anterior se envía como una referencia breve con un ID como `PDF-001`, y el modelo recupera solo las páginas que necesita por ID y número de página. Funciona con PDF de texto y con escaneos. Codex nunca envía los archivos PDF al modelo; las páginas que allí se convierten en imágenes se gestionan como cualquier otra imagen.
+
 ### ¿Mis imágenes se borran o se envían a otro sitio?
 
 No. El complemento se ejecuta en tu equipo. Tus imágenes originales y el historial de la conversación se mantienen intactos, y las solicitudes van al servicio que ya usa tu agente. Aparte de esas solicitudes, consulta a GitHub más o menos una vez al día si hay una versión nueva; esa consulta no lleva ningún dato tuyo, y puedes desactivar las actualizaciones automáticas en el panel.

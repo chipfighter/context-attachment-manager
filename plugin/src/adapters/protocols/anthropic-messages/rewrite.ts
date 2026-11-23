@@ -144,7 +144,8 @@ function promptOf(messages: Json[], msg: number): number {
 
 // A note goes right after a user message, the only place Anthropic allows a system message; when Claude Code put a
 // system message there already, the note joins it, since two may not follow each other. True when a message was added.
-function noteAfter(messages: Json[], msg: number, text: string): boolean {
+// v0.13: also for the PDFs' notes (documents.ts).
+export function noteAfter(messages: Json[], msg: number, text: string): boolean {
   const after = messages[msg + 1];
   if (after?.role === "system") {
     const content = typeof after.content === "string" ? [{ type: "text", text: after.content }] : after.content;

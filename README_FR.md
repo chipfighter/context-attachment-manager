@@ -142,6 +142,10 @@ Oui. Chaque image a un identifiant, par exemple `IMG-001`, et le modèle note un
 
 Oui. Quand des outils renvoient beaucoup de captures d’écran dans un même tour, les plus anciennes deviennent des textes de remplacement par lots et les plus récentes partent telles quelles. Le modèle peut noter en une seule ligne une série de captures semblables et récupérer n’importe laquelle grâce à son identifiant.
 
+### Gère-t-il les PDF ?
+
+Dans Claude Code, oui. Un PDF que Claude Code lit est renvoyé en entier avec chaque message. Avec **Auto-select** activé, un PDF d’un tour précédent part sous forme d’un court texte de remplacement avec un identifiant comme `PDF-001`, et le modèle ne récupère que les pages dont il a besoin, par identifiant et numéro de page. Cela fonctionne pour les PDF texte comme pour les numérisations. Codex n’envoie jamais les fichiers PDF eux-mêmes au modèle ; les pages qui y sont converties en images sont gérées comme les autres images.
+
 ### Mes images sont-elles supprimées ou envoyées ailleurs ?
 
 Non. Le plugin s’exécute sur votre ordinateur. Vos images d’origine et l’historique de vos conversations restent intacts, et les requêtes sont envoyées au service que votre agent utilise déjà. En dehors de ces requêtes, il demande à GitHub environ une fois par jour s’il existe une nouvelle version ; cette requête ne contient aucune information sur vous, et vous pouvez désactiver les mises à jour automatiques dans le panneau.
