@@ -300,6 +300,7 @@
       <div class="line" id="lastLine"><span class="k" id="lastLabel"></span><span class="v" id="lastValue"></span></div>
       <div class="line" id="fetchedLine"><span class="k" id="fetchedLabel"></span><span class="ids" id="fetchedIds"></span></div>
       <div class="line" id="childrenLine"><span class="k" id="childrenLabel"></span><span class="v" id="childrenValue"></span></div>
+      <div class="line" id="updateLine" hidden><span class="k" id="updateLabel"></span><span class="v" id="updateValue"></span><button class="idbtn" id="updateToggle" type="button"></button></div>
     </div>
   </section>
   <div class="foot">
@@ -364,6 +365,23 @@
       "children.label": "子代理和旁聊 {count} 个",
       "children.saved": "上次共少发 {saved}",
       "children.none": "上次没有替换",
+      "update.label": "插件版本",
+      "update.off": " · 已关闭自动更新",
+      "update.latest": " · 已是最新",
+      "update.failed": " · 上次没查成，稍后再试",
+      "update.local": " · 本地装的，不自动更新",
+      "update.pendingCodex": " · {version} 待重启生效",
+      "update.pendingClaude": " · {version} 新会话生效",
+      "update.turnOff": "关闭自动更新",
+      "update.turnOn": "开启自动更新",
+      "update.offTitle": "关闭后不再每天检查新版本。",
+      "update.onTitle": "每天检查一次 GitHub 上的新版本，自动装好，下次启动时生效。",
+      "notice.updatePendingCodex": "插件新版本 {version} 已装好，重启 Codex 后生效。",
+      "notice.updatePendingClaude": "插件新版本 {version} 已装好，新开一个会话后生效。",
+      "notice.updated": "插件已更新到 {version}。",
+      "update.notes": "更新说明",
+      "update.copied": "链接已复制",
+      "update.ok": "知道了",
       "needs.title": "模型需要 {count} 张没发送的图",
       "id.jump": "在列表里找到 {id}",
       "search.placeholder": "画面，或你当时说过的话",
@@ -499,6 +517,23 @@
       "children.label": "Subagents & side chats: {count}",
       "children.saved": "{saved} less last time",
       "children.none": "Nothing replaced last time",
+      "update.label": "Plugin version",
+      "update.off": " · auto-update off",
+      "update.latest": " · up to date",
+      "update.failed": " · last check failed",
+      "update.local": " · local install",
+      "update.pendingCodex": " · {version} after restart",
+      "update.pendingClaude": " · {version} in new sessions",
+      "update.turnOff": "Turn off updates",
+      "update.turnOn": "Turn on updates",
+      "update.offTitle": "The plugin stops checking for new versions.",
+      "update.onTitle": "Once a day the plugin checks GitHub for a new version and installs it for the next start.",
+      "notice.updatePendingCodex": "Version {version} of the plugin is installed. Restart Codex to use it.",
+      "notice.updatePendingClaude": "Version {version} of the plugin is installed. New sessions use it.",
+      "notice.updated": "The plugin was updated to {version}.",
+      "update.notes": "What's new",
+      "update.copied": "Link copied",
+      "update.ok": "OK",
       "needs.title": "The model needs {count} unsent images",
       "needs.title_one": "The model needs {count} unsent image",
       "id.jump": "Find {id} in the list",
@@ -636,6 +671,23 @@
       "children.label": "サブエージェント・サイドチャット {count} 件",
       "children.saved": "前回合計 {saved} 削減",
       "children.none": "前回は置換なし",
+      "update.label": "プラグインのバージョン",
+      "update.off": " · 自動更新オフ",
+      "update.latest": " · 最新です",
+      "update.failed": " · 前回の確認に失敗",
+      "update.local": " · ローカル版",
+      "update.pendingCodex": " · {version} は再起動後",
+      "update.pendingClaude": " · {version} は新しいセッションで",
+      "update.turnOff": "自動更新をオフ",
+      "update.turnOn": "自動更新をオン",
+      "update.offTitle": "新しいバージョンの確認を止めます。",
+      "update.onTitle": "1 日に 1 回 GitHub で新しいバージョンを確認し、次回の起動に向けてインストールします。",
+      "notice.updatePendingCodex": "プラグインの新しいバージョン {version} をインストールしました。Codex を再起動すると使われます。",
+      "notice.updatePendingClaude": "プラグインの新しいバージョン {version} をインストールしました。新しいセッションで使われます。",
+      "notice.updated": "プラグインを {version} に更新しました。",
+      "update.notes": "更新内容",
+      "update.copied": "リンクをコピーしました",
+      "update.ok": "OK",
       "needs.title": "モデルが未送信の画像 {count} 枚を必要としています",
       "id.jump": "一覧で {id} を探す",
       "search.placeholder": "画像の内容や、そのときの言葉",
@@ -1040,6 +1092,59 @@
     }
   }
 
+  // ---- v0.13: the plugin's version and its automatic updates (core/update.ts) ----
+  // Under Claude Code the page runs on its own, with panel-web.js as its host.
+  const underClaude = () => !!window.camHost;
+  function renderUpdateLine() {
+    const update = S.data?.update;
+    $("updateLine").hidden = !update?.version;
+    if (!update?.version) return;
+    $("updateLabel").textContent = t("update.label");
+    const status = update.status;
+    const note = !update.auto ? t("update.off")
+      : update.pending ? t(underClaude() ? "update.pendingClaude" : "update.pendingCodex", { version: update.pending })
+      : status?.result === "skipped" && /local folder/.test(status.reason ?? "") ? t("update.local")
+      : status?.result === "failed" ? t("update.failed")
+      : status?.result === "up-to-date" || status?.result === "updated" ? t("update.latest") : "";
+    $("updateValue").textContent = update.version + note;
+    $("updateValue").title = $("updateValue").textContent;
+    const toggle = $("updateToggle");
+    toggle.textContent = t(update.auto ? "update.turnOff" : "update.turnOn");
+    toggle.title = t(update.auto ? "update.offTitle" : "update.onTitle");
+    toggle.disabled = !!S.updating;
+  }
+  async function changeUpdate(change) {
+    if (S.updating) return;
+    S.updating = true; renderCard();
+    try {
+      const result = await callTool("cam_update", change);
+      if (S.data && result?.structuredContent?.update) S.data = { ...S.data, update: result.structuredContent.update };
+    } catch (error) {
+      S.error = { key: "error.call", message: error.message };
+    } finally {
+      S.updating = false; render();
+    }
+  }
+  // The release notes (their address comes with the state) in the host's browser; where the host does not open links,
+  // the link is copied.
+  async function openNotes(version) {
+    const url = S.data?.update?.notes;
+    if (!url) return;
+    let opened = false;
+    try { opened = !(await request("ui/open-link", { url }, 5000))?.isError; } catch {}
+    if (!opened && await copyText(url)) { S.notesCopied = version; render(); }
+  }
+  function updateNotices() {
+    const update = S.data?.update;
+    if (update?.pending) return [notice("info", t(underClaude() ? "notice.updatePendingClaude" : "notice.updatePendingCodex", { version: update.pending }))];
+    if (update?.updated) {
+      return [notice("info", t("notice.updated", { version: update.updated }),
+        { label: t(S.notesCopied === update.updated ? "update.copied" : "update.notes"), run: () => openNotes(update.updated) },
+        { label: t("update.ok"), run: () => changeUpdate({ seen: update.updated }) })];
+    }
+    return [];
+  }
+
   // ---- images: every thumbnail is queued in list order, a few at a time; tiles scrolled into view go first ----
   // (Visibility alone is not enough: a page that is hidden or not painted yet gets no intersection updates.)
   const thumbQueue = [];
@@ -1245,6 +1350,7 @@
       $("childrenLabel").textContent = t("children.label", { count: children.length });
       $("childrenValue").textContent = saved > 0 ? t("children.saved", { saved: formatBytes(saved) }) : t("children.none");
     }
+    renderUpdateLine();
   }
   // v0.3: with automatic selection on, the ids the model fetched in the latest turn, each finding its thumbnail.
   // Rebuilt only when that list changes, so hover and focus survive the polling.
@@ -1491,6 +1597,7 @@
     const sendNotice = S.data?.send?.notice;
     if (sendNotice?.kind === "skipped") nodes.push(notice("error", t("notice.skipped", { time: timeOf(sendNotice.at), reason: t(MESSAGES[lang][`reason.${sendNotice.reason}`] ? `reason.${sendNotice.reason}` : "reason.other") })));
     if (sendNotice?.kind === "fallback") nodes.push(notice("error", t("notice.skipped", { time: timeOf(sendNotice.at), reason: t("reason.thinking") })));
+    nodes.push(...updateNotices());
     if (sendNotice?.kind === "thinking") nodes.push(notice("info", t("notice.thinking", { time: timeOf(sendNotice.at), count: sendNotice.count })));
     if (sendNotice?.kind === "websocket") nodes.push(notice("warn", t("notice.websocket")));
     return nodes;
@@ -1831,6 +1938,7 @@
   function render() { renderCard(); renderNeeds(); renderPlugin(); renderRefresh(); renderSearch(); renderViews(); renderList(); renderFooter(); renderViewer(); }
 
   $("cardHead").addEventListener("click", () => { S.cardOpen = !S.cardOpen; renderCard(); });
+  $("updateToggle").addEventListener("click", () => changeUpdate({ auto: !S.data?.update?.auto }));
   $("search").addEventListener("input", (event) => { S.query = event.target.value; renderSearch(); renderViews(); renderList(); });
   document.addEventListener("keydown", (event) => {
     if (!S.preview || $("viewer").hidden) return;

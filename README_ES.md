@@ -37,7 +37,7 @@
 Instala Context Attachment Manager siguiendo estas instrucciones: https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
 ```
 
-Después, reinicia el agente. En Claude Desktop, inicia una nueva sesión de Code. Si prefieres hacerlo a mano, consulta las [instrucciones de instalación, actualización y desinstalación](INSTALL.md) (en inglés).
+Después, reinicia el agente. En Claude Desktop, inicia una nueva sesión de Code. Si prefieres hacerlo a mano, consulta las [instrucciones de instalación, actualización y desinstalación](INSTALL.md) (en inglés). A partir de ahí, en Codex y Claude Code se actualiza solo: las versiones nuevas se instalan en segundo plano y se aplican la próxima vez que se inicia el agente.
 
 **2. Trabaja como siempre.** El complemento está activado por defecto. Las imágenes de turnos anteriores se envían como referencias de una línea; las imágenes nuevas y las de referencia que fijes se envían tal cual. Una referencia tiene este aspecto:
 
@@ -144,7 +144,7 @@ Sí. Cuando las herramientas devuelven muchas capturas en un mismo turno, las m�
 
 ### ¿Mis imágenes se borran o se envían a otro sitio?
 
-No. El complemento se ejecuta en tu equipo. Tus imágenes originales y el historial de la conversación se mantienen intactos, y las solicitudes van al servicio que ya usa tu agente.
+No. El complemento se ejecuta en tu equipo. Tus imágenes originales y el historial de la conversación se mantienen intactos, y las solicitudes van al servicio que ya usa tu agente. Aparte de esas solicitudes, consulta a GitHub más o menos una vez al día si hay una versión nueva; esa consulta no lleva ningún dato tuyo, y puedes desactivar las actualizaciones automáticas en el panel.
 
 ### ¿Con qué agentes funciona? ¿Es gratis?
 

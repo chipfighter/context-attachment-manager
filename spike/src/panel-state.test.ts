@@ -323,8 +323,8 @@ test("the image preview supports Ctrl+wheel zoom and preserves keyboard and back
 
   const byId = new Map<string, El>();
   const reg = (el: El) => { if (el.id) byId.set(el.id, el); return el; };
-  for (const id of ["title", "refresh", "plugin", "card", "cardBody", "meterLabel", "meterValue", "meterFull", "meterBarBox", "meterBar", "nextLine", "nextLabel", "nextValue", "lastLine", "lastLabel", "lastValue", "fetchedLine", "fetchedLabel", "fetchedIds", "childrenLine", "childrenLabel", "childrenValue", "needs", "searchBox", "search", "views", "main", "status"]) {
-    reg(new El(id === "search" ? "input" : id === "refresh" ? "button" : "div", id));
+  for (const id of ["title", "refresh", "plugin", "card", "cardBody", "meterLabel", "meterValue", "meterFull", "meterBarBox", "meterBar", "nextLine", "nextLabel", "nextValue", "lastLine", "lastLabel", "lastValue", "fetchedLine", "fetchedLabel", "fetchedIds", "childrenLine", "childrenLabel", "childrenValue", "updateLine", "updateLabel", "updateValue", "updateToggle", "needs", "searchBox", "search", "views", "main", "status"]) {
+    reg(new El(id === "search" ? "input" : id === "refresh" || id === "updateToggle" ? "button" : "div", id));
   }
   reg(new El("button", "cardHead", "card-head"));
   const auto = reg(new El("label", "auto", "switch")); auto.hidden = true; auto.append(new El("span", "", "auto-label"), new El("input"));

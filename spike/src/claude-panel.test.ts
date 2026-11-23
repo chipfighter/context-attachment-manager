@@ -73,6 +73,24 @@ test("the panel's data for a session: images, turns, title, the language", () =>
   assert.equal(body.lang, "zh");
 });
 
+test("v0.13: the panel's data carries the plugin's version and its updates; the switch and the seen note are saved", (t) => {
+  // The switch's default, whatever the machine running the tests set.
+  const saved = process.env.CAM_AUTO_UPDATE;
+  delete process.env.CAM_AUTO_UPDATE;
+  t.after(() => { if (saved !== undefined) process.env.CAM_AUTO_UPDATE = saved; });
+  const { options } = setup();
+  const withVersion = { ...options, version: "0.13.0" };
+  const panel = get(`/__cam/claude/panel?session=${session}`, withVersion).body.update;
+  assert.deepEqual([panel.version, panel.auto, panel.notes], ["0.13.0", true, "https://github.com/chipfighter/context-attachment-manager/releases/tag/v0.13.0"]);
+  const off = post(`/__cam/claude/update?session=${session}`, { auto: false }, withVersion);
+  assert.deepEqual([off.status, off.body.update.auto], [200, false]);
+  assert.equal(get(`/__cam/claude/panel?session=${session}`, withVersion).body.update.auto, false, "kept");
+  const seen = post(`/__cam/claude/update?session=${session}`, { seen: "0.13.0" }, withVersion);
+  assert.equal(seen.body.update.updated, null);
+  assert.equal(JSON.parse(readFileSync(join(options.dataRoot, "state", "update.json"), "utf8")).seen.claude, "0.13.0");
+  assert.equal(claudePanelApi("POST", `/__cam/claude/update?session=${session}`, panelHeaders, null, withVersion).status, 413);
+});
+
 test("unchecking and checking again are written to the Claude selection, by key", () => {
   const { options, p1 } = setup();
   const off = post(`/__cam/claude/select?session=${session}`, { uncheck: ["IMG-002"] }, options);

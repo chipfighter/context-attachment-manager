@@ -37,7 +37,7 @@
 Installe Context Attachment Manager en suivant les instructions sur https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
 ```
 
-Redémarrez ensuite l’agent. Dans Claude Desktop, ouvrez une nouvelle session Code. Pour une installation manuelle, consultez les [instructions d’installation, de mise à jour et de désinstallation](INSTALL.md) (en anglais).
+Redémarrez ensuite l’agent. Dans Claude Desktop, ouvrez une nouvelle session Code. Pour une installation manuelle, consultez les [instructions d’installation, de mise à jour et de désinstallation](INSTALL.md) (en anglais). Ensuite, dans Codex et Claude Code, il se met à jour tout seul : les nouvelles versions s’installent en arrière-plan et s’appliquent au prochain démarrage de l’agent.
 
 **2. Travaillez comme d’habitude.** Le plugin est actif par défaut. Les images des tours précédents partent sous forme de textes d’une ligne ; les nouvelles images et les références que vous épinglez partent telles quelles. Un texte de remplacement ressemble à ceci :
 
@@ -144,7 +144,7 @@ Oui. Quand des outils renvoient beaucoup de captures d’écran dans un même to
 
 ### Mes images sont-elles supprimées ou envoyées ailleurs ?
 
-Non. Le plugin s’exécute sur votre ordinateur. Vos images d’origine et l’historique de vos conversations restent intacts, et les requêtes sont envoyées au service que votre agent utilise déjà.
+Non. Le plugin s’exécute sur votre ordinateur. Vos images d’origine et l’historique de vos conversations restent intacts, et les requêtes sont envoyées au service que votre agent utilise déjà. En dehors de ces requêtes, il demande à GitHub environ une fois par jour s’il existe une nouvelle version ; cette requête ne contient aucune information sur vous, et vous pouvez désactiver les mises à jour automatiques dans le panneau.
 
 ### Avec quels agents fonctionne-t-il ? Est-il gratuit ?
 

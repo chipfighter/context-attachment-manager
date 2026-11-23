@@ -29,6 +29,16 @@ jobs:
         run: |
           version=$(node -p "require('./plugin/.codex-plugin/plugin.json').version")
           if [ "$GITHUB_REF_NAME" != "v$version" ]; then echo "tag $GITHUB_REF_NAME does not match plugin version $version"; exit 1; fi
+          claude=$(node -p "require('./.claude-plugin/plugin.json').version")
+          if [ "$claude" != "$version" ]; then echo "the Claude manifest says $claude, the Codex one $version"; exit 1; fi
+      # v0.13: Claude Code installs (and updates to) the release the marketplace names; the release must name itself.
+      - name: Claude's marketplace must name this release
+        run: |
+          node -e "
+            const plugin = require('./.claude-plugin/marketplace.json').plugins.find((entry) => entry.name === 'codex-attachment-manager');
+            const tag = process.env.GITHUB_REF_NAME;
+            if (plugin?.source?.ref !== tag || 'v' + plugin?.version !== tag) { console.error('.claude-plugin/marketplace.json names ' + plugin?.source?.ref + ' (' + plugin?.version + '), not ' + tag); process.exit(1); }
+          "
       - name: Install scripts for this release
         run: |
           mkdir dist

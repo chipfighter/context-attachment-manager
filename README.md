@@ -37,7 +37,7 @@
 Install Context Attachment Manager for me, following https://github.com/chipfighter/context-attachment-manager/blob/main/INSTALL.md
 ```
 
-Then restart the agent (in Claude Desktop, start a new Code session). To do it by hand, see [installation, updates and uninstall](INSTALL.md).
+Then restart the agent (in Claude Desktop, start a new Code session). To do it by hand, see [installation, updates and uninstall](INSTALL.md). In Codex and Claude Code it then keeps itself up to date: new versions install in the background and take effect the next time the agent starts.
 
 **2. Work as usual.** The plugin is on by default. Images from earlier turns go out as one-line placeholders; new images and the references you pin go out as they are. A placeholder looks like this:
 
@@ -144,7 +144,7 @@ Yes. When tools return many screenshots in one turn, the older ones become place
 
 ### Are my images deleted, or sent anywhere else?
 
-No. The plugin runs on your computer. Your original images and chat history stay as they are, and requests go to the service your agent already uses.
+No. The plugin runs on your computer. Your original images and chat history stay as they are, and requests go to the service your agent already uses. Apart from those requests, it asks GitHub about once a day whether there is a new version; that request carries nothing about you, and you can turn automatic updates off in the panel.
 
 ### Which agents does it work with, and is it free?
 
