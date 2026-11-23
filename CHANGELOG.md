@@ -2,6 +2,43 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.13.0] - 2026-11-23
+
+The plugin now updates itself, and in Claude Code it manages PDFs as well as images.
+
+### New
+
+- **Updates itself.** When the plugin was installed from GitHub, it asks GitHub about once a day whether there is a new release, and installs it in the background with Codex's or Claude Code's own command line. Codex uses the new version after it restarts; in Claude Desktop, new sessions use it. Running tasks are not interrupted. If an install fails, the version you have keeps working and the plugin tries again later. The check carries nothing about you. To turn it off, click the request card at the bottom of the panel, then **Turn off updates**. A plugin installed from a local folder is left alone.
+- **PDFs in Claude Code.** When Claude Code reads a PDF, it sends the whole file again with every message. With **Auto-select** on, a PDF read in an earlier turn now goes out as a short placeholder with an ID such as `PDF-001`, its page count, whether it is text or scanned, and the start of what the model said after reading it. When the model needs the file again, it fetches only the pages it needs, by ID and page number, and those pages stay in the conversation. Text PDFs and scans both work.
+- **The plugin's version in the panel**, with the update status. A note says when a new version is waiting for a restart, and another one, with a link to the release notes, once it runs.
+
+### Fixed
+
+- **Claude Code sent the previous turn's images once more.** Claude Code sometimes sends a turn's first request a moment before it saves your message. The plugin then still took the previous turn for the current one, and sent its images in full once more. They now go out as placeholders from the first request on.
+
+### After updating
+
+- This is the last version to update by hand; versions before 0.13 cannot update themselves. See the [update instructions](https://github.com/chipfighter/context-attachment-manager/blob/v0.13.0/INSTALL.md#update).
+  - **Codex**: run the one command again, then restart Codex.
+  - **Claude Desktop**: run `claude plugin marketplace update codex-attachment-manager`, then `claude plugin update codex-attachment-manager@codex-attachment-manager`, and start a new Code session.
+- In Claude Code sessions that already read PDFs, the PDFs become placeholders with your next message, so that message is processed again from the first PDF onward.
+
+### How we tested
+
+- **Updates.** On throwaway Codex and Claude Code installs, the plugin updated itself from 0.11.5 to 0.12.0: Codex in 10 seconds, while another process was using the old version's folder, and Claude Code in 15 seconds. Marking the older release as the latest made both go back.
+- **PDFs.** In real Claude Code sessions on Haiku 5.5 and Sonnet 5.5, the model read a 4-page text PDF and a 2-page scan, then answered questions about single pages. Every request was accepted, the model fetched the page it needed by ID and page number, and it answered correctly. From the turn after, each request was about 175 KB smaller for the two files. In 4 of the 8 runs of the final version, the model added that it had not checked a page again or had not seen it, while its answers stayed right; with the same steps on images, Haiku 5.5 does this too.
+- **Cutting pages.** The engine cut pages out of 22 PDFs on our machine, including LaTeX papers, manuals, files printed from a browser and a book of 1,589 pages. Each copy held exactly the pages asked for; most took a few milliseconds, the book about 150 ms.
+- **Codex.** What Codex sends to the model is unchanged. The release checks cover plugin startup, installation, upgrade and removal on Windows, macOS and Linux.
+
+<details>
+<summary>Technical details</summary>
+
+- Updates (`core/update.ts`, `adapters/codex/update.ts`, `adapters/claude/update.ts`): the plugin follows GitHub's latest release (one `HEAD` request for `/releases/latest`, through the engine's outbound proxy), up or down, so a rollback works. The plugin service checks 2 minutes after it starts and then every 6 hours; it asks GitHub at most once in 20 hours (6 after a failure), one check at a time per machine (`state/update.lock`); the state is in `state/update.json`. Codex: the `ref` of the plugin's own marketplace in `config.toml` moves to the new tag (backed up, put back if the refresh fails), then `codex plugin marketplace upgrade` (up to twice, checked), and `codex plugin add` only if that did not install it; older versions' files are kept for the services still running from them. Claude Code: `claude plugin marketplace update` and `claude plugin update --scope user`. Claude Desktop starts its sessions with `DISABLE_AUTOUPDATER=1`, so Claude Code's own plugin updates never run there. `.claude-plugin/marketplace.json` now names the release tag as the plugin's source, and `release.yml` checks it. `CAM_AUTO_UPDATE=0` turns updates off; `CAM_UPDATE_LATEST=v<version>` pins a version.
+- PDFs: `core/pdf.ts` reads the page count and the pages with a font (text pages), and cuts pages into a new PDF without a library. It finds objects by reading the file from its start, also inside object streams, makes what a page inherits from the page tree its own, and renumbers everything; an encrypted or unreadable file goes out whole. `adapters/protocols/anthropic-messages/documents.ts` replaces document blocks and the fetch tool's markers; `adapters/claude/claude-pdfs.ts` decides which. Under Claude Code, `cam_view_image` takes ids such as `PDF-001` and `pages` such as `"3"` or `"2-4"`; the plugin service answers with a marker that the engine replaces with those pages in every request from then on.
+- Turns: a request that ends with a user message the transcript does not have yet counts as the next turn (`promptPending` in `adapters/claude/engine.ts`).
+
+</details>
+
 ## [0.12.0] - 2026-11-22
 
 The panel lets you browse images by character, place, screen and document. Long turns full of screenshots stay small, and image generation through a proxy no longer gets cut off.

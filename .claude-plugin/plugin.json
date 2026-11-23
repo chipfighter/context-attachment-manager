@@ -1,8 +1,8 @@
 {
   "name": "codex-attachment-manager",
   "displayName": "Context Attachment Manager",
-  "version": "0.12.0",
-  "description": "For Claude Code sessions with many images: earlier images go out as short placeholders instead of being sent again with every message, the model fetches the original back by its ID (also after compaction), and the prompt cache keeps working.",
+  "version": "0.13.0",
+  "description": "For Claude Code sessions with many images or PDFs: earlier images and PDFs go out as short placeholders instead of being sent again with every message, the model fetches the original back by its ID (also after compaction), and the prompt cache keeps working.",
   "author": {
     "name": "chipfighter"
   },
