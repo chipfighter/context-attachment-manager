@@ -142,6 +142,10 @@ Ja. Jedes Bild hat eine ID wie `IMG-001`, und das Modell notiert zu jedem eine Z
 
 Ja. Wenn Tools in einer Runde viele Screenshots zurückgeben, werden die älteren schubweise zu Platzhaltern, und die neuesten gehen unverändert mit. Das Modell kann eine Reihe ähnlicher Screenshots in einer Zeile notieren und jeden davon über seine ID wieder abrufen.
 
+### Kommt es mit PDFs zurecht?
+
+In Claude Code ja. Ein PDF, das Claude Code liest, wird mit jeder Nachricht als ganze Datei erneut gesendet. Ist **Auto-select** an, wird ein PDF aus einer früheren Runde zu einem kurzen Platzhalter mit einer ID wie `PDF-001`, und das Modell holt sich nur die Seiten zurück, die es braucht, per ID und Seitenzahl. Das geht mit Text-PDFs und mit Scans. Codex sendet PDF-Dateien selbst nie an das Modell; dort in Bilder umgewandelte Seiten werden wie andere Bilder verwaltet.
+
 ### Werden meine Bilder gelöscht oder woandershin gesendet?
 
 Nein. Das Plugin läuft auf deinem Computer. Deine Originalbilder und der Chatverlauf bleiben unverändert, und Anfragen gehen an den Dienst, den dein Agent bereits nutzt. Abgesehen von diesen Anfragen fragt es etwa einmal am Tag bei GitHub nach, ob es eine neue Version gibt; diese Anfrage enthält keine Informationen über dich, und du kannst die automatischen Updates im Panel ausschalten.

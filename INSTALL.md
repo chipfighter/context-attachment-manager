@@ -138,7 +138,7 @@ When reporting a failure, include the steps that reproduce it, the expected and 
 
 From version 0.13 on, the plugin keeps itself up to date in Codex and Claude Code when it was installed from GitHub (the one command, the Plugins page, or the `claude plugin` commands above). About once a day it asks GitHub for the latest release and, when it is new, installs it in the background with the agent's own command line. Codex uses it after it restarts; in Claude Desktop, new sessions use it. Running tasks and sessions are not interrupted. The check carries nothing about you. An install from a local folder is not updated this way.
 
-To turn this off, open the panel, click the request card at the bottom to show its details, and click **Turn off auto-update**. Setting the environment variable `CAM_AUTO_UPDATE=0` also turns it off.
+To turn this off, open the panel, click the request card at the bottom to show its details, and click **Turn off updates**. Setting the environment variable `CAM_AUTO_UPDATE=0` also turns it off.
 
 To update by hand, or from a version before 0.13:
 

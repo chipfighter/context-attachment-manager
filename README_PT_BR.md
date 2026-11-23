@@ -142,6 +142,10 @@ Sim. Cada imagem tem um ID, como `IMG-001`, e o modelo anota uma linha sobre cad
 
 Sim. Quando as ferramentas devolvem muitas capturas em um mesmo turno, as mais antigas viram referências em lotes e as mais recentes são enviadas normalmente. O modelo pode anotar em uma só linha uma sequência de capturas parecidas e recuperar qualquer uma delas pelo ID.
 
+### Funciona com PDFs?
+
+No Claude Code, sim. Um PDF que o Claude Code lê é enviado de novo inteiro a cada mensagem. Com **Auto-select** ligado, um PDF de um turno anterior vai como uma referência curta com um ID como `PDF-001`, e o modelo busca só as páginas de que precisa, pelo ID e número da página. Funciona com PDFs de texto e com digitalizações. O Codex nunca envia os arquivos PDF ao modelo; as páginas convertidas em imagens ali são gerenciadas como qualquer outra imagem.
+
 ### Minhas imagens são apagadas ou enviadas para outro lugar?
 
 Não. O plugin roda no seu computador. As imagens originais e o histórico da conversa permanecem intactos, e as solicitações vão para o serviço que seu agente já usa. Além dessas solicitações, ele consulta o GitHub mais ou menos uma vez por dia para ver se há uma versão nova; essa consulta não leva nenhuma informação sua, e você pode desativar as atualizações automáticas no painel.
