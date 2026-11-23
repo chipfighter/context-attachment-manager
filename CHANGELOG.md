@@ -2,12 +2,24 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [Unreleased]
+## [0.13.1] - 2026-11-23
+
+Installing and updating the plugin in Claude Code no longer hangs on networks where SSH to GitHub stalls, and updates hold up better on slow networks.
 
 ### Fixed
 
-- **Installing or updating in Claude Code could hang.** On computers where Claude Code can sign in to GitHub over SSH, it downloaded the plugin over SSH, which stalled on some networks. The marketplace now gives the plugin's HTTPS address, so the download goes over HTTPS, through your proxy if you have one. This took effect right away, also for version 0.13.0.
+- **Installing or updating in Claude Code could hang.** On computers where Claude Code can sign in to GitHub over SSH, it downloaded the plugin over SSH, which stalled on some networks. The marketplace now gives the plugin's HTTPS address, so the download goes over HTTPS, through your proxy if you have one. This already applied to 0.13.0 from the moment the fix was published.
 - **Updates on slow networks.** The plugin waits up to 10 minutes for each step of an update instead of 3, and when a step runs out of time, it also stops the programs that step started.
+
+### After updating
+
+- If you have 0.13.0 from GitHub, the plugin installs this version by itself within about a day: Codex uses it after it restarts, and in Claude Desktop new sessions use it.
+- From a version before 0.13, update by hand once. See the [update instructions](https://github.com/chipfighter/context-attachment-manager/blob/v0.13.1/INSTALL.md#update).
+
+### How we tested
+
+- **Claude Code.** On a computer where SSH to GitHub signs in but then stalls, `claude plugin update` hung with the old marketplace entry. With the new one, a fresh install from GitHub, and updates from an install made with the old entry (up a version, back down and up again), all downloaded over HTTPS in 7 to 21 seconds. An install already at the latest version was left as it was.
+- **Time limits.** On Windows, macOS and Linux, a command that outlives its time limit is now stopped together with the program it started. The release checks also cover plugin startup, installation, upgrade and removal on all three.
 
 <details>
 <summary>Technical details</summary>
