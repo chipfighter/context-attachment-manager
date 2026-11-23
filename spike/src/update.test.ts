@@ -180,3 +180,53 @@ test("Claude Code's command line: the one named, and it runs outside the session
   const env = cliEnv({ CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "x", CLAUDE_CODE_ENTRYPOINT: "claude-desktop", CLAUDE_PID: "1", CLAUDE_AGENT_SDK_VERSION: "0.3", CAM_HOST: "claude", CLAUDE_CONFIG_DIR: "C:\\c", CLAUDE_CODE_GIT_BASH_PATH: "C:\\git\\bash.exe", DISABLE_AUTOUPDATER: "1", PATH: "p" });
   assert.deepEqual(Object.keys(env).sort(), ["CLAUDE_CODE_GIT_BASH_PATH", "CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "PATH"]);
 });
+
+// v0.13: Claude Code clones a "github" source over SSH wherever the user's GitHub key works, and SSH straight to GitHub
+// stalled where HTTPS went through a proxy (2026-11-23): the plugin is named by its HTTPS address, at its own release.
+test("Claude's marketplace names the plugin by its HTTPS address, at the plugin's own version", async () => {
+  const { readFileSync } = await import("node:fs");
+  const repoRoot = join(import.meta.dirname, "..", "..");
+  const entry = JSON.parse(readFileSync(join(repoRoot, ".claude-plugin", "marketplace.json"), "utf8")).plugins.find((plugin: any) => plugin.name === "codex-attachment-manager");
+  const version = JSON.parse(readFileSync(join(repoRoot, ".claude-plugin", "plugin.json"), "utf8")).version;
+  assert.deepEqual(entry.source, { source: "url", url: "https://github.com/chipfighter/context-attachment-manager.git", ref: `v${version}` });
+  assert.equal(entry.version, version);
+});
+
+test("the lock stays fresh while its holder works, so a long check is not taken over; let go, it is gone", async () => {
+  const { statSync, utimesSync, existsSync } = await import("node:fs");
+  const { takeLock, LOCK_STALE_MS } = await import("../../plugin/src/core/update.ts");
+  const dir = root();
+  const unlock = takeLock(dir, 20)!;
+  assert.ok(unlock);
+  const file = join(dir, "state", "update.lock");
+  const old = new Date(Date.now() - LOCK_STALE_MS - 60_000);
+  utimesSync(file, old, old);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.ok(Date.now() - statSync(file).mtimeMs < 60_000, "touched again by its holder");
+  assert.equal(takeLock(dir), null, "still held");
+  unlock();
+  assert.equal(existsSync(file), false);
+  const again = takeLock(dir);
+  assert.ok(again, "free again");
+  again!();
+});
+
+test("a command still running at its time limit is stopped with what it started", async () => {
+  const { readFileSync, existsSync } = await import("node:fs");
+  const { runCommand } = await import("../../plugin/src/core/update.ts");
+  const dir = root();
+  const pidFile = join(dir, "grandchild.pid");
+  // A command that starts another program (as claude starts git and ssh), which runs on. On Windows Node puts the
+  // programs it starts in a job that ends with it, which Claude Code's git and ssh are not: the second program leaves
+  // it (detached), so stopping only the command would leave it running there too (checked by hand, 2026-11-23).
+  const grandchild = `require("fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`;
+  const command = `require("child_process").spawn(process.execPath, ["-e", ${JSON.stringify(grandchild)}], { stdio: "ignore", detached: process.platform === "win32" }); setInterval(() => {}, 1000);`;
+  const ran = await runCommand(process.execPath, ["-e", command], { timeoutMs: 2000 });
+  assert.equal(ran.ok, false);
+  assert.match(ran.stderr, /timed out/);
+  assert.ok(existsSync(pidFile), "the second program had started");
+  const pid = Number(readFileSync(pidFile, "utf8"));
+  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  for (let wait = 0; wait < 50 && alive(); wait++) await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(alive(), false, "stopped with the command");
+});

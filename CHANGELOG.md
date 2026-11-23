@@ -2,6 +2,21 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [Unreleased]
+
+### Fixed
+
+- **Installing or updating in Claude Code could hang.** On computers where Claude Code can sign in to GitHub over SSH, it downloaded the plugin over SSH, which stalled on some networks. The marketplace now gives the plugin's HTTPS address, so the download goes over HTTPS, through your proxy if you have one. This took effect right away, also for version 0.13.0.
+- **Updates on slow networks.** The plugin waits up to 10 minutes for each step of an update instead of 3, and when a step runs out of time, it also stops the programs that step started.
+
+<details>
+<summary>Technical details</summary>
+
+- `.claude-plugin/marketplace.json` names the plugin `{ "source": "url", "url": "https://github.com/chipfighter/context-attachment-manager.git", "ref": "v<version>" }` instead of a `github` source: Claude Code 2.1.330 clones a `github` source over SSH whenever `ssh -T git@github.com` succeeds. `release.yml` checks the HTTPS address.
+- `core/update.ts`: a command may take 10 minutes (`COMMAND_TIMEOUT_MS`); a command that times out is stopped with its children (`taskkill /T` on Windows, its process group elsewhere). The service holding `state/update.lock` touches it every minute, so a long check is not taken over after 15 minutes.
+
+</details>
+
 ## [0.13.0] - 2026-11-23
 
 The plugin now updates itself, and in Claude Code it manages PDFs as well as images.
