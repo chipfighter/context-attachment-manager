@@ -47,7 +47,7 @@ import { applySelection, imageFor, loadPanelState } from "./adapters/codex/panel
 import { claudeImageFor, type ClaudePanelOptions } from "./adapters/claude/panel.ts";
 import type { PanelState } from "./panel/panel-state.ts";
 import { claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./core/paths.ts";
-import { fetchedLabel, fetchWords } from "./core/words.ts";
+import { claudeFetchWords, fetchedLabel, fetchWords, pdfMarker } from "./core/words.ts";
 import { claudeSelection } from "./adapters/claude/selection.ts";
 import { effectiveSelection } from "./adapters/codex/selection.ts";
 import { ensureAutoDefault, ensureStableIds, stableIdTimes } from "./core/selection.ts";
@@ -132,7 +132,13 @@ export const TOOLS = toolsFor("zh");
 // v0.11: or a platform using the core alone (platforms.ts), named by its MCP configuration (CAM_HOST=workbuddy, …):
 // only the model's fetch tool too.
 export const HOST: string = corePlatformOf(process.env.CAM_HOST) ? process.env.CAM_HOST! : process.env.CAM_HOST === "claude" ? "claude" : "codex";
-export const claudeToolsFor = (lang: Lang) => toolsFor(lang).filter((tool) => tool.name === "cam_view_image");
+export const platformToolsFor = (lang: Lang) => toolsFor(lang).filter((tool) => tool.name === "cam_view_image");
+// v0.13 (docs/design.md §14): under Claude Code it also gets pages of an omitted PDF back.
+export const claudeToolsFor = (lang: Lang) => platformToolsFor(lang).map((tool) => ({
+  ...tool,
+  description: claudeFetchWords(lang).description,
+  inputSchema: { type: "object", properties: { ids: { type: "array", items: { type: "string" }, description: claudeFetchWords(lang).ids }, pages: { type: "string", description: claudeFetchWords(lang).pages } }, required: ["ids"] },
+}));
 
 // A stack of pictures, drawn for light and dark themes (Codex takes https or data URLs only).
 const ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="14" height="14" rx="2.5"/><path d="M7 3h10.5A3.5 3.5 0 0 1 21 6.5V16"/><circle cx="8" cy="11" r="1.5"/><path d="m3.5 18 4.5-4.5 3 3 2-2 3.5 3.5"/></svg>';
@@ -289,13 +295,26 @@ export function callClaudeTool(name: string, args: Json, options: ClaudePanelOpt
     const ids: string[] = Array.isArray(args.ids) ? args.ids.map(String) : typeof args.id === "string" ? [args.id] : [];
     const selectionDir = claudeSelectionDirOf(options.dataRoot ?? dataDir());
     const index = loadClaudeIndex(sessionId, options.home, stableIdTimes(selectionDir));
-    if (!claudeSelection(sessionId, selectionDir, claudeStartedAt(index), index.previous).auto) {
+    // v0.13: a PDF's pages come back whatever the mode: the engine puts them in place of this call's marker, in its
+    // own turn (anthropic-messages/documents.ts); images only where automatic selection is on.
+    const pdfId = (asked: string) => { const match = /^PDF-?(\d+)$/i.exec(asked.trim()); return match ? `PDF-${match[1].padStart(3, "0")}` : null; };
+    const pages = typeof args.pages === "number" ? String(args.pages) : Array.isArray(args.pages) ? args.pages.join(",") : typeof args.pages === "string" && args.pages.trim() ? args.pages.trim() : null;
+    const auto = claudeSelection(sessionId, selectionDir, claudeStartedAt(index), index.previous).auto;
+    if (!auto && ids.length && ids.every((asked) => !pdfId(asked))) {
       log({ event: "fetch", host: "claude", sessionId, ids, refused: "automatic selection is off" });
       return { content: [{ type: "text", text: words.off }], isError: true };
     }
     const content: Json[] = [];
     const found: string[] = [];
     for (const asked of ids) {
+      const pdf = pdfId(asked) ? index.pdfs.find((candidate) => candidate.id === pdfId(asked)) : undefined;
+      if (pdfId(asked)) {
+        if (!pdf) { content.push({ type: "text", text: words.missing(asked) }); continue; }
+        content.push({ type: "text", text: pdfMarker({ id: pdf.id, name: pdf.name, turn: pdf.turn, pages: null, textPages: null }, pages, lang) });
+        found.push(pdf.id);
+        continue;
+      }
+      if (!auto) { content.push({ type: "text", text: words.off }); continue; }
       const id = asked.trim().toUpperCase();
       const image = index.images.find((candidate) => candidate.id === id);
       if (!image) { content.push({ type: "text", text: words.missing(asked) }); continue; }
@@ -305,7 +324,7 @@ export function callClaudeTool(name: string, args: Json, options: ClaudePanelOpt
       content.push({ type: "text", text: fetchedLabel(image, lang) }, { type: "image", data: parts[2], mimeType: parts[1] });
       found.push(id);
     }
-    log({ event: "fetch", host: "claude", sessionId, ids, found });
+    log({ event: "fetch", host: "claude", sessionId, ids, found, ...(pages ? { pages } : {}) });
     return { content, isError: ids.length > 0 && !found.length };
   }
   throw new Error(`unknown tool ${name}`);
@@ -388,7 +407,7 @@ function main(): void {
     if (method === "initialize") {
       send({ id, result: { protocolVersion: params.protocolVersion ?? "2025-06-18", capabilities: { tools: {}, resources: {} }, serverInfo: serverInfo(currentLang()) } });
     } else if (method === "tools/list") {
-      send({ id, result: { tools: HOST === "codex" ? toolsFor(currentLang()) : claudeToolsFor(currentLang()) } });
+      send({ id, result: { tools: HOST === "codex" ? toolsFor(currentLang()) : HOST === "claude" ? claudeToolsFor(currentLang()) : platformToolsFor(currentLang()) } });
     } else if (method === "resources/list") {
       send({ id, result: { resources: [{ uri: PANEL_URI, name: say(currentLang(), "resource.name"), mimeType: PANEL_MIME }] } });
     } else if (method === "resources/templates/list") {

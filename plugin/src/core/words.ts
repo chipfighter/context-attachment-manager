@@ -29,6 +29,18 @@ import type { Notes, Rating } from "./notes.ts";
 export type Described = { id: string; name: string | null; label: string | null; kind: ImageKind; turn: number | null; width: number | null; height: number | null; notes?: Notes; awaiting?: boolean; now?: boolean };
 
 type FetchWords = { title: string; description: string; ids: string; missing: (id: string) => string; unavailable: (id: string) => string; off: string };
+// v0.13, Claude Code only (docs/design.md §14): the fetch tool also gets PDF pages back.
+type ClaudeFetchWords = { description: string; ids: string; pages: string; pdfUnavailable: (id: string) => string };
+// v0.13, Claude Code only: a PDF read in an earlier turn, the notes after the message holding it, the pages the model
+// fetched (as the fetch tool marks them, and as the engine puts them in).
+type PdfWords = {
+  unnamed: string; pages: (count: number) => string; kind: (pages: number, textPages: number) => string; turn: (n: number) => string;
+  heading: (id: string, fields: string[]) => string; said: (start: string) => string; ask: (id: string) => string;
+  listItem: (id: string, name: string) => string; listSeparator: string;
+  fullNote: string; here: (list: string) => string;
+  marker: (id: string, name: string, pages: string | null) => string; some: (pages: string, total: number | null) => string; whole: (total: number | null) => string; rest: (turn: number) => string;
+  fetched: (id: string, fields: string[]) => string; rangeSeparator: string;
+};
 type Words = {
   kind: Record<ImageKind, string>; unnamed: string; turn: (n: number) => string; thisTurn: string; newImage: string;
   // v0.10: the source in a compact line (compactLine), shorter.
@@ -52,6 +64,7 @@ type Words = {
   codexCompacted: (count: number, resent: number, auto: boolean) => string;
   // v0.8: how to write feature lines and note ratings; the placeholder's line with them; how long each may be shown.
   featureNote: string; notes: (line: string | null, ratings: Rating[]) => string;
+  claudeFetch: ClaudeFetchWords; pdf: PdfWords;
 };
 
 // The image sits in the history, so the model concludes it never saw it and takes back what it said about it (user
@@ -180,6 +193,38 @@ const WORDS: Record<Lang, Words> = {
       line ? `特征：${line}` : null,
       ratings.length ? `评价：${ratings.map((rating) => `${rating.turn !== null ? `第 ${rating.turn} 轮` : ""}“${rating.text}”`).join("，")}` : null,
     ].filter((part) => part !== null).join("；"),
+    // v0.13 (docs/design.md §14): like the images' wording under automatic selection, said of a PDF; the pages to ask for
+    // are spelled out, since fetching a few costs less than the whole file.
+    claudeFetch: {
+      description: "查看这个任务里被省略的图片的原图，或被省略的 PDF 的页面。被省略的图片在对话里显示为“[图片 IMG-xxx 已省略…]”，PDF 显示为“[PDF PDF-xxx 已省略…]”。只在回答需要看、而你之前说过的内容不够用时调用。取回的图片只在本轮提供；取回的 PDF 页面会留在对话里，之后不用再取。",
+      ids: "要查看的编号，例如 [\"IMG-004\"] 或 [\"PDF-001\"]；几个就一次传几个。",
+      pages: "只用于 PDF：要看的页码，例如 \"3\"、\"2-4\" 或 \"1,5\"；不传就是整份。只取需要的页。",
+      pdfUnavailable: (id) => `${id} 的原文件读不出来。`,
+    },
+    pdf: {
+      unnamed: "未命名",
+      pages: (count) => `${count} 页`,
+      kind: (pages, textPages) => (textPages >= pages ? "文字版" : textPages === 0 ? "扫描件，只有页面图像" : `${textPages} 页有文字，其余是扫描页`),
+      turn: (n) => `第 ${n} 轮读取`,
+      heading: (id, fields) => `[PDF ${id} 已省略｜${fields.join("｜")}]`,
+      said: (start) => `你当时读完它的回答开头：“${start}”`,
+      ask: (id) => `需要再看时，调用 cam_view_image，ids 传“${id}”，pages 传要看的页码（例如 "3" 或 "2-4"），只取需要的页。`,
+      listItem: (id, name) => `${id}（${name}）`,
+      listSeparator: "、",
+      // 2026-11-23, Haiku 5.5 low, headless: with only a short note after the message holding the placeholder, the model
+      // fetched the page and answered right, then "corrected" its earlier summary ("第一次读取时，工具只返回了页数和一段
+      // 占位说明…没有依据"). So, as for images (claudeNote, here), the first message holding one is followed by the full
+      // note. Pages fetched stay where they came (anthropic-messages/documents.ts), which it says too.
+      fullNote: "上下文管理说明（来自用户安装的上下文素材管理工具）：为了节省上下文，之前各轮读进来的 PDF 不再随每次请求重复发送，它们在对话里原来的位置（Read 的工具结果里）换成了“[PDF PDF-xxx 已省略…]”这样的占位文字。这些占位文字是这个工具在这次请求里才换上的，不是 Read 当时的返回：Read 当时返回的是完整的 PDF，你当时读过。你之前对它们的描述、总结，以及据此做出的判断，都是看着原文件做出的，仍然有效。不要因为现在看不到，就认为之前的回答没有依据、是猜测或编造，也不要收回、更正或道歉。之前说过的内容不够用时，调用 cam_view_image 工具，ids 传 PDF 的编号，pages 传要看的页码（例如 \"3\" 或 \"2-4\"；不传就是整份），这几页会出现在这次的工具结果里，之后一直留在那里，不用再取；这比用 Read 重新读整个文件省上下文。现在看不到的内容，不要猜测或补充。",
+      here: (list) => `上下文管理说明：上面这条消息里的 ${list}，当时就是完整的内容，你当时看过；那里的占位文字是这次请求才换上的，不是工具当时的返回。你之前据此做出的描述和判断仍然有效，不要收回或更正。`,
+      marker: (id, name, pages) => `[PDF ${id} 取回的页面｜${name}｜${pages ? `第 ${pages} 页` : "整份"}]`,
+      some: (pages, total) => `原文件第 ${pages} 页${total ? `（共 ${total} 页）` : ""}，按顺序排在下面这份 PDF 里`,
+      whole: (total) => (total ? `整份 ${total} 页` : "整份"),
+      // 2026-11-23, Sonnet 5.5: having fetched page 1 only, it said it had never seen page 2, which it had read whole.
+      rest: (turn) => `其余页你在第 ${turn} 轮读过完整内容，之前说过的仍然有效`,
+      fetched: (id, fields) => `[PDF ${id} 取回的页面｜${fields.join("｜")}]`,
+      rangeSeparator: "、",
+    },
   },
   en: {
     kind: { upload: "uploaded by the user", view: "viewed with a tool", generated: "generated image", tool: "image from a tool result" },
@@ -273,6 +318,31 @@ const WORDS: Record<Lang, Words> = {
       line ? `Features: ${line}` : null,
       ratings.length ? `rated: ${ratings.map((rating) => `"${rating.text}"${rating.turn !== null ? ` (turn ${rating.turn})` : ""}`).join(", ")}` : null,
     ].filter((part) => part !== null).join("; "),
+    claudeFetch: {
+      description: "View the originals of omitted images in this task, or pages of an omitted PDF. Omitted images appear in the conversation as \"[Image IMG-xxx omitted…]\", PDFs as \"[PDF PDF-xxx omitted…]\". Call it only when an answer needs to look at one and what you said about it before is not enough. Images you fetch are included only in this turn; PDF pages you fetch stay in the conversation, so you need not fetch them again.",
+      ids: "Ids to view, e.g. [\"IMG-004\"] or [\"PDF-001\"]; pass several at once if you need several.",
+      pages: "PDFs only: the pages to view, e.g. \"3\", \"2-4\" or \"1,5\"; leave it out for the whole file. Fetch only the pages you need.",
+      pdfUnavailable: (id) => `The file of ${id} could not be read.`,
+    },
+    pdf: {
+      unnamed: "unnamed",
+      pages: (count) => `${count} ${count === 1 ? "page" : "pages"}`,
+      kind: (pages, textPages) => (textPages >= pages ? "text" : textPages === 0 ? "scanned, page images only" : `${textPages} with text, the rest scanned`),
+      turn: (n) => `read in turn ${n}`,
+      heading: (id, fields) => `[PDF ${id} omitted | ${fields.join(" | ")}]`,
+      said: (start) => `How your answer after reading it began: "${start}"`,
+      ask: (id) => `To look at it again, call cam_view_image with ids ["${id}"] and pages, e.g. "3" or "2-4"; fetch only the pages you need.`,
+      listItem: (id, name) => `${id} (${name})`,
+      listSeparator: ", ",
+      fullNote: "Context management note (from the context asset manager the user installed): to save context, PDFs read in earlier turns are no longer sent again with every request; where they were in the conversation (in Read's tool results) there is now placeholder text such as \"[PDF PDF-xxx omitted…]\". This tool put those placeholders in for this request; they are not what Read returned at the time: Read returned the whole PDF then, and you read it. What you said about them, your summaries, and the judgments you based on them were made looking at the original files and remain valid. Do not treat your earlier answers as unfounded, guesses or made up because you cannot see the files now, and do not take them back, correct them or apologize. When what you said before is not enough, call the cam_view_image tool with the PDF's id in ids and the pages you need in pages (e.g. \"3\" or \"2-4\"; leave it out for the whole file): those pages come back in that tool result and stay there, so you need not fetch them again. That takes less context than reading the whole file again with Read. Do not guess or add content you cannot see now.",
+      here: (list) => `Context management note: in the message above, ${list} had the full content at the time, and you looked at it then; the placeholder text there was put in only for this request, it is not what the tool returned at the time. What you said and judged from it remains valid; do not take it back or correct it.`,
+      marker: (id, name, pages) => `[PDF ${id} fetched pages | ${name} | ${pages ? `pages ${pages}` : "whole file"}]`,
+      some: (pages, total) => `pages ${pages}${total ? ` of ${total}` : ""} of the file, in this order in the PDF below`,
+      whole: (total) => (total ? `all ${total} pages` : "the whole file"),
+      rest: (turn) => `you read the other pages in full in turn ${turn}; what you said about them stands`,
+      fetched: (id, fields) => `[PDF ${id} fetched pages | ${fields.join(" | ")}]`,
+      rangeSeparator: ", ",
+    },
   },
 };
 
@@ -298,7 +368,8 @@ const CLIP_AT = /[，。；、！？,.;!?｜|：:\s]/u;
 const WIDE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
 // A rating keeps as much as a feature line: they are the user's own words, and only a few per session (a long replay
 // lost half of one at 15, 2026-10-31).
-const CAPS = { line: 40, rating: 30 };
+// v0.13: said, the start of the reply a PDF placeholder quotes.
+const CAPS = { line: 40, rating: 30, said: 50 };
 export function clip(text: string, max: number): string {
   const chars = [...text.trim()];
   let width = 0;
@@ -405,4 +476,55 @@ export const awaitingNote = (ids: string[], lang: Lang) => WORDS[lang].awaitingN
 // images within their message and means nothing here: GPT-6 Luna once read it as the digit asked about.
 export function fetchedLabel(image: Described, lang: Lang = "zh"): string {
   return heading(WORDS[lang], { ...image, label: null }, FETCHED_STATE[lang]);
+}
+
+// v0.13, Claude Code only (docs/design.md §14): what is known of a PDF the session read. turn: the turn it was read in
+// (null: not known); pages and textPages: from the file (core/pdf.ts), null when it could not be read; said: the reply
+// that ended that turn, whose start the placeholder quotes.
+export type PdfDescribed = { id: string; name: string | null; turn: number | null; pages: number | null; textPages: number | null; said?: string | null };
+export const claudeFetchWords = (lang: Lang): ClaudeFetchWords => WORDS[lang].claudeFetch;
+
+// Page numbers in short: 3, 4, 5, 8 → "3–5、8".
+export function pageRanges(pages: number[], lang: Lang = "zh"): string {
+  const runs: string[] = [];
+  for (let at = 0; at < pages.length; ) {
+    let end = at;
+    while (end + 1 < pages.length && pages[end + 1] === pages[end] + 1) end++;
+    runs.push(end > at ? `${pages[at]}–${pages[end]}` : `${pages[at]}`);
+    at = end + 1;
+  }
+  return runs.join(WORDS[lang].pdf.rangeSeparator);
+}
+
+// A PDF read in an earlier turn, in place of the file: its name, turn, pages and kind, and how to get pages back.
+export function pdfPlaceholder(pdf: PdfDescribed, lang: Lang = "zh"): string {
+  const words = WORDS[lang].pdf;
+  const fields = [pdf.name ?? words.unnamed];
+  if (pdf.turn !== null) fields.push(words.turn(pdf.turn));
+  if (pdf.pages) fields.push(pdf.textPages === null ? words.pages(pdf.pages) : `${words.pages(pdf.pages)}${lang === "zh" ? "，" : ", "}${words.kind(pdf.pages, pdf.textPages)}`);
+  return [words.heading(pdf.id, fields), pdf.said ? words.said(clip(pdf.said, CAPS.said)) : null, words.ask(pdf.id)].filter((line) => line !== null).join("\n");
+}
+
+// The note after a message holding PDF placeholders, naming them as the images' short note does (hereNote); after the
+// first such message of a request, the full note first (`full`), as for images (claudeNote).
+export type PdfNoted = { id: string; name: string | null };
+export function pdfNote(items: PdfNoted[], lang: Lang = "zh", full = false): string {
+  const words = WORDS[lang].pdf;
+  const list = items.map((item) => words.listItem(item.id, item.name ?? words.unnamed)).join(words.listSeparator);
+  return `${full ? `${words.fullNote}\n` : ""}${words.here(list)}`;
+}
+
+// What the fetch tool returns for a PDF; the engine finds it (PDF_MARKER, either language) and puts the pages in its
+// place, in every request from then on.
+export function pdfMarker(pdf: PdfDescribed, pages: string | null, lang: Lang = "zh"): string {
+  const words = WORDS[lang].pdf;
+  return words.marker(pdf.id, pdf.name ?? words.unnamed, pages);
+}
+export const PDF_MARKER = /^\[PDF (PDF-\d{3,}) (?:取回的页面|fetched pages)(?:｜| \|)/;
+
+// The line before the pages the engine puts in: which pages of the file they are (null: the whole file).
+export function pdfFetchedLabel(pdf: PdfDescribed, pages: number[] | null, lang: Lang = "zh"): string {
+  const words = WORDS[lang].pdf;
+  const rest = pages && pdf.turn !== null ? [words.rest(pdf.turn)] : [];
+  return words.fetched(pdf.id, [pdf.name ?? words.unnamed, pages ? words.some(pageRanges(pages, lang), pdf.pages) : words.whole(pdf.pages), ...rest]);
 }
