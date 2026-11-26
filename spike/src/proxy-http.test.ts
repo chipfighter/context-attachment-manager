@@ -24,7 +24,7 @@ async function fixture(t: TestContext, handler: http.RequestListener, connectDel
   const upstream = http.createServer(handler);
   await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
   const upstreamPort = (upstream.address() as { port: number }).port;
-  const port = await engineTestPort();
+  const port = await engineTestPort("http");
   const pressureFile = join(root, "memory-pressure");
   const preload = join(root, "memory-pressure.mjs");
   if (memoryPressure) writeFileSync(preload, [

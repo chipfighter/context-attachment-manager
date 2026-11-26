@@ -28,7 +28,7 @@ async function engine(t: TestContext) {
   });
   await new Promise<void>(ok => upstream.listen(0, "127.0.0.1", ok));
   const upstreamPort = (upstream.address() as net.AddressInfo).port;
-  const port = await engineTestPort();
+  const port = await engineTestPort("provider");
   const child = spawn(process.execPath, [fileURLToPath(new URL("./proxy-http-fixture.ts", import.meta.url))], {
     env: { ...process.env, CAM_DATA_DIR: root, CODEX_HOME: join(root, "codex"), CLAUDE_CONFIG_DIR: join(root, "claude"), LOCALAPPDATA: join(root, "empty-appdata"), CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), NO_PROXY: "*", no_proxy: "*" },
     stdio: ["ignore", "pipe", "pipe"],

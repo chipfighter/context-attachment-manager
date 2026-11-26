@@ -39,7 +39,7 @@ async function fixture(t: TestContext, handler: (stream: http2.ServerHttp2Stream
   });
   await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
   const upstreamPort = (upstream.address() as { port: number }).port;
-  const port = await engineTestPort();
+  const port = await engineTestPort("h2");
   const child = spawn(process.execPath, [fileURLToPath(new URL("./proxy-http-fixture.ts", import.meta.url))], {
     env: { ...process.env, CAM_DATA_DIR: root, CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), CAM_TEST_UPSTREAM_H2: "1", NO_PROXY: "*", no_proxy: "*", ...env },
     stdio: ["ignore", "pipe", "pipe"],
