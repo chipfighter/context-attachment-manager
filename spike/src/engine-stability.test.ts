@@ -1,13 +1,13 @@
 // v0.12: what keeps the engine up and its requests moving: telling a busy engine from a missing one, a connection
 // setup that cannot hang, and bookkeeping that never throws. Loopback servers and temporary folders only.
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import test from "node:test";
-import { ensureEngine, probeEngine } from "../../plugin/src/engine.ts";
+import { dirname, join } from "node:path";
+import test, { type TestContext } from "node:test";
+import { buildOf, ENGINE_SERVICE, ensureEngine, probeEngine, watchForClients } from "../../plugin/src/engine.ts";
 import { connectUpstream, log } from "../../plugin/src/core/engine/transport.ts";
 import { recordRequest } from "../../plugin/src/core/request-stats.ts";
 
@@ -54,6 +54,134 @@ test("a busy engine is left alone instead of a second one being started", async 
   assert.equal(result.state, "busy");
   assert.equal(result.health, null);
   assert.ok(Date.now() - started < 1800, "no engine was started and waited for");
+});
+
+async function startupFixture(t: TestContext) {
+  const free = net.createServer();
+  const port = await listening(free);
+  await closing(free);
+  const root = mkdtempSync(join(tmpdir(), "cam-racing-start-"));
+  const env = { CAM_DATA_DIR: process.env.CAM_DATA_DIR, CAM_ENGINE_START: process.env.CAM_ENGINE_START };
+  t.after(() => {
+    for (const [key, value] of Object.entries(env)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    rmSync(root, { recursive: true, force: true });
+  });
+  process.env.CAM_DATA_DIR = root;
+  process.env.CAM_ENGINE_START = "child";
+  const dir = join(root, "src");
+  const manifest = join(root, ".codex-plugin");
+  const startedPid = join(root, "started-pid");
+  const version = "1.0.0";
+  mkdirSync(dir);
+  mkdirSync(manifest);
+  writeFileSync(join(manifest, "plugin.json"), JSON.stringify({ version }));
+  writeFileSync(join(dir, "proxy.ts"), [
+    'import { writeFileSync } from "node:fs";',
+    `writeFileSync(${JSON.stringify(startedPid)}, String(process.pid));`,
+  ].join("\n"));
+  return { port, dir, lock: join(root, "state", "engine-start.lock"), startedPid, version };
+}
+
+test("an engine that appears before we take the start lock is reused", async (t) => {
+  const { port, dir, lock, startedPid, version } = await startupFixture(t);
+  const health = { ok: true, service: ENGINE_SERVICE, pid: 4242, port, build: buildOf(dir), version };
+  let probes = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    if (++probes === 1) throw new Error("no engine yet");
+    assert.ok(existsSync(lock), "the peer is discovered under the start lock");
+    return Response.json(health);
+  });
+
+  const result = await ensureEngine({ port, dir });
+  assert.equal(result.state, "running");
+  assert.deepEqual(result.health, health);
+  assert.equal(existsSync(startedPid), false);
+  assert.equal(existsSync(lock), false, "the lock is released on reuse");
+});
+
+for (const waitForPeer of [false, true]) {
+  const observation = waitForPeer ? "while waiting for the start lock" : "after taking the start lock";
+  test(`a forced install replaces a different build it discovers ${observation}`, async (t) => {
+    const { port, dir, lock, startedPid, version } = await startupFixture(t);
+    const old = { ok: true, service: ENGINE_SERVICE, pid: 123_456_789, port, build: "old-build", version };
+    const build = buildOf(dir);
+    let probes = 0;
+    let retired = false;
+    const kill = t.mock.method(process, "kill", () => false);
+    if (waitForPeer) {
+      mkdirSync(dirname(lock));
+      writeFileSync(lock, String(process.pid));
+    }
+    t.mock.method(globalThis, "fetch", async (input: string) => {
+      if (new URL(input).pathname === "/__cam/retire") {
+        assert.ok(existsSync(lock), "replacement is decided under the start lock");
+        retired = true;
+        return Response.json({ retiring: true });
+      }
+      if (++probes === 1) throw new Error("no engine yet");
+      if (!retired) {
+        if (waitForPeer && probes === 2) rmSync(lock);
+        return Response.json(old);
+      }
+      if (!existsSync(startedPid)) throw new Error("replacement not started yet");
+      const pid = Number(readFileSync(startedPid, "utf8"));
+      if (!pid) throw new Error("replacement not ready yet");
+      return Response.json({ ...old, pid, build });
+    });
+
+    const result = await ensureEngine({ port, dir, force: true });
+    assert.equal(retired, true);
+    assert.equal(result.state, "replaced");
+    assert.deepEqual(result.replaced, old);
+    assert.equal(result.health?.build, build);
+    assert.equal(result.health?.pid, Number(readFileSync(startedPid, "utf8")));
+    assert.equal(kill.mock.callCount(), 0);
+    assert.equal(existsSync(lock), false, "the lock is released after replacement");
+  });
+}
+
+test("an expired start lock still belongs to its live owner", async (t) => {
+  const { port, dir, lock, startedPid, version } = await startupFixture(t);
+  const health = { ok: true, service: ENGINE_SERVICE, pid: 4242, port, build: buildOf(dir), version };
+  const owner = String(process.pid);
+  mkdirSync(dirname(lock));
+  writeFileSync(lock, owner);
+  const past = new Date(Date.now() - 60_000);
+  utimesSync(lock, past, past);
+  let probes = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    if (++probes === 1) throw new Error("no engine yet");
+    assert.equal(readFileSync(lock, "utf8"), owner);
+    return Response.json(health);
+  });
+
+  const result = await ensureEngine({ port, dir });
+  assert.equal(result.state, "running");
+  assert.deepEqual(result.health, health);
+  assert.equal(existsSync(startedPid), false);
+  assert.equal(readFileSync(lock, "utf8"), owner, "waiting did not clear the peer's lock");
+});
+
+test("a slow process poll cannot overlap or exit an engine after the watch stops", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  let finish!: (count: number) => void;
+  const pending = new Promise<number>((resolve) => { finish = resolve; });
+  let checks = 0;
+  let exits = 0;
+  const stop = watchForClients(() => { exits++; }, {
+    intervalMs: 5,
+    misses: 1,
+    count: () => { checks++; return pending; },
+  });
+  t.mock.timers.tick(5);
+  t.mock.timers.tick(5);
+  t.mock.timers.tick(5);
+  stop();
+  finish(0);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual({ checks, exits }, { checks: 1, exits: 0 });
 });
 
 test("a connection the outbound proxy never answers fails after the timeout, and the socket is closed", async (t) => {
