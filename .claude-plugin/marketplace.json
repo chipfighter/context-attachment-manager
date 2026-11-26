@@ -10,10 +10,10 @@
       "source": {
         "source": "url",
         "url": "https://github.com/chipfighter/context-attachment-manager.git",
-        "ref": "v0.13.1"
+        "ref": "v0.13.2"
       },
       "description": "In Claude Code sessions with many images or PDFs, earlier images and PDFs go out as short placeholders instead of being sent again with every message; the model fetches the original, or the pages it needs, back by its ID, also after compaction, and the prompt cache keeps working.",
-      "version": "0.13.1"
+      "version": "0.13.2"
     }
   ]
 }
