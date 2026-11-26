@@ -8,13 +8,12 @@
 // Linux. Output: health checks, a detached engine process.
 
 import { execFile, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ENGINE_NODE_ARGS } from "./core/memory.ts";
 import { dataDir, proxyLogDirOf } from "./core/paths.ts";
 
 export const ENGINE_SERVICE = "codex-attachment-manager";
@@ -145,7 +144,7 @@ type Started = { pid: number | null; failed: () => boolean; bindFailure: () => E
 // (watchForClients). Where WMI cannot start it (no PowerShell, a security policy), it starts as before.
 // CAM_ENGINE_START=child: always as before. Elsewhere: detached, so it outlives whoever asked for it.
 async function startEngine(port: number, extraArgs: string[] = [], dir = here): Promise<Started> {
-  const args = [...ENGINE_NODE_ARGS, ...reportFlags(), join(dir, "proxy.ts"), "--port", String(port), ...extraArgs];
+  const args = [...reportFlags(), join(dir, "proxy.ts"), "--port", String(port), ...extraArgs];
   if (process.platform === "win32" && process.env.CAM_ENGINE_START !== "child" && !wmiFailed) {
     const pid = await startOutsideJob([process.execPath, ...args], tmpdir());
     if (pid !== null) {
@@ -225,17 +224,39 @@ function readStartFailure(pid: number): EngineBindFailure | undefined {
   } catch { return undefined; }
 }
 
-// v0.12: one engine start at a time across processes (Codex starts several plugin services at once, and a WMI start
-// takes a second): the others wait for the engine the first one starts. A lock older than 20 s is left over.
+// The engine is shared by plugin services from different versions. Refresh the file so older services also
+// keep respecting this lock during a slow replacement. Give live legacy owners extra time, but cap it in case
+// their PID has since been reused by another process.
 function takeStartLock(): (() => void) | null {
   const file = join(dataDir(), "state", "engine-start.lock");
-  try {
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, String(process.pid), { flag: "wx" });
-    return () => { try { unlinkSync(file); } catch { /* gone */ } };
-  } catch {
+  const owner = `${process.pid}\n${randomUUID()}`;
+  const acquire = () => {
+    writeFileSync(file, owner, { flag: "wx" });
+    const refresh = setInterval(() => {
+      try {
+        const now = new Date();
+        if (readFileSync(file, "utf8") === owner) utimesSync(file, now, now);
+      } catch { /* the lock file went away */ }
+    }, 5000).unref();
+    return () => {
+      clearInterval(refresh);
+      try { if (readFileSync(file, "utf8") === owner) unlinkSync(file); } catch { /* gone */ }
+    };
+  };
+  try { mkdirSync(dirname(file), { recursive: true }); return acquire(); } catch {
     try {
-      if (Date.now() - statSync(file).mtimeMs > 20_000) { unlinkSync(file); writeFileSync(file, String(process.pid), { flag: "wx" }); return () => { try { unlinkSync(file); } catch { /* gone */ } }; }
+      const idleMs = Date.now() - statSync(file).mtimeMs;
+      if (idleMs <= 20_000) return null;
+      const stale = readFileSync(file, "utf8");
+      const pid = Number(stale.split("\n", 1)[0]);
+      if (idleMs <= 120_000 && Number.isSafeInteger(pid) && pid > 0) {
+        try { process.kill(pid, 0); return null; } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") return null;
+        }
+      }
+      if (readFileSync(file, "utf8") !== stale || Date.now() - statSync(file).mtimeMs <= 20_000) return null;
+      unlinkSync(file);
+      return acquire();
     } catch { /* another process took it */ }
     return null;
   }
@@ -260,43 +281,47 @@ const knownBuilds = new Map<string, { build: string | null; against: string | nu
 export async function ensureEngine(options: { port?: number; waitMs?: number; extraArgs?: string[]; dir?: string; force?: boolean; client?: string; patienceMs?: number } = {}): Promise<{ state: EngineState; health: Health | null; replaced?: Health; bindFailure?: EngineBindFailure; start?: StartNote }> {
   const port = options.port ?? DEFAULT_PORT;
   const dir = options.dir ?? here;
-  let probe = await probeEngine(port, 800, options.client);
-  // v0.12: no answer in time, but something holds the port: asked again with more patience; still busy, it is left
-  // alone this round (see probeEngine).
-  if (probe.kind === "busy") probe = await probeEngine(port, options.patienceMs ?? 5000, options.client);
-  if (probe.kind === "busy") return { state: "busy", health: null };
-  const existing = probe.kind === "engine" ? probe.health : null;
-  let replaced: Health | undefined;
-  if (existing) {
+  const check = async () => {
+    const probe = await probeEngine(port, 800, options.client);
+    return probe.kind === "busy" ? probeEngine(port, options.patienceMs ?? 5000, options.client) : probe;
+  };
+  const replacementBuild = (existing: Health) => {
     const known = knownBuilds.get(dir);
     if (!known || (known.build !== existing.build && known.against !== existing.build)) knownBuilds.set(dir, { build: buildOf(dir), against: existing.build });
     const build = knownBuilds.get(dir)!.build;
-    if (build === existing.build || !shouldReplace(existing, { build, version: versionOf(dir) }, options.force)) return { state: "running", health: existing };
-    await retireEngine(port, existing, build);
-    // A retiring engine closes its listener at once; a stopped one lets go of the port as it exits.
-    for (let i = 0; i < 20 && (await engineHealth(port, 300))?.pid === existing.pid; i++) await sleep(150);
-    replaced = existing;
-  }
+    if (!build || build === existing.build) return null;
+    return shouldReplace(existing, { build, version: versionOf(dir) }, options.force) ? build : null;
+  };
+  const initial = await check();
+  if (initial.kind === "busy") return { state: "busy", health: null };
+  if (initial.kind === "engine" && !replacementBuild(initial.health)) return { state: "running", health: initial.health };
+
   const waitMs = options.waitMs ?? 8000;
-  // v0.12: another process is starting one right now: wait for it instead of starting a second. Its start through WMI
-  // can take a while before the engine even runs, so the wait allows for that too.
-  const unlock = takeStartLock();
+  let unlock = takeStartLock();
   if (!unlock) {
     const deadline = Date.now() + WMI_START_MS + waitMs;
-    while (Date.now() < deadline) {
+    while (!unlock && Date.now() < deadline) {
       await sleep(250);
-      const health = await engineHealth(port);
-      if (health && health.pid !== replaced?.pid) return { state: "running", health, replaced };
+      const health = await engineHealth(port, 800, options.client);
+      if (health && !replacementBuild(health)) return { state: "running", health };
+      if (Date.now() < deadline) unlock = takeStartLock();
     }
-    return { state: "failed", health: null, replaced };
+    if (!unlock) return { state: "failed", health: null };
   }
+  let replaced: Health | undefined;
   let started: Started | null = null;
   lastWmiStart = null;
   try {
-    // A peer may have finished starting and released the lock since our first probe.
-    const current = await probeEngine(port, 800, options.client);
-    if (current.kind === "busy") return { state: "busy", health: null, replaced };
-    if (current.kind === "engine" && current.health.pid !== replaced?.pid) return { state: "running", health: current.health, replaced };
+    // The earlier probe can be stale by the time we take the lock. Decide and replace under the same lock.
+    const current = await check();
+    if (current.kind === "busy") return { state: "busy", health: null };
+    if (current.kind === "engine") {
+      const build = replacementBuild(current.health);
+      if (!build) return { state: "running", health: current.health };
+      replaced = current.health;
+      await retireEngine(port, replaced, build);
+      for (let i = 0; i < 20 && (await engineHealth(port, 300))?.pid === replaced.pid; i++) await sleep(150);
+    }
     started = await startEngine(port, options.extraArgs, dir);
     // v0.12: the wait for the engine counts from here, once it is started. Counted from before, a slow start through
     // WMI used up most of it, and the start was reported as failed while the engine was still coming up (Windows CI,
@@ -307,7 +332,7 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
     while (Date.now() < deadline) {
       await sleep(150);
       const health = await engineHealth(port);
-      if (health && health.pid !== replaced?.pid) return { state: replaced ? "replaced" : "started", health, replaced, start: note() };
+      if (health && health.pid !== replaced?.pid && !replacementBuild(health)) return { state: replaced ? "replaced" : "started", health, replaced, start: note() };
       if (started.bindFailure() || started.failed()) {
         // An engine WMI started that died at once (a policy ending it): this process starts them as before from now on.
         if (viaWmi && !started.bindFailure()) {
@@ -382,7 +407,7 @@ export function watchForClients(onGone: () => void, options: { intervalMs?: numb
     try {
       const found = await count().catch(() => 1);
       if (stopped) return;
-      missed = found > 0 ? 0 : missed + 1;
+      missed = found > 0 || Date.now() - lastClient() < CLIENT_SEEN_MS ? 0 : missed + 1;
       if (missed >= needed) { stop(); onGone(); }
     } finally { checking = false; }
   }, options.intervalMs ?? 15_000);
