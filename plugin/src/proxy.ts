@@ -34,6 +34,7 @@ import { codexHome } from "./adapters/codex/codexconfig.ts";
 import { CODEX_BASE, imageSizesOf, needsRewrite, OPENAI_API_HOST, requestIdentity, rewriteBody, UPSTREAM_HOST, type RequestIdentity } from "./adapters/codex/engine.ts";
 import { connectDirectly, keepRouted, pluginGone, usesEngine } from "./adapters/codex/setup.ts";
 import { setPixelCache } from "./core/pixels.ts";
+import { pruneDiskCaches } from "./core/disk-cache.ts";
 import { REMEMBERED, type SentPrefix } from "./adapters/protocols/anthropic-messages/cache.ts";
 import { readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecord } from "./adapters/protocols/anthropic-messages/thinking.ts";
 import { connectUpstream, decodeBody, HOP_BY_HOP, log, outboundProxy, ownRequest, parseBody, readSystemProxy, redactImages, type ParsedBody } from "./core/engine/transport.ts";
@@ -217,7 +218,10 @@ async function main(): Promise<void> {
   };
   // v0.10: per session, where the conversation requests sent last had their cache marks, newest first
   // (anthropic-messages/cache.ts); memory only.
-  const sentPrefixes = new Map<string, SentPrefix[]>();
+  const sentPrefixes = new LruCache<SentPrefix[]>(50, (prefixes) =>
+    // Each SHA-256 hex digest has 64 characters, plus the array reference and string overhead.
+    prefixes.reduce((bytes, { hashes, marks }) => bytes + hashes.length * 160 + marks.length * 64, 0),
+  );
   // v0.12: per session, the contents of images that went out before the transcript had them, so without ids (the
   // report's lateContent): the next turn sends them once more for their feature lines (core/session.ts missedLine).
   // Memory only; an engine restarted in between just leaves them out.
@@ -232,9 +236,7 @@ async function main(): Promise<void> {
   };
   const rememberPrefix = (sessionId: string, prefix: SentPrefix) => {
     const kept = [prefix, ...(sentPrefixes.get(sessionId) ?? [])].slice(0, REMEMBERED);
-    sentPrefixes.delete(sessionId);
     sentPrefixes.set(sessionId, kept);
-    for (const key of sentPrefixes.keys()) if (sentPrefixes.size > 50) sentPrefixes.delete(key);
   };
   log({ at: startedAt, event: "engine-start", pid: process.pid, port, build, version });
   // Open WebSocket connections per thread. Over WebSocket Codex only sends new items and the server keeps the rest,
@@ -630,7 +632,10 @@ async function main(): Promise<void> {
         socket.destroy();
         client.destroy();
         sockets.delete(connection);
-        if (identity.threadId) live.get(identity.threadId)?.delete(connection);
+        if (identity.threadId) {
+          const connections = live.get(identity.threadId);
+          if (connections?.delete(connection) && connections.size === 0) live.delete(identity.threadId);
+        }
         const entry = { at: new Date(started).toISOString(), id, transport: "websocket", path, ...(route.host === OPENAI_API_HOST ? { upstream: route.host } : {}), upstreamStatus, upBytes: up, downBytes: down, ms: Date.now() - started, closedForSelection: connection.closedForSelection, activeWhileUnchecked: connection.activeWhileUnchecked, ...identity };
         log(entry);
         recordRequest(identity.threadId, entry);
@@ -696,6 +701,16 @@ async function main(): Promise<void> {
     return;
   }
   ready = true;
+  let sweepingDisk = false;
+  const sweepDisk = async () => {
+    if (!ready || sweepingDisk) return;
+    sweepingDisk = true;
+    try { await pruneDiskCaches(dataDir()); }
+    catch { /* a cache maintenance failure does not interrupt the proxy */ }
+    finally { sweepingDisk = false; }
+  };
+  void sweepDisk();
+  setInterval(sweepDisk, 60_000).unref();
   let retryMemoryRestartAt = 0;
   // Drop rebuildable data before rotating. Reuse the normal start lock so a supervisor can take over too.
   setInterval(async () => {
