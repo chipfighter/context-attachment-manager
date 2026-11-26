@@ -2,6 +2,31 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.13.2] - 2026-11-26
+
+Codex and Claude Code do a better job sharing the local proxy when several sessions start at once.
+
+### Fixed
+
+- **Duplicate proxy starts.** If another session has just started the proxy, a session waiting to start it checks again and can reuse it. The installer still switches to the intended version when it needs to. Thanks to [@TeapoyY](https://github.com/TeapoyY) for the fix ([#22](https://github.com/chipfighter/context-attachment-manager/pull/22)).
+- **Slow process checks.** If the system takes too long to report which apps are open, the check times out and leaves the proxy running. Checks no longer pile up.
+
+### After updating
+
+- If you have version 0.13 or later from GitHub, the plugin updates automatically. Restart Codex or open a new Claude Code session to use the update. From an earlier version, [update by hand once](https://github.com/chipfighter/context-attachment-manager/blob/v0.13.2/INSTALL.md#update).
+
+### How we tested
+
+- The release checks cover startup, installation, upgrades, and removal on Windows, macOS, and Linux.
+
+<details>
+<summary>Technical details</summary>
+
+- The engine supervisor checks health again under the startup lock and applies the existing build and version policy. Client process checks run one at a time with a 10-second timeout.
+- The HTTP proxy test suites use separate loopback port ranges to avoid collisions with each other and with ephemeral ports.
+
+</details>
+
 ## [0.13.1] - 2026-11-23
 
 Installing and updating the plugin in Claude Code no longer hangs on networks where SSH to GitHub stalls, and updates hold up better on slow networks.
