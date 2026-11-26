@@ -14,6 +14,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ENGINE_NODE_ARGS } from "./core/memory.ts";
 import { dataDir, proxyLogDirOf } from "./core/paths.ts";
 
 export const ENGINE_SERVICE = "codex-attachment-manager";
@@ -144,7 +145,7 @@ type Started = { pid: number | null; failed: () => boolean; bindFailure: () => E
 // (watchForClients). Where WMI cannot start it (no PowerShell, a security policy), it starts as before.
 // CAM_ENGINE_START=child: always as before. Elsewhere: detached, so it outlives whoever asked for it.
 async function startEngine(port: number, extraArgs: string[] = [], dir = here): Promise<Started> {
-  const args = [...reportFlags(), join(dir, "proxy.ts"), "--port", String(port), ...extraArgs];
+  const args = [...ENGINE_NODE_ARGS, ...reportFlags(), join(dir, "proxy.ts"), "--port", String(port), ...extraArgs];
   if (process.platform === "win32" && process.env.CAM_ENGINE_START !== "child" && !wmiFailed) {
     const pid = await startOutsideJob([process.execPath, ...args], tmpdir());
     if (pid !== null) {
@@ -292,6 +293,10 @@ export async function ensureEngine(options: { port?: number; waitMs?: number; ex
   let started: Started | null = null;
   lastWmiStart = null;
   try {
+    // A peer may have finished starting and released the lock since our first probe.
+    const current = await probeEngine(port, 800, options.client);
+    if (current.kind === "busy") return { state: "busy", health: null, replaced };
+    if (current.kind === "engine" && current.health.pid !== replaced?.pid) return { state: "running", health: current.health, replaced };
     started = await startEngine(port, options.extraArgs, dir);
     // v0.12: the wait for the engine counts from here, once it is started. Counted from before, a slow start through
     // WMI used up most of it, and the start was reported as failed while the engine was still coming up (Windows CI,
@@ -349,7 +354,7 @@ export function listCodexProcesses(): Promise<number> {
   const windows = process.platform === "win32";
   const [file, args] = windows ? ["tasklist", ["/FO", "CSV", "/NH"]] : ["ps", ["-A", "-o", "comm="]];
   return new Promise((resolve) => {
-    execFile(file, args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+    execFile(file, args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024, timeout: 10_000 }, (error, stdout) => {
       // If the check itself fails, assume Codex is still there rather than shutting down under it.
       resolve(error ? 1 : windows ? countCodexProcesses(stdout) + countClaudeProcesses(stdout) : countCodexInPs(stdout) + countClaudeInPs(stdout));
     });
@@ -368,10 +373,19 @@ export function watchForClients(onGone: () => void, options: { intervalMs?: numb
   const count = async () => (Date.now() - lastClient() < CLIENT_SEEN_MS ? 1 : await processes());
   const needed = options.misses ?? 2;
   let missed = 0;
+  let checking = false;
+  let stopped = false;
+  const stop = () => { stopped = true; clearInterval(timer); };
   const timer = setInterval(async () => {
-    missed = (await count()) > 0 ? 0 : missed + 1;
-    if (missed >= needed) { clearInterval(timer); onGone(); }
+    if (stopped || checking) return;
+    checking = true;
+    try {
+      const found = await count().catch(() => 1);
+      if (stopped) return;
+      missed = found > 0 ? 0 : missed + 1;
+      if (missed >= needed) { stop(); onGone(); }
+    } finally { checking = false; }
   }, options.intervalMs ?? 15_000);
   timer.unref();
-  return () => clearInterval(timer);
+  return stop;
 }

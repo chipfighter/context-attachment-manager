@@ -8,9 +8,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ImageDigest } from "./images.ts";
+import { LruCache } from "./memory.ts";
 import { decodePng } from "./png.ts";
 
-const pixelHashes = new Map<string, string | null>();
+const pixelHashes = new LruCache<string | null>(10_000);
 let pixelCacheDir: string | null = null;
 export function setPixelCache(dir: string | null): void { pixelCacheDir = dir; }
 const SHA256 = /^[0-9a-f]{64}$/;

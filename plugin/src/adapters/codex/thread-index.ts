@@ -20,6 +20,7 @@ import { basename, dirname, join, relative, toNamespacedPath } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
 import { sqliteHome } from "./codexconfig.ts";
 import { findImages, type ImageRef } from "../protocols/openai-responses/images.ts";
+import { LruCache } from "../../core/memory.ts";
 import { addNotes, copyNotes, type Notes } from "../../core/notes.ts";
 import { pixelHashOfData } from "../../core/pixels.ts";
 import type { FetchedCopy, IndexedImage as SessionImage, SessionIndex } from "../../core/session.ts";
@@ -35,7 +36,8 @@ export type Parsed = { offset: number; type: string; payload: Json; timestamp: s
 type FileCache = { size: number; mtimeMs: number; parsedTo: number; records: Parsed[] };
 
 const SEGMENT_NAME = /^rollout-[0-9T:-]+-([0-9a-f-]{36})(?:_([0-9a-f-]{36}))?\.jsonl(?:\.zst)?$/;
-const files = new Map<string, FileCache>();
+// ponytail: uncompressed input bytes approximate retained objects and strings.
+const files = new LruCache<FileCache>(128, (cache) => cache.parsedTo * 4);
 
 function walk(directory: string): string[] {
   let entries;
@@ -106,7 +108,7 @@ function records(plain: string): Parsed[] {
 type Tree = { walkedAt: number; missedAt: number; segments: Map<string, string>; threadOf: Map<string, string> };
 const FULL_WALK_MS = 60_000;
 const MISSED_WALK_MS = 5_000;
-const trees = new Map<string, Tree>();
+const trees = new LruCache<Tree>(4, (tree) => tree.segments.size * 1024);
 const archivedOf = (sessionsDir: string) => join(dirname(sessionsDir), "archived_sessions");
 
 export function recentFolders(sessionsDir: string, now = Date.now()): string[] {
@@ -137,11 +139,13 @@ function allSegments(sessionsDir: string, missed = false): Tree {
     trees.set(sessionsDir, tree);
     return tree;
   }
+  const previousSize = tree.segments.size;
   for (const folder of recentFolders(sessionsDir, now)) {
     let names: string[];
     try { names = readdirSync(folder); } catch { continue; }
     for (const name of names) addSegment(tree, join(folder, name));
   }
+  if (tree.segments.size !== previousSize) trees.set(sessionsDir, tree);
   return tree;
 }
 
@@ -153,7 +157,7 @@ function withSegments<T>(sessionsDir: string, read: (tree: Tree) => T): T {
   }
 }
 
-const baseOf = (file: string): Json | null => (records(file)[0]?.type === "session_meta" ? records(file)[0].payload.history_base ?? null : null);
+const baseOf = (first?: Parsed): Json | null => first?.type === "session_meta" ? first.payload.history_base ?? null : null;
 
 // With `missing` (the second look, after walking the tree again), a page the history starts in that is still not found
 // is left out and its id added to `missing`; without it, the miss is thrown for the caller to look again.
@@ -161,7 +165,8 @@ function effective(segments: Map<string, string>, segmentId: string, endOffset =
   const file = segments.get(segmentId);
   // Not listed (yet): the caller walks the tree again once.
   if (!file) throw Object.assign(new Error(`rollout segment not found: ${segmentId}`), { code: "ENOENT" });
-  const base = baseOf(file);
+  const parsed = records(file);
+  const base = baseOf(parsed[0]);
   let inherited: Parsed[] = [];
   if (base) {
     try { inherited = effective(segments, base.thread_id, base.end_byte_offset, missing); } catch (error) {
@@ -169,7 +174,7 @@ function effective(segments: Map<string, string>, segmentId: string, endOffset =
       if (!missing.includes(base.thread_id)) missing.push(base.thread_id);
     }
   }
-  return [...inherited, ...records(file).filter((record) => record.offset < endOffset)];
+  return [...inherited, ...parsed.filter((record) => record.offset < endOffset)];
 }
 
 export function imageData(items: Json[], ref: ImageRef): string | null {
@@ -269,7 +274,7 @@ function firstRecord(plain: string): Parsed | null {
   } catch { return null; }
 }
 
-const origins = new Map<string, { parent: string; at: string } | null>();
+const origins = new LruCache<{ parent: string; at: string } | null>();
 
 // A forked thread's session_meta names the thread it came from and when it was forked. Cached: it never changes.
 export function forkOrigin(sessionsDir: string, threadId: string): { parent: string; at: string } | null {
@@ -286,7 +291,7 @@ export function forkOrigin(sessionsDir: string, threadId: string): { parent: str
   return origin;
 }
 
-const spawners = new Map<string, string | null>();
+const spawners = new LruCache<string | null>();
 
 // v0.7: the thread that started a subagent without history (session_meta source.subagent.thread_spawn); null for
 // anything else: the user's tasks, forks (a subagent started with history is one), Codex's background tasks (review,
@@ -306,7 +311,7 @@ export function spawnParent(sessionsDir: string, threadId: string): string | nul
   return spawners.get(key)!;
 }
 
-const starts = new Map<string, string | null>();
+const starts = new LruCache<string | null>();
 
 // v0.6: when a thread started, from its session_meta; a fork counts from the thread it came from (followed to the
 // first one; the fork's own time when that one is gone). null while the thread has no rollout, or no first line yet.
@@ -347,7 +352,7 @@ export function sessionMetaOf(sessionsDir: string, threadId: string): Json | nul
   });
 }
 
-const noteTakers = new Map<string, boolean>();
+const noteTakers = new LruCache<boolean>();
 
 // v0.8: whether a thread's model writes feature lines (docs/v0.8/plan.md): the user's own tasks and their forks, not a
 // subagent (started with history or without) or one of Codex's internal tasks. Without a first line yet, yes, and not
@@ -416,7 +421,7 @@ export function readThreadHistory(sessionsDir: string, threadId: string, missing
   const read = ({ segments, threadOf }: Tree, gaps: string[] | null) => {
     const own = [...segments.keys()].filter((id) => threadOf.get(id) === threadId);
     if (!own.length) throw new Error(`no rollout found for thread ${threadId}`);
-    const bases = new Set(own.map((id) => baseOf(segments.get(id)!)?.thread_id).filter(Boolean));
+    const bases = new Set(own.map((id) => baseOf(records(segments.get(id)!)[0])?.thread_id).filter(Boolean));
     const heads = own.filter((id) => !bases.has(id));
     const head = heads.length > 1 ? registeredHead(sessionsDir, threadId, heads, segments) : heads[0];
     if (!head) throw new Error(`expected one latest rollout segment for ${threadId}, found ${heads.length}`);

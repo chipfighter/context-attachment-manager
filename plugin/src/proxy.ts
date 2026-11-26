@@ -39,11 +39,12 @@ import { readThinkingRecord, recordSent, writeThinkingRecord, type ThinkingRecor
 import { connectUpstream, decodeBody, HOP_BY_HOP, log, outboundProxy, ownRequest, parseBody, readSystemProxy, redactImages, type ParsedBody } from "./core/engine/transport.ts";
 import { sendUpstream } from "./core/engine/upstream.ts";
 import { isEntryPoint } from "./core/entry.ts";
+import { clearCaches, LruCache, MEMORY_LIMIT_BYTES, processMemoryBytes } from "./core/memory.ts";
 import { migrateDataOnce } from "./core/migrate-data.ts";
 import { claudeRequestStatsDirOf, claudeSelectionDirOf, dataDir, pixelCacheDirOf, selectionDirOf } from "./core/paths.ts";
 import { recordRequest } from "./core/request-stats.ts";
 import { readRoute, registerRoute, routeBaseUrl, routingPort, validateBaseUrl, type Platform } from "./core/routes.ts";
-import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, probeEngine, startFailureFile, versionOf, watchForClients, type EngineBindFailure } from "./engine.ts";
+import { buildOf, DEFAULT_PORT, ENGINE_SERVICE, ensureEngine, probeEngine, startFailureFile, versionOf, watchForClients, type EngineBindFailure } from "./engine.ts";
 import { currentLang } from "./adapters/codex/language.ts";
 import { say } from "./core/messages.ts";
 import { headerOf } from "./core/platform.ts";
@@ -220,12 +221,14 @@ async function main(): Promise<void> {
   // v0.12: per session, the contents of images that went out before the transcript had them, so without ids (the
   // report's lateContent): the next turn sends them once more for their feature lines (core/session.ts missedLine).
   // Memory only; an engine restarted in between just leaves them out.
-  const missedImages = new Map<string, Set<string>>();
+  const missedImages = new LruCache<Set<string>>(50, contents => {
+    let bytes = 0;
+    for (const content of contents) bytes += content.length * 2;
+    return bytes;
+  });
   const rememberMissed = (sessionId: string, contents: string[]) => {
     const kept = [...(missedImages.get(sessionId) ?? []), ...contents].slice(-50);
-    missedImages.delete(sessionId);
     missedImages.set(sessionId, new Set(kept));
-    for (const key of missedImages.keys()) if (missedImages.size > 50) missedImages.delete(key);
   };
   const rememberPrefix = (sessionId: string, prefix: SentPrefix) => {
     const kept = [prefix, ...(sentPrefixes.get(sessionId) ?? [])].slice(0, REMEMBERED);
@@ -244,21 +247,26 @@ async function main(): Promise<void> {
   const sockets = new Set<Live>();
   let inFlight = 0;
   let retiredAt: number | null = null;
+  let restarting = false;
+  let drainTimer: NodeJS.Timeout | undefined;
   const retire = (by: string) => {
     if (retiredAt !== null) return;
     retiredAt = Date.now();
+    ready = false;
+    const reason = restarting ? "memory pressure" : "replaced by a newer engine";
     log({ at: new Date().toISOString(), event: "engine-retire", pid: process.pid, build, by: by || null });
     for (const server of servers) { server.close(); server.closeIdleConnections(); }
-    setInterval(() => {
+    drainTimer = setInterval(() => {
       for (const connection of sockets) {
-        if (Date.now() - connection.last < 1500) continue;
+        // A quiet WebSocket can still be waiting for the model. Let it finish during automatic rotation.
+        if (reason === "memory pressure" || Date.now() - connection.last < 1500) continue;
         connection.socket.destroy();
         connection.client.destroy();
       }
       for (const server of servers) server.closeIdleConnections();
-      const done = inFlight === 0 && sockets.size === 0;
+      const done = !restarting && inFlight === 0 && sockets.size === 0;
       if (!done && Date.now() - retiredAt! < 10 * 60_000) return;
-      log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: done ? "replaced by a newer engine" : "replaced by a newer engine; connections still open after 10 minutes were dropped" });
+      log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: done ? reason : `${reason}; drain exceeded 10 minutes` });
       process.exit(0);
     }, 250);
   };
@@ -668,10 +676,16 @@ async function main(): Promise<void> {
   });
   // Bind the provider listener before advertising readiness on the legacy port. Older plugin copies never start
   // this listener, so they cannot misroute the persisted provider URLs after a mixed-version restart.
-  for (const listenPort of [providerPort, port]) for (const host of ["127.0.0.1", "::1"]) {
-    const failure = await listen(host, listenPort);
-    if (!failure) continue;
-    log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: `port ${listenPort} unavailable on ${host}`, code: failure.code });
+  const bindListeners = async () => {
+    for (const listenPort of [providerPort, port]) for (const host of ["127.0.0.1", "::1"]) {
+      const failure = await listen(host, listenPort);
+      if (failure) return failure;
+    }
+    return null;
+  };
+  const failure = await bindListeners();
+  if (failure) {
+    log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: `port ${failure.port} unavailable on ${failure.host}`, code: failure.code });
     // v0.12: an engine started through WMI (engine.ts) has no channel back: the reason goes into a file too.
     try {
       mkdirSync(join(dataDir(), "state"), { recursive: true });
@@ -682,6 +696,38 @@ async function main(): Promise<void> {
     return;
   }
   ready = true;
+  let retryMemoryRestartAt = 0;
+  // Drop rebuildable data before rotating. Reuse the normal start lock so a supervisor can take over too.
+  setInterval(async () => {
+    if (retiredAt !== null || Date.now() < retryMemoryRestartAt || processMemoryBytes() < MEMORY_LIMIT_BYTES * 0.75) return;
+    clearCaches();
+    (globalThis as typeof globalThis & { gc?: () => void }).gc?.();
+    const bytes = processMemoryBytes();
+    log({ at: new Date().toISOString(), event: "engine-memory-cleanup", pid: process.pid, bytes, limit: MEMORY_LIMIT_BYTES });
+    if (bytes < MEMORY_LIMIT_BYTES) return;
+    const extraArgs = process.argv.slice(2);
+    if (portIndex >= 0) extraArgs.splice(portIndex - 2, 2);
+    restarting = true;
+    retire("memory pressure");
+    try {
+      const next = await ensureEngine({ port, extraArgs }).catch(() => null);
+      if (next?.health) return;
+      log({ at: new Date().toISOString(), event: "engine-memory-restart-failed", pid: process.pid, state: next?.state ?? "failed" });
+      // A manual engine may have no supervisor to retry. Reopen our listeners if the ports are still available.
+      const closedServers = servers.length;
+      const bindFailure = await bindListeners();
+      if (bindFailure) {
+        for (const server of servers.splice(closedServers)) server.close();
+        return;
+      }
+      servers.splice(0, closedServers);
+      clearInterval(drainTimer);
+      retiredAt = null;
+      ready = true;
+      retryMemoryRestartAt = Date.now() + 60_000;
+      log({ at: new Date().toISOString(), event: "engine-memory-resumed", pid: process.pid });
+    } finally { restarting = false; }
+  }, 10_000).unref();
   if (!process.argv.includes("--stay")) {
     // v0.1-5: a plugin removed or turned off without 停用 leaves Codex pointed at an engine nothing will start again.
     // Seen in two checks in a row (or once more as the engine exits, when Codex is gone and cannot be mid-write), Codex
@@ -721,6 +767,7 @@ async function main(): Promise<void> {
     } catch { /* no folder to watch yet: the periodic check still runs */ }
     setInterval(() => { checkPlugin(false); reroute("check"); }, 15_000).unref();
     watchForClients(() => {
+      if (retiredAt !== null) return;
       checkPlugin(true);
       log({ at: new Date().toISOString(), event: "engine-exit", pid: process.pid, reason: "no Codex or Claude Code process left, and no plugin service checked in" });
       process.exit(0);

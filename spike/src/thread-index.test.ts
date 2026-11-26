@@ -14,6 +14,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { zstdCompressSync } from "node:zlib";
 import { buildIndex, forkOrigin, hasRollout, loadThreadIndex, readThreadHistory, spawnParent, threadStartedAt, threadsStartedSince } from "../../plugin/src/adapters/codex/thread-index.ts";
+import { clearCaches } from "../../plugin/src/core/memory.ts";
 import { setPixelCache } from "../../plugin/src/core/pixels.ts";
 import { startThread, todayFolder } from "./testfixtures.ts";
 import { png } from "./testkit.ts";
@@ -57,6 +58,8 @@ test("appending to the rollout adds new ids and keeps the old ones", () => {
   appendFileSync(file, turn("t2") + upload("msg_2", "t2", "b.png", blue).slice(0, 40));
   assert.deepEqual(loadThreadIndex(dir, THREAD).images.map((i) => i.name), ["a.png"]);
   appendFileSync(file, upload("msg_2", "t2", "b.png", blue).slice(40));
+  assert.deepEqual(loadThreadIndex(dir, THREAD).images.map((i) => [i.id, i.name, i.turn]), [["IMG-001", "a.png", 1], ["IMG-002", "b.png", 2]]);
+  clearCaches();
   assert.deepEqual(loadThreadIndex(dir, THREAD).images.map((i) => [i.id, i.name, i.turn]), [["IMG-001", "a.png", 1], ["IMG-002", "b.png", 2]]);
 });
 

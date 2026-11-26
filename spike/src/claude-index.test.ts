@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { activeChain, buildClaudeIndex, claudeImageData, loadClaudeIndex, transcriptOf } from "../../plugin/src/adapters/claude/claude-index.ts";
+import { clearCaches } from "../../plugin/src/core/memory.ts";
 import { image, pngA, pngB, pngC, text, transcript, usualSession } from "./claude-fixtures.ts";
 
 test("images get ids in conversation order: pasted ones by record, tool ones by tool_use_id", () => {
@@ -280,6 +281,8 @@ test("a transcript is found by session id under projects/, and read again as it 
   t.assistant(text("ok"));
   t.prompt([image(pngB), text("two")]);
   appendFileSync(file, t.records.slice(1).map((record) => JSON.stringify(record)).join("\n") + "\n");
+  assert.deepEqual(loadClaudeIndex(id, home).images.map((entry) => entry.id), ["IMG-001", "IMG-002"]);
+  clearCaches();
   assert.deepEqual(loadClaudeIndex(id, home).images.map((entry) => entry.id), ["IMG-001", "IMG-002"]);
   assert.equal(loadClaudeIndex("22222222-2222-4333-8444-555555555555", home).images.length, 0);
 });

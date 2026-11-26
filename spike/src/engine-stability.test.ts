@@ -1,13 +1,13 @@
 // v0.12: what keeps the engine up and its requests moving: telling a busy engine from a missing one, a connection
 // setup that cannot hang, and bookkeeping that never throws. Loopback servers and temporary folders only.
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { ensureEngine, probeEngine } from "../../plugin/src/engine.ts";
+import { ensureEngine, probeEngine, watchForClients } from "../../plugin/src/engine.ts";
 import { connectUpstream, log } from "../../plugin/src/core/engine/transport.ts";
 import { recordRequest } from "../../plugin/src/core/request-stats.ts";
 
@@ -54,6 +54,49 @@ test("a busy engine is left alone instead of a second one being started", async 
   assert.equal(result.state, "busy");
   assert.equal(result.health, null);
   assert.ok(Date.now() - started < 1800, "no engine was started and waited for");
+});
+
+test("an engine that appears before we take the start lock is reused", async (t) => {
+  const free = net.createServer();
+  const port = await listening(free);
+  await closing(free);
+  const root = mkdtempSync(join(tmpdir(), "cam-racing-start-"));
+  const env = { CAM_DATA_DIR: process.env.CAM_DATA_DIR, CAM_ENGINE_START: process.env.CAM_ENGINE_START };
+  process.env.CAM_DATA_DIR = root;
+  process.env.CAM_ENGINE_START = "child";
+  t.after(() => {
+    for (const [key, value] of Object.entries(env)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    rmSync(root, { recursive: true, force: true });
+  });
+  writeFileSync(join(root, "proxy.ts"), "");
+  const health = { ok: true, service: "codex-attachment-manager", pid: 4242, port };
+  let probes = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    if (++probes === 1) throw new Error("no engine yet");
+    assert.ok(existsSync(join(root, "state", "engine-start.lock")));
+    return Response.json(health);
+  });
+  assert.deepEqual(await ensureEngine({ port, dir: root }), { state: "running", health, replaced: undefined });
+});
+
+test("a slow process poll cannot overlap or exit an engine after the watch stops", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  let finish!: (count: number) => void;
+  const pending = new Promise<number>((resolve) => { finish = resolve; });
+  let checks = 0;
+  let exits = 0;
+  const stop = watchForClients(() => { exits++; }, {
+    intervalMs: 5,
+    misses: 1,
+    count: () => { checks++; return pending; },
+  });
+  t.mock.timers.tick(20);
+  stop();
+  finish(0);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual({ checks, exits }, { checks: 1, exits: 0 });
 });
 
 test("a connection the outbound proxy never answers fails after the timeout, and the socket is closed", async (t) => {

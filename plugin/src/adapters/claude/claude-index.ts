@@ -24,6 +24,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { baseName, FETCHED_STATE, imageDigest, type ImageKind } from "../../core/images.ts";
 import type { ImageRef } from "../protocols/openai-responses/images.ts";
+import { LruCache } from "../../core/memory.ts";
 import { addNotes, copyNotes, withoutRecords, type Notes } from "../../core/notes.ts";
 import { pixelHashOfData } from "../../core/pixels.ts";
 import type { IdTimes } from "../../core/selection.ts";
@@ -82,8 +83,8 @@ export function claudeHome(env: NodeJS.ProcessEnv = process.env): string {
 
 // Where each session's transcript is: <home>/projects/<project>/<id>.jsonl. Looked up again when a session is not
 // found (at most every 5 s), since a new session's file appears with its first message.
-const located = new Map<string, string>();
-const missedAt = new Map<string, number>();
+const located = new LruCache<string>();
+const missedAt = new LruCache<number>();
 export function transcriptOf(sessionId: string, home = claudeHome()): string | null {
   if (!SESSION_ID.test(sessionId)) return null;
   const key = `${home}\0${sessionId}`;
@@ -101,7 +102,7 @@ export function transcriptOf(sessionId: string, home = claudeHome()): string | n
 }
 
 type FileCache = { size: number; mtimeMs: number; parsedTo: number; records: ClaudeRecord[] };
-const files = new Map<string, FileCache>();
+const files = new LruCache<FileCache>(128, (cache) => cache.parsedTo * 4);
 
 // Append-only: only the complete lines added since the last read are parsed. A damaged line is skipped.
 export function readTranscript(file: string): ClaudeRecord[] {
@@ -363,7 +364,7 @@ export type ClaudeIndexOptions = { links?: Map<string, string>; eras?: Eras; cha
 // the records it did not see then (`unseen`: before v0.10 all calls found off the chain, offChain; before `chained`
 // those behind another call's result, behindResult) taking none either.
 // Only up to `until` (nothing written later is translated), so it stays the same as the session goes on: kept.
-const numberings = new Map<string, Map<string, string>>();
+const numberings = new LruCache<Map<string, string>>(64, (keys) => keys.size * 512);
 function oldNumbering(chain: ClaudeRecord[], from: number, until: string, unseen: Set<ClaudeRecord> | undefined): Map<string, string> {
   let end = from;
   const hidden: string[] = [];
@@ -392,7 +393,6 @@ function oldNumbering(chain: ClaudeRecord[], from: number, until: string, unseen
       content.set(found.key, { contentId: digest.contentId, pixels });
     }
   }
-  if (numberings.size > 64) numberings.clear();
   numberings.set(cacheKey, keys);
   return keys;
 }
@@ -656,7 +656,10 @@ export function emptyClaudeIndex(sessionId: string): ClaudeIndex {
 // v0.10: an earlier transcript, read for its history only: every image's digest and pixel fingerprint are taken while
 // its data is at hand, then the data is left on disk (claudeImageData reads it back), so a long session followed back
 // through several transcripts does not hold all their images in memory. Read again only if the file changes.
-const histories = new Map<string, { size: number; mtimeMs: number; records: ClaudeRecord[] }>();
+// ponytail: estimate parsed records from the input line minus removed payloads; prefixes can reuse these weights.
+const historyWeights = new WeakMap<ClaudeRecord, number>();
+const historyBytes = (records: ClaudeRecord[]) => records.reduce((sum, record) => sum + (historyWeights.get(record) ?? 1024), 0);
+const histories = new LruCache<{ size: number; mtimeMs: number; records: ClaudeRecord[] }>(128, (cache) => historyBytes(cache.records));
 export function readHistoryTranscript(file: string): ClaudeRecord[] {
   const stat = statSync(file);
   const known = histories.get(file);
@@ -669,11 +672,13 @@ export function readHistoryTranscript(file: string): ClaudeRecord[] {
     if (text) {
       try {
         const record = JSON.parse(text) as ClaudeRecord;
+        let retainedBytes = end - start;
         for (const found of imageBlocks(record.message?.content)) {
           const data = found.block.source.data as string;
           if (!data) continue;
           pixelHashOfData(imageDigest(found.block, data, mimeOf(found.block)), data);
           found.block.source = { ...found.block.source, data: "" };
+          retainedBytes -= data.length;
           onDisk.set(found.block, { file, start, end, part: found.part, sub: found.sub });
         }
         // v0.13: PDFs too (claudePdfData reads them back).
@@ -682,8 +687,10 @@ export function readHistoryTranscript(file: string): ClaudeRecord[] {
           if (!data) continue;
           imageDigest(found.block, data, "application/pdf");
           found.block.source = { ...found.block.source, data: "" };
+          retainedBytes -= data.length;
           onDisk.set(found.block, { file, start, end, part: found.part, sub: found.sub });
         }
+        historyWeights.set(record, Math.max(retainedBytes, 128) * 4);
         records.push(record);
       } catch { /* damaged line */ }
     }
@@ -697,7 +704,7 @@ export function readHistoryTranscript(file: string): ClaudeRecord[] {
 // at: <path>"; the last such line, after the model's own text); failing that, a transcript of the same project that
 // holds the boundary with records before it. Only files under <home>/projects count. Remembered once found.
 const TRANSCRIPT_AT = /read the full transcript at: ([^\n]+?\.jsonl)/g;
-const originals = new Map<string, { file: string | null; at: number }>();
+const originals = new LruCache<{ file: string | null; at: number }>();
 function underProjects(file: string, home: string): boolean {
   const root = resolve(home, "projects") + sep;
   const full = resolve(file);
@@ -745,7 +752,9 @@ export type WithHistory = { records: ClaudeRecord[]; links: Map<string, string> 
 // The history read from an earlier transcript, per boundary, while that file is unchanged: only its conversation
 // records before the boundary (the rest of it is in the newer transcript, or not part of this session), so the earlier
 // file itself need not stay parsed.
-const prefixes = new Map<string, { stamp: string; part: { prefix: ClaudeRecord[]; links: Map<string, string> } | null }>();
+const prefixes = new LruCache<{ stamp: string; part: { prefix: ClaudeRecord[]; links: Map<string, string> } | null }>(
+  64, ({ part }) => part ? historyBytes(part.prefix) + part.links.size * 128 : 0,
+);
 const stampOf = (file: string) => { const stat = statSync(file); return `${stat.size}:${stat.mtimeMs}`; };
 export function withHistory(file: string, records: ClaudeRecord[], home = claudeHome(), depth = 0): WithHistory {
   const first = records.find((record) => typeof record.uuid === "string");
@@ -772,8 +781,8 @@ export function withHistory(file: string, records: ClaudeRecord[], home = claude
 // v0.10: the transcripts of one session in its project folder: those whose first conversation record is the session's
 // start or one of its compactions, each with when it was started (its first stamped record, before the copied ones)
 // and, for a fork, the session it came from. The head of each file is read once.
-const heads = new Map<string, { start: string; created: string; sessionOf: string | null } | null>();
-const listings = new Map<string, { at: number; names: string[] }>();
+const heads = new LruCache<{ start: string; created: string; sessionOf: string | null } | null>();
+const listings = new LruCache<{ at: number; names: string[] }>(64, (cache) => cache.names.reduce((bytes, name) => bytes + name.length * 2 + 32, 0));
 function headOf(file: string): { start: string; created: string; sessionOf: string | null } | null {
   if (heads.has(file)) return heads.get(file)!;
   let head: { start: string; created: string; sessionOf: string | null } | null = null;
