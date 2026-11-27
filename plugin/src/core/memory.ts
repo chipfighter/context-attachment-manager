@@ -1,6 +1,4 @@
 // Rebuildable caches share one estimated byte budget per process.
-export const MEMORY_LIMIT_BYTES = 2 * 1024 ** 3;
-export const ENGINE_NODE_ARGS = ["--max-old-space-size=1536", "--expose-gc"];
 export const CACHE_BUDGET_BYTES = 256 * 1024 ** 2;
 export const CACHE_IDLE_MS = 15 * 60_000;
 
@@ -76,12 +74,6 @@ export function clearCaches(): void {
 
 export function cacheMemory() {
   return { bytes: retainedBytes, entries: retained.size, budget: CACHE_BUDGET_BYTES, idleMs: CACHE_IDLE_MS };
-}
-
-export function processMemoryBytes(): number {
-  const { rss, heapTotal, external } = process.memoryUsage();
-  // Include V8 allocations when the OS has compressed or swapped their pages.
-  return Math.max(rss, heapTotal + external);
 }
 
 setInterval(() => cleanupCaches(), 60_000).unref();

@@ -15,11 +15,14 @@
 // before it: they stay as they are until the next compaction, so the prompt cache reads past them.
 // Input: the sessions directory and a thread id. Output: ThreadIndex (in memory; files are parsed incrementally).
 
+import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, toNamespacedPath } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
 import { sqliteHome } from "./codexconfig.ts";
 import { findImages, type ImageRef } from "../protocols/openai-responses/images.ts";
+import { readLines, readRecord } from "../../core/jsonl.ts";
+import { imageDigest, rememberImageDigest } from "../../core/images.ts";
 import { LruCache } from "../../core/memory.ts";
 import { addNotes, copyNotes, type Notes } from "../../core/notes.ts";
 import { pixelHashOfData } from "../../core/pixels.ts";
@@ -33,11 +36,11 @@ export type IndexedImage = ImageRef & SessionImage;
 // stood then.
 export type ThreadIndex = SessionIndex<IndexedImage> & { compaction?: { before: number; notes: Map<string, Notes> } };
 export type Parsed = { offset: number; type: string; payload: Json; timestamp: string | null };
-type FileCache = { size: number; mtimeMs: number; parsedTo: number; records: Parsed[] };
+type FileCache = { size: number; mtimeMs: number; parsedTo: number; weight: number; records: Parsed[] };
 
 const SEGMENT_NAME = /^rollout-[0-9T:-]+-([0-9a-f-]{36})(?:_([0-9a-f-]{36}))?\.jsonl(?:\.zst)?$/;
 // ponytail: uncompressed input bytes approximate retained objects and strings.
-const files = new LruCache<FileCache>(128, (cache) => cache.parsedTo * 4);
+const files = new LruCache<FileCache>(128, (cache) => cache.weight);
 
 function walk(directory: string): string[] {
   let entries;
@@ -48,17 +51,77 @@ function walk(directory: string): string[] {
   });
 }
 
-function parseLines(buffer: Buffer, base: number, cache: FileCache): number {
-  let start = 0;
-  for (let end = buffer.indexOf(0x0a); end >= 0; end = buffer.indexOf(0x0a, start)) {
-    const text = buffer.toString("utf8", start, end).replace(/\r$/, "");
-    // A damaged line is skipped rather than failing the whole index; unknown images are sent unchanged anyway.
-    let record: Json | null = null;
-    if (text.trim()) { try { record = JSON.parse(text); } catch { record = null; } }
-    if (record) cache.records.push({ offset: base + start, type: record.type, payload: record.payload ?? {}, timestamp: typeof record.timestamp === "string" ? record.timestamp : null });
-    start = end + 1;
+// Index media while its bytes are available. A later explicit fetch reads just the owning line of a plain rollout.
+const indexedPixels = new WeakMap<object, string | null>();
+
+function parseRecord(line: Buffer, offset: number, file: string, cache: FileCache): void {
+  let record: Json;
+  try { record = JSON.parse(line.toString("utf8")); } catch { return; }
+  if (!record || typeof record !== "object") return;
+  let retained = line.length;
+  if (line.length >= 4096 && record.payload) {
+    const length = line.length;
+    const deferred: { path: string[]; digest?: ReturnType<typeof imageDigest>; pixels?: string | null }[] = [];
+    function visit(value: Json, path: string[]): void {
+      for (const [key, child] of Object.entries(value)) {
+        if (child && typeof child === "object") { visit(child, [...path, key]); continue; }
+        if (typeof child !== "string" || child.length < 4096) continue;
+        const inline = key === "image_url" && (value.type === "input_image" || value.type === "output_image")
+          ? /^data:([^;,]+);base64,/.exec(child) : null;
+        const generated = key === "result" && value.type === "image_generation_call";
+        // Event messages can contain additional copies that aren't used to build the timeline.
+        if (!inline && !generated && !(record.type === "event_msg" && path.includes("images"))) continue;
+        const data = inline ? child.slice(inline[0].length) : child;
+        const digest = inline || generated ? imageDigest(value, data, inline?.[1] ?? "image/png") : undefined;
+        deferred.push({ path: [...path, key], digest, pixels: digest ? pixelHashOfData(digest, data) : null });
+        retained -= child.length;
+        value[key] = "";
+      }
+    }
+    visit(record.payload, []);
+    if (deferred.length) {
+      // Detach short parsed strings that V8 may represent as slices of a large JSON source.
+      record = JSON.parse(JSON.stringify(record));
+      for (const { path, digest, pixels } of deferred) {
+        let owner = record.payload;
+        for (const step of path.slice(0, -1)) owner = owner[step];
+        if (digest) { rememberImageDigest(owner, digest); indexedPixels.set(owner, pixels ?? null); }
+        Object.defineProperty(owner, path.at(-1)!, { enumerable: true, get: loadField(file, offset, length, path, digest?.contentId) });
+      }
+    }
   }
-  return start;
+  cache.weight += Math.max(128, retained) * 4;
+  cache.records.push({ offset, type: record.type, payload: record.payload ?? {}, timestamp: record.timestamp ?? null });
+}
+
+// A multi-image fetch from one archived page can share its decompression. The weak reference lets GC reclaim it.
+let lastArchive: { file: string; size: number; mtimeMs: number; data: WeakRef<Buffer> } | undefined;
+function archiveData(file: string): Buffer {
+  const { size, mtimeMs } = statSync(file);
+  if (lastArchive?.file === file && lastArchive.size === size && lastArchive.mtimeMs === mtimeMs) {
+    const data = lastArchive.data.deref();
+    if (data) return data;
+  }
+  const data = zstdDecompressSync(readFileSync(file));
+  lastArchive = { file, size, mtimeMs, data: new WeakRef(data) };
+  return data;
+}
+
+function loadField(file: string, offset: number, length: number, path: string[], contentId?: string) {
+  return () => {
+    const plain = file.replace(/\.zst$/, "");
+    const current = existing(plain);
+    if (!current) throw missing(plain);
+    let value = current.endsWith(".zst")
+      ? JSON.parse(archiveData(current).toString("utf8", offset, offset + length)).payload
+      : readRecord(current, offset, length).payload;
+    for (const step of path) value = value[step];
+    if (contentId) {
+      const data = path.at(-1) === "image_url" ? value.slice(value.indexOf(",") + 1) : value;
+      if (createHash("sha256").update(data).digest("hex") !== contentId) throw new Error("rollout image changed");
+    }
+    return value;
+  };
 }
 
 const missing = (plain: string) => Object.assign(new Error(`rollout missing: ${basename(plain)}`), { code: "ENOENT" });
@@ -78,19 +141,22 @@ function records(plain: string): Parsed[] {
   let cache = files.get(file);
   if (file.endsWith(".zst")) {
     if (!cache || cache.size !== stat.size || cache.mtimeMs !== stat.mtimeMs) {
-      cache = { size: stat.size, mtimeMs: stat.mtimeMs, parsedTo: 0, records: [] };
-      cache.parsedTo = parseLines(zstdDecompressSync(readFileSync(file)), 0, cache);
+      cache = { size: stat.size, mtimeMs: stat.mtimeMs, parsedTo: 0, weight: 0, records: [] };
+      const data = archiveData(file);
+      let offset = 0;
+      for (let end = data.indexOf(10); end >= 0; end = data.indexOf(10, offset)) {
+        parseRecord(data.subarray(offset, end), offset, file, cache);
+        offset = end + 1;
+      }
+      cache.parsedTo = offset;
       files.set(file, cache);
     }
     return cache.records;
   }
-  if (!cache || stat.size < cache.parsedTo) cache = { size: 0, mtimeMs: 0, parsedTo: 0, records: [] };
+  if (!cache || stat.size < cache.size || (stat.size === cache.size && stat.mtimeMs !== cache.mtimeMs)) cache = { size: 0, mtimeMs: 0, parsedTo: 0, weight: 0, records: [] };
   if (stat.size !== cache.size || stat.mtimeMs !== cache.mtimeMs) {
-    const length = stat.size - cache.parsedTo;
-    const buffer = Buffer.alloc(length);
-    const fd = openSync(file, "r");
-    try { readSync(fd, buffer, 0, length, cache.parsedTo); } finally { closeSync(fd); }
-    cache.parsedTo += parseLines(buffer, cache.parsedTo, cache);
+    const target = cache;
+    cache.parsedTo = readLines(file, cache.parsedTo, stat.size, (line, offset) => parseRecord(line, offset, file, target));
     cache.size = stat.size;
     cache.mtimeMs = stat.mtimeMs;
     files.set(file, cache);
@@ -178,13 +244,21 @@ function effective(segments: Map<string, string>, segmentId: string, endOffset =
 }
 
 export function imageData(items: Json[], ref: ImageRef): string | null {
-  const item = items[ref.item];
-  if (ref.part === null) return typeof item?.result === "string" ? item.result : null;
-  const url = (item?.content ?? item?.output)?.[ref.part]?.image_url;
-  return typeof url === "string" ? url.slice(url.indexOf(",") + 1) : null;
+  try {
+    const item = items[ref.item];
+    if (ref.part === null) {
+      const data = item?.result;
+      return typeof data === "string" ? data : null;
+    }
+    const url = (item?.content ?? item?.output)?.[ref.part]?.image_url;
+    return typeof url === "string" ? url.slice(url.indexOf(",") + 1) : null;
+  } catch { return null; }
 }
 
 export function pixelHashOf(items: Json[], ref: ImageRef): string | null {
+  const item = items[ref.item];
+  const owner = ref.part === null ? item : (item?.content ?? item?.output)?.[ref.part];
+  if (owner && indexedPixels.has(owner)) return indexedPixels.get(owner)!;
   const value = imageData(items, ref);
   return value === null ? null : pixelHashOfData(ref, value);
 }
@@ -421,7 +495,7 @@ export function readThreadHistory(sessionsDir: string, threadId: string, missing
   const read = ({ segments, threadOf }: Tree, gaps: string[] | null) => {
     const own = [...segments.keys()].filter((id) => threadOf.get(id) === threadId);
     if (!own.length) throw new Error(`no rollout found for thread ${threadId}`);
-    const bases = new Set(own.map((id) => baseOf(records(segments.get(id)!)[0])?.thread_id).filter(Boolean));
+    const bases = new Set(own.length > 1 ? own.map((id) => baseOf(firstRecord(segments.get(id)!) ?? undefined)?.thread_id).filter(Boolean) : []);
     const heads = own.filter((id) => !bases.has(id));
     const head = heads.length > 1 ? registeredHead(sessionsDir, threadId, heads, segments) : heads[0];
     if (!head) throw new Error(`expected one latest rollout segment for ${threadId}, found ${heads.length}`);

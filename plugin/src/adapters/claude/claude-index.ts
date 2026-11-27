@@ -19,11 +19,13 @@
 // Input: the session id (and optionally the Claude config dir). Output: ClaudeIndex (in memory; files are parsed
 // incrementally).
 
+import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { baseName, FETCHED_STATE, imageDigest, type ImageKind } from "../../core/images.ts";
+import { baseName, FETCHED_STATE, imageDigest, rememberImageDigest, type ImageKind } from "../../core/images.ts";
 import type { ImageRef } from "../protocols/openai-responses/images.ts";
+import { readLines, readRecord } from "../../core/jsonl.ts";
 import { LruCache } from "../../core/memory.ts";
 import { addNotes, copyNotes, withoutRecords, type Notes } from "../../core/notes.ts";
 import { pixelHashOfData } from "../../core/pixels.ts";
@@ -101,26 +103,25 @@ export function transcriptOf(sessionId: string, home = claudeHome()): string | n
   return null;
 }
 
-type FileCache = { size: number; mtimeMs: number; parsedTo: number; records: ClaudeRecord[] };
-const files = new LruCache<FileCache>(128, (cache) => cache.parsedTo * 4);
+type FileCache = { size: number; mtimeMs: number; parsedTo: number; weight: number; records: ClaudeRecord[] };
+const files = new LruCache<FileCache>(128, cache => cache.weight);
 
-// Append-only: only the complete lines added since the last read are parsed. A damaged line is skipped.
 export function readTranscript(file: string): ClaudeRecord[] {
   const stat = statSync(file);
   let cache = files.get(file);
-  if (!cache || stat.size < cache.parsedTo) cache = { size: 0, mtimeMs: 0, parsedTo: 0, records: [] };
-  if (stat.size !== cache.size || stat.mtimeMs !== cache.mtimeMs) {
-    const length = stat.size - cache.parsedTo;
-    const buffer = Buffer.alloc(length);
-    const fd = openSync(file, "r");
-    try { readSync(fd, buffer, 0, length, cache.parsedTo); } finally { closeSync(fd); }
-    let start = 0;
-    for (let end = buffer.indexOf(0x0a); end >= 0; end = buffer.indexOf(0x0a, start)) {
-      const text = buffer.toString("utf8", start, end).trim();
-      if (text) { try { cache.records.push(JSON.parse(text)); } catch { /* damaged line */ } }
-      start = end + 1;
-    }
-    cache.parsedTo += start;
+  if (!cache || stat.size < cache.size || (stat.size === cache.size && stat.mtimeMs !== cache.mtimeMs)) {
+    cache = { size: -1, mtimeMs: 0, parsedTo: 0, weight: 0, records: [] };
+  }
+  if (cache.size !== stat.size) {
+    const current = cache;
+    cache.parsedTo = readLines(file, cache.parsedTo, stat.size, (line, offset) => {
+      let record: ClaudeRecord;
+      try { record = JSON.parse(line.toString("utf8")); } catch { return; }
+      if (!record || typeof record !== "object") return;
+      const compact = compactRecord(record, file, offset, line.length);
+      current.weight += historyWeights.get(compact)!;
+      current.records.push(compact);
+    });
     cache.size = stat.size;
     cache.mtimeMs = stat.mtimeMs;
     files.set(file, cache);
@@ -385,7 +386,7 @@ function oldNumbering(chain: ClaudeRecord[], from: number, until: string, unseen
       if (seen.has(found.key)) continue;
       seen.add(found.key);
       const digest = imageDigest(found.block, found.block.source.data, mimeOf(found.block));
-      const pixels = pixelHashOfData(digest, found.block.source.data);
+      const pixels = blockPixels(found.block, digest);
       const fetched = found.toolUseId && found.before ? FETCHED_LINE.exec(found.before)?.[1] ?? null : null;
       const original = fetched ? content.get(keys.get(fetched) ?? "") : undefined;
       if (original && (original.contentId === digest.contentId || (pixels !== null && original.pixels === pixels))) continue;
@@ -534,7 +535,7 @@ export function buildClaudeIndex(sessionId: string, records: ClaudeRecord[], tra
         if (tool?.name === "Read" && typeof tool.input.file_path === "string") name = baseName(tool.input.file_path);
       }
       if (byKey.has(key) || copies.has(key)) continue;
-      const pixelSha256 = pixelHashOfData(digest, found.block.source.data);
+      const pixelSha256 = blockPixels(found.block, digest);
       // What our fetch tool brought back is a copy of an image already listed: no id of its own (thread-index.ts).
       const labelled = found.toolUseId && found.before ? FETCHED_LINE.exec(found.before)?.[1] ?? null : null;
       const fetchedId = labelled ? idOf(labelled) : null;
@@ -617,17 +618,15 @@ export function claudeStartedAt(index: ClaudeIndex): string | null {
 }
 
 // v0.10: an image read from an earlier transcript keeps its data on disk: where to read it back.
-type OnDisk = { file: string; start: number; end: number; part: number; sub: number | null };
+type OnDisk = { file: string; start: number; end: number; part: number; sub: number | null; contentId: string; pixels: string | null };
 const onDisk = new WeakMap<object, OnDisk>();
 
-function readImageAt({ file, start, end, part, sub }: OnDisk): string | null {
+function readImageAt({ file, start, end, part, sub, contentId }: OnDisk): string | null {
   try {
-    const buffer = Buffer.alloc(end - start);
-    const fd = openSync(file, "r");
-    try { readSync(fd, buffer, 0, buffer.length, start); } finally { closeSync(fd); }
-    const block = JSON.parse(buffer.toString("utf8")).message?.content?.[part];
+    const block = readRecord(file, start, end - start).message?.content?.[part];
     const inner = sub === null ? block : block?.content?.[sub];
-    return typeof inner?.source?.data === "string" ? inner.source.data : null;
+    const data = inner?.source?.data;
+    return typeof data === "string" && createHash("sha256").update(data).digest("hex") === contentId ? data : null;
   } catch { return null; }
 }
 
@@ -656,48 +655,43 @@ export function emptyClaudeIndex(sessionId: string): ClaudeIndex {
 // v0.10: an earlier transcript, read for its history only: every image's digest and pixel fingerprint are taken while
 // its data is at hand, then the data is left on disk (claudeImageData reads it back), so a long session followed back
 // through several transcripts does not hold all their images in memory. Read again only if the file changes.
-// ponytail: estimate parsed records from the input line minus removed payloads; prefixes can reuse these weights.
+// Charge only data retained in the index, including inherited prefixes.
 const historyWeights = new WeakMap<ClaudeRecord, number>();
 const historyBytes = (records: ClaudeRecord[]) => records.reduce((sum, record) => sum + (historyWeights.get(record) ?? 1024), 0);
-const histories = new LruCache<{ size: number; mtimeMs: number; records: ClaudeRecord[] }>(128, (cache) => historyBytes(cache.records));
-export function readHistoryTranscript(file: string): ClaudeRecord[] {
-  const stat = statSync(file);
-  const known = histories.get(file);
-  if (known && known.size === stat.size && known.mtimeMs === stat.mtimeMs) return known.records;
-  const buffer = readFileSync(file);
-  const records: ClaudeRecord[] = [];
-  let start = 0;
-  for (let end = buffer.indexOf(0x0a); end >= 0; end = buffer.indexOf(0x0a, start)) {
-    const text = buffer.toString("utf8", start, end).trim();
-    if (text) {
-      try {
-        const record = JSON.parse(text) as ClaudeRecord;
-        let retainedBytes = end - start;
-        for (const found of imageBlocks(record.message?.content)) {
-          const data = found.block.source.data as string;
-          if (!data) continue;
-          pixelHashOfData(imageDigest(found.block, data, mimeOf(found.block)), data);
-          found.block.source = { ...found.block.source, data: "" };
-          retainedBytes -= data.length;
-          onDisk.set(found.block, { file, start, end, part: found.part, sub: found.sub });
-        }
-        // v0.13: PDFs too (claudePdfData reads them back).
-        for (const found of documentBlocks(record.message?.content)) {
-          const data = found.block.source.data as string;
-          if (!data) continue;
-          imageDigest(found.block, data, "application/pdf");
-          found.block.source = { ...found.block.source, data: "" };
-          retainedBytes -= data.length;
-          onDisk.set(found.block, { file, start, end, part: found.part, sub: found.sub });
-        }
-        historyWeights.set(record, Math.max(retainedBytes, 128) * 4);
-        records.push(record);
-      } catch { /* damaged line */ }
-    }
-    start = end + 1;
+function blockPixels(block: Json, digest: ReturnType<typeof imageDigest>): string | null {
+  const stored = onDisk.get(block);
+  return stored ? stored.pixels : pixelHashOfData(digest, block.source.data);
+}
+
+function compactRecord(record: ClaudeRecord, file: string, start: number, length: number): ClaudeRecord {
+  const media = [];
+  let retained = length;
+  for (const found of [...imageBlocks(record.message?.content), ...documentBlocks(record.message?.content)]) {
+    const block = found.block;
+    const data = block.source.data as string;
+    if (!data) continue;
+    const digest = imageDigest(block, data, block.type === "document" ? "application/pdf" : mimeOf(block));
+    const pixels = pixelHashOfData(digest, data);
+    media.push({ digest, location: { file, start, end: start + length, part: found.part, sub: found.sub, contentId: digest.contentId, pixels } });
+    block.source.data = "";
+    retained -= data.length;
   }
-  histories.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, records });
-  return records;
+  if (media.length) {
+    // Detach even short strings from the source line before caching it.
+    record = JSON.parse(JSON.stringify(record));
+    for (const { digest, location } of media) {
+      const part = record.message.content[location.part];
+      const block = location.sub === null ? part : part.content[location.sub];
+      rememberImageDigest(block, digest);
+      onDisk.set(block, location);
+    }
+  }
+  historyWeights.set(record, Math.max(retained, 128) * 4);
+  return record;
+}
+
+export function readHistoryTranscript(file: string): ClaudeRecord[] {
+  return readTranscript(file);
 }
 
 // v0.10: the transcript a compaction happened in. The summary Claude Code wrote names it ("…read the full transcript
@@ -772,7 +766,6 @@ export function withHistory(file: string, records: ClaudeRecord[], home = claude
     const prefix = at < 0 || !start ? null : older.records.slice(0, at).filter((record) => typeof record.uuid === "string");
     cached = { stamp, part: prefix && start ? { prefix, links: new Map([...older.links, [first.uuid!, start]]) } : null };
     prefixes.set(key, cached);
-    histories.delete(original);
   }
   if (!cached.part) return { records, links: new Map() };
   return { records: [...cached.part.prefix, ...records], links: cached.part.links };

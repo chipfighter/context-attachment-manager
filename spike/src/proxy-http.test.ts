@@ -2,14 +2,13 @@
 // The child fixture replaces only the outbound TLS handshake; no remote service or model is contacted.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
-import { setTimeout as sleep } from "node:timers/promises";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { engineTestPort } from "./proxy-test-ports.ts";
 
 async function bounded<T>(promise: Promise<T>, message: string, ms = 2000): Promise<T> {
@@ -19,26 +18,14 @@ async function bounded<T>(promise: Promise<T>, message: string, ms = 2000): Prom
   } finally { clearTimeout(timer!); }
 }
 
-async function fixture(t: TestContext, handler: http.RequestListener, connectDelay = 0, engineArgs: string[] = [], memoryPressure?: "replace" | "failed-start") {
+async function fixture(t: TestContext, handler: http.RequestListener, connectDelay = 0, engineArgs: string[] = []) {
   const root = mkdtempSync(join(tmpdir(), "cam-http-lifecycle-"));
   const upstream = http.createServer(handler);
   await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
   const upstreamPort = (upstream.address() as { port: number }).port;
   const port = await engineTestPort("http");
-  const pressureFile = join(root, "memory-pressure");
-  const preload = join(root, "memory-pressure.mjs");
-  if (memoryPressure) writeFileSync(preload, [
-    'import { existsSync } from "node:fs";',
-    "const usage = process.memoryUsage;",
-    `process.memoryUsage = Object.assign(() => ({ ...usage(), rss: existsSync(${JSON.stringify(pressureFile)}) ? 3 * 1024 ** 3 : usage.rss() }), { rss: usage.rss });`,
-    ...(memoryPressure === "failed-start" ? [
-      "const executable = process.execPath;",
-      `Object.defineProperty(process, "execPath", { get: () => existsSync(${JSON.stringify(pressureFile)}) ? ${JSON.stringify(join(root, "missing-executable"))} : executable });`,
-    ] : []),
-  ].join("\n"));
-  const nodeArgs = memoryPressure ? ["--import", pathToFileURL(preload).href] : [];
-  const child = spawn(process.execPath, [...nodeArgs, fileURLToPath(new URL("./proxy-http-fixture.ts", import.meta.url))], {
-    env: { ...process.env, CAM_DATA_DIR: root, CODEX_HOME: join(root, "codex"), CLAUDE_CONFIG_DIR: join(root, "claude"), LOCALAPPDATA: join(root, "empty-appdata"), CAM_ENGINE_START: "child", CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), CAM_TEST_CONNECT_DELAY: String(connectDelay), CAM_TEST_ENGINE_ARGS: engineArgs.join(" "), NO_PROXY: "*", no_proxy: "*" },
+  const child = spawn(process.execPath, [fileURLToPath(new URL("./proxy-http-fixture.ts", import.meta.url))], {
+    env: { ...process.env, CAM_DATA_DIR: root, CAM_TEST_PROXY_PORT: String(port), CAM_TEST_UPSTREAM_PORT: String(upstreamPort), CAM_TEST_CONNECT_DELAY: String(connectDelay), CAM_TEST_ENGINE_ARGS: engineArgs.join(" "), NO_PROXY: "*", no_proxy: "*" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
@@ -59,7 +46,7 @@ async function fixture(t: TestContext, handler: http.RequestListener, connectDel
       if (output.includes(`http://127.0.0.1:${port}/`)) resolve();
     });
   }), "synthetic engine did not start", 10000);
-  return { root, port, upstream, pressureFile, child, exited };
+  return { port, upstream };
 }
 
 function request(port: number) {
@@ -70,63 +57,6 @@ function request(port: number) {
   client.end(body);
   return client;
 }
-
-test("memory pressure replaces the engine while an in-flight HTTP stream drains", { timeout: 35_000 }, async (t) => {
-  let finish!: () => void;
-  const { port, pressureFile, child, exited } = await fixture(t, (req, res) => {
-    req.resume();
-    res.writeHead(200, { "content-type": "text/event-stream" });
-    res.write("data: first\n\n");
-    finish = () => res.end("data: last\n\n");
-  }, 0, [], "replace");
-  const client = request(port);
-  t.after(() => { client.destroy(); });
-  let received!: () => void;
-  const firstChunk = new Promise<void>(resolve => { received = resolve; });
-  const complete = new Promise<string>((resolve, reject) => {
-    client.on("error", reject);
-    client.once("response", response => {
-      let body = "";
-      response.on("data", chunk => { body += chunk; received(); });
-      response.on("error", reject);
-      response.on("end", () => resolve(body));
-    });
-  });
-  void complete.catch(() => {}); // Assert the stream after the replacement is ready.
-  await bounded(firstChunk, "the old engine did not start the stream");
-  writeFileSync(pressureFile, "");
-
-  const deadline = Date.now() + 19_000;
-  let replacement: number | undefined;
-  while (Date.now() < deadline) {
-    try {
-      const result = await fetch(`http://127.0.0.1:${port}/__cam/health`, { signal: AbortSignal.timeout(500) });
-      if (result.ok) {
-        const { pid } = await result.json();
-        if (pid !== child.pid) { replacement = pid; break; }
-      }
-    } catch { /* the listener is changing hands */ }
-    await sleep(100);
-  }
-  assert.ok(replacement, "no replacement engine became healthy");
-  t.after(() => { try { process.kill(replacement); } catch { /* already exited */ } });
-  assert.equal(child.exitCode, null, "the old engine must stay alive until the stream ends");
-  finish();
-  assert.equal(await bounded(complete, "stream did not finish"), "data: first\n\ndata: last\n\n");
-  await bounded(exited, "the old engine did not exit after draining");
-});
-
-test("the old engine resumes serving if replacement cannot start", { timeout: 35_000 }, async (t) => {
-  const { root, port, pressureFile, child } = await fixture(t, () => {}, 0, [], "failed-start");
-  const log = join(root, "proxy", new Date().toISOString().slice(0, 10) + ".jsonl");
-  writeFileSync(pressureFile, "");
-  const deadline = Date.now() + 19_000;
-  while (Date.now() < deadline && !readFileSync(log, "utf8").includes('"event":"engine-memory-resumed"')) await sleep(100);
-  assert.match(readFileSync(log, "utf8"), /"event":"engine-memory-resumed"/);
-  const response = await fetch(`http://127.0.0.1:${port}/__cam/health`, { signal: AbortSignal.timeout(500) });
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).pid, child.pid);
-});
 
 test("HTTP cancellation during the upstream handshake closes the pending socket", async (t) => {
   const { port, upstream } = await fixture(t, () => assert.fail("cancelled request must not reach the upstream"), 10000);

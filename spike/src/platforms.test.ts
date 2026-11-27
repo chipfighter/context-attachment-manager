@@ -98,14 +98,14 @@ test("the fetch tool returns the image by id from the session sent last", () => 
   assert.throws(() => callPlatformTool("opencode", "cam_view_image", { ids: ["IMG-001"] }, data), "another platform has no session there");
 });
 
-test("evicted images keep their ids and are cached again when the client resends them", async (t) => {
+test("disk cleanup preserves the only fetchable image and its id", async (t) => {
   const data = root();
   t.after(() => rmSync(data, { recursive: true, force: true }));
   send("workbuddy", "/v2/chat/completions", chat(2), data);
   const fetchFirst = () => callPlatformTool("workbuddy", "cam_view_image", { ids: ["IMG-001"], lang: "en" }, data);
   assert.equal(fetchFirst().content[1].data, red);
-  await pruneDiskCaches(data, { pixels: 0, images: 0 });
-  assert.equal(fetchFirst().isError, true);
+  await pruneDiskCaches(data, 0);
+  assert.equal(fetchFirst().content[1].data, red);
   const again = send("workbuddy", "/v2/chat/completions", chat(2), data);
   assert.equal(again.report.replaced[0].id, "IMG-001");
   assert.equal(fetchFirst().content[1].data, red);

@@ -30,7 +30,7 @@ test("disk LRU counts allocation blocks and only evicts recognized cache files",
   assert.equal(cachedFile(hot, 128, true), true);
   assert.equal(cachedFile(recentAsset, 128, true), true);
 
-  await pruneDiskCaches(root, { pixels: 4096, images: 4096 });
-  assert.ok(!existsSync(pixel) && !existsSync(oldAsset) && !existsSync(temp));
-  for (const file of [hot, recentAsset, wrongShard, session, outside]) assert.ok(existsSync(file), file);
+  await pruneDiskCaches(root, 4096);
+  assert.ok(!existsSync(pixel));
+  for (const file of [temp, oldAsset, hot, recentAsset, wrongShard, session, outside]) assert.ok(existsSync(file), file);
 });

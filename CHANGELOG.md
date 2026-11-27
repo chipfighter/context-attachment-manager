@@ -2,13 +2,15 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [0.13.2] - 2026-11-26
+## [0.13.2] - Unreleased
 
-Codex and Claude Code do a better job sharing the local proxy when several sessions start at once.
+Long image-heavy sessions use less memory, and Codex and Claude Code can share the local proxy when several sessions start at once.
 
 ### Fixed
 
 - **Duplicate proxy starts.** If another session has just started the proxy, a session waiting to start it checks again and can reuse it. The installer still switches to the intended version when it needs to. Thanks to [@TeapoyY](https://github.com/TeapoyY) for the fix ([#22](https://github.com/chipfighter/context-attachment-manager/pull/22)).
+- **Memory use in long sessions.** The plugin can look up earlier images and Claude PDFs in their original conversation records. Switching between large conversations keeps less attachment data in memory.
+- **Disk use.** The plugin trims rebuildable image fingerprints, rotates diagnostic logs, and removes temporary backups after a successful install or recovery. Stored originals used by platforms without a panel stay available by image ID.
 - **Slow process checks.** If the system takes too long to report which apps are open, the check times out and leaves the proxy running. Checks no longer pile up.
 
 ### After updating
@@ -23,6 +25,7 @@ Codex and Claude Code do a better job sharing the local proxy when several sessi
 <summary>Technical details</summary>
 
 - The engine supervisor checks health again under the startup lock and applies the existing build and version policy. Client process checks run one at a time with a 10-second timeout.
+- Parsed histories and rebuildable media share an estimated per-process cache budget. The proxy keeps compact request statistics during a streaming reply.
 - The HTTP proxy test suites use separate loopback port ranges to avoid collisions with each other and with ephemeral ports.
 
 </details>

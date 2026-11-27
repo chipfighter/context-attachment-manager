@@ -2,11 +2,8 @@ import { lstatSync, utimesSync, type Stats } from "node:fs";
 import { lstat, readdir, realpath, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { pixelCacheDirOf } from "./paths.ts";
-import { PLATFORM_NAME } from "./routes.ts";
 
 export const PIXEL_CACHE_BUDGET_BYTES = 64 * 1024 ** 2;
-export const IMAGE_CACHE_BUDGET_BYTES = 512 * 1024 ** 2;
-export const MAX_CACHED_IMAGE_BYTES = 64 * 1024 ** 2;
 export const CONTENT_DIGEST = /^[0-9a-f]{64}$/;
 
 // Explicit recency works even on filesystems that do not update access times.
@@ -76,14 +73,11 @@ async function trim(folders: CacheFolder[], budget: number): Promise<void> {
 }
 
 // Only the long-lived proxy schedules this sweep. It is shared across the panel and platform processes via disk.
-export async function pruneDiskCaches(root: string, limits = { pixels: PIXEL_CACHE_BUDGET_BYTES, images: IMAGE_CACHE_BUDGET_BYTES }): Promise<void> {
+export async function pruneDiskCaches(root: string, pixelBudget = PIXEL_CACHE_BUDGET_BYTES): Promise<void> {
   try { root = await realpath(root); } catch { return; }
   if ((await directories(root, /^cache$/)).includes("cache")) {
     const pixels = pixelCacheDirOf(root);
     const shards = await directories(pixels, /^[a-f0-9]{2}$/);
-    await trim(shards.map(shard => ({ path: join(pixels, shard), digestPrefix: shard })), limits.pixels);
+    await trim(shards.map(shard => ({ path: join(pixels, shard), digestPrefix: shard })), pixelBudget);
   }
-  const platforms = join(root, "platforms");
-  const names = await directories(platforms, PLATFORM_NAME);
-  await trim(names.map(name => ({ path: join(platforms, name, "images") })), limits.images);
 }

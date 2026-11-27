@@ -13,7 +13,7 @@ import { join, toNamespacedPath } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { zstdCompressSync } from "node:zlib";
-import { buildIndex, forkOrigin, hasRollout, loadThreadIndex, readThreadHistory, spawnParent, threadStartedAt, threadsStartedSince } from "../../plugin/src/adapters/codex/thread-index.ts";
+import { buildIndex, forkOrigin, imageData, hasRollout, loadThreadIndex, readThreadHistory, spawnParent, threadStartedAt, threadsStartedSince } from "../../plugin/src/adapters/codex/thread-index.ts";
 import { clearCaches } from "../../plugin/src/core/memory.ts";
 import { setPixelCache } from "../../plugin/src/core/pixels.ts";
 import { startThread, todayFolder } from "./testfixtures.ts";
@@ -286,4 +286,24 @@ test("a rollout whose first line is not written yet is read again later: who sta
   assert.equal(spawnParent(sessionsDir, CHILD), PARENT);
   assert.deepEqual(forkOrigin(sessionsDir, FORK), { parent: PARENT, at: "2026-10-13T10:00:00Z" });
   assert.equal(threadStartedAt(sessionsDir, CHILD), "2026-10-13T10:00:00Z");
+});
+
+test("large rollout images survive cache eviction and archival, and changed bytes never reuse an id", (t) => {
+  const { dir, day } = sessions();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(day, `rollout-2026-09-24T10-00-00-${THREAD}.jsonl`);
+  const bytes = Buffer.concat([red, Buffer.alloc(300_000)]);
+  const body = upload("large", "t1", "large.png", bytes);
+  writeFileSync(path, body);
+  const index = loadThreadIndex(dir, THREAD);
+  clearCaches();
+  writeFileSync(path + ".zst", zstdCompressSync(Buffer.from(body)));
+  rmSync(path);
+  for (const known of [index, loadThreadIndex(dir, THREAD)]) {
+    assert.equal(known.images[0].id, "IMG-001");
+    assert.equal(imageData(known.items!, known.images[0]), bytes.toString("base64"));
+  }
+  bytes[bytes.length - 1] = 1;
+  writeFileSync(path, upload("large", "t1", "large.png", bytes));
+  assert.equal(imageData(index.items!, index.images[0]), null);
 });
