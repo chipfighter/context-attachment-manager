@@ -3,12 +3,13 @@
 // sent in its own turn only), the session a request belongs to, the model's fetch tool, the registry and routes.
 // Input: synthetic requests in a temporary data folder. Output: test results.
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { formatOf, rewritePlatformRequest, sessionOfRequest } from "../../plugin/src/adapters/protocols/any.ts";
 import { workbuddy } from "../../plugin/src/adapters/workbuddy/platform.ts";
+import { pruneDiskCaches } from "../../plugin/src/core/disk-cache.ts";
 import { latestSession } from "../../plugin/src/core/request-index.ts";
 import { readRoute, registerRoute } from "../../plugin/src/core/routes.ts";
 import { corePlatformOf, isPlatform } from "../../plugin/src/platforms.ts";
@@ -95,6 +96,44 @@ test("the fetch tool returns the image by id from the session sent last", () => 
   assert.ok(/^\[Image IMG-001 fetched original/.test(result.content[0].text), "each after the line naming it, so the next request knows it as a copy");
   assert.ok(result.content.some((part: Json) => part.type === "text" && /IMG-009/.test(part.text)), "an unknown id is said so");
   assert.throws(() => callPlatformTool("opencode", "cam_view_image", { ids: ["IMG-001"] }, data), "another platform has no session there");
+});
+
+test("disk cleanup preserves the only fetchable image and its id", async (t) => {
+  const data = root();
+  t.after(() => rmSync(data, { recursive: true, force: true }));
+  send("workbuddy", "/v2/chat/completions", chat(2), data);
+  const fetchFirst = () => callPlatformTool("workbuddy", "cam_view_image", { ids: ["IMG-001"], lang: "en" }, data);
+  assert.equal(fetchFirst().content[1].data, red);
+  await pruneDiskCaches(data, 0);
+  assert.equal(fetchFirst().content[1].data, red);
+  const again = send("workbuddy", "/v2/chat/completions", chat(2), data);
+  assert.equal(again.report.replaced[0].id, "IMG-001");
+  assert.equal(fetchFirst().content[1].data, red);
+});
+
+test("the engine leaves original images in a request when disk caching fails", (t) => {
+  const data = root();
+  t.after(() => rmSync(data, { recursive: true, force: true }));
+  const platform = join(data, "platforms", "workbuddy");
+  mkdirSync(platform, { recursive: true });
+  writeFileSync(join(platform, "images"), "synthetic write failure");
+  const original = chat(2);
+  const result = send("workbuddy", "/v2/chat/completions", original, data);
+  assert.deepEqual(result.json, original);
+  assert.deepEqual(result.report.replaced, []);
+});
+
+test("the engine keeps original images if the fetch tool cannot resolve their session or ids", (t) => {
+  for (const failure of ["sessions", "latest.json"]) {
+    const data = root();
+    t.after(() => rmSync(data, { recursive: true, force: true }));
+    const platform = join(data, "platforms", "workbuddy");
+    mkdirSync(platform, { recursive: true });
+    const blocker = join(platform, failure);
+    if (failure === "sessions") writeFileSync(blocker, "");
+    else mkdirSync(blocker);
+    assert.deepEqual(send("workbuddy", "/v2/chat/completions", chat(2), data).json, chat(2));
+  }
 });
 
 test("a request without tools (a side request) does not move the session a fetch is about", () => {
