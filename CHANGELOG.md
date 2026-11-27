@@ -2,23 +2,27 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
-## [0.13.2] - Unreleased
+## [0.13.2] - 2026-11-27
 
 Long image-heavy sessions use less memory, and Codex and Claude Code can share the local proxy when several sessions start at once.
 
+Thanks to [@TeapoyY](https://github.com/TeapoyY) for reporting the problems, contributing the startup and cache fixes, and adding regression tests in [PR #22](https://github.com/chipfighter/context-attachment-manager/pull/22).
+
 ### Fixed
 
-- **Duplicate proxy starts.** If another session has just started the proxy, a session waiting to start it checks again and can reuse it. The installer still switches to the intended version when it needs to. Thanks to [@TeapoyY](https://github.com/TeapoyY) for the fix ([#22](https://github.com/chipfighter/context-attachment-manager/pull/22)).
+- **Duplicate proxy starts.** If another session has just started the proxy, a session waiting to start it checks again and can reuse it. The installer still switches to the intended version when it needs to.
 - **Memory use in long sessions.** The plugin can look up earlier images and Claude PDFs in their original conversation records. Switching between large conversations keeps less attachment data in memory.
 - **Disk use.** The plugin trims rebuildable image fingerprints, rotates diagnostic logs, and removes temporary backups after a successful install or recovery. Stored originals used by platforms without a panel stay available by image ID.
 - **Slow process checks.** If the system takes too long to report which apps are open, the check times out and leaves the proxy running. Checks no longer pile up.
 
 ### After updating
 
+- If you installed the earlier 0.13.2 build before November 27, follow the [manual update steps](https://github.com/chipfighter/context-attachment-manager/blob/v0.13.2/INSTALL.md#update) to get the memory fixes. Both builds use the same version number.
 - If you have version 0.13 or later from GitHub, the plugin updates automatically. Restart Codex or open a new Claude Code session to use the update. From an earlier version, [update by hand once](https://github.com/chipfighter/context-attachment-manager/blob/v0.13.2/INSTALL.md#update).
 
 ### How we tested
 
+- On Windows we compared memory use in long image-heavy sessions and checked that every image could still be fetched by its original ID with identical contents.
 - The release checks cover startup, installation, upgrades, and removal on Windows, macOS, and Linux.
 
 <details>
