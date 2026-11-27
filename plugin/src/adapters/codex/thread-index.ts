@@ -59,7 +59,7 @@ function parseRecord(line: Buffer, offset: number, file: string, cache: FileCach
   try { record = JSON.parse(line.toString("utf8")); } catch { return; }
   if (!record || typeof record !== "object") return;
   let retained = line.length;
-  if (line.length >= 4096 && record.payload) {
+  if (line.length >= 4096 && record.payload && typeof record.payload === "object") {
     const length = line.length;
     const deferred: { path: string[]; digest?: ReturnType<typeof imageDigest>; pixels?: string | null }[] = [];
     function visit(value: Json, path: string[]): void {

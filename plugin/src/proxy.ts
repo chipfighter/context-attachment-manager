@@ -409,7 +409,10 @@ async function main(): Promise<void> {
       if (finished) return;
       finished = true;
       try {
-        if (resolveSizes && claudeSession) imageSizes = resolveSizes(loadClaudeIndex(claudeSession, claudeHome(), stableIdTimes(claudeSelectionDirOf())));
+        if (resolveSizes && claudeSession) {
+          try { imageSizes = resolveSizes(loadClaudeIndex(claudeSession, claudeHome(), stableIdTimes(claudeSelectionDirOf()))); }
+          catch { /* A missing transcript only loses the per-image breakdown. */ }
+        }
         const entry = { at: new Date(started).toISOString(), id, transport: "http", method: req.method, path, ...(upstream === OPENAI_API_HOST ? { upstream } : {}), status, requestBytes, decodedBytes, contentEncoding: req.headers["content-encoding"] ?? null, responseBytes, ms: Date.now() - started, ...identity, ...claudeFields, ...coreFields, ...details, ...extra, error: error ?? null };
         log(entry);
         // Image keys go to the per-thread statistics only, not to the log.
