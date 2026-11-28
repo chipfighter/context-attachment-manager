@@ -2,6 +2,33 @@
 
 When a version is released, its section here becomes the GitHub release notes.
 
+## [0.13.3] - 2026-11-28
+
+On Windows, the local proxy starts in the background without opening a black `node.exe` window.
+
+Thanks to [@xugo42](https://github.com/xugo42) for reporting [#24](https://github.com/chipfighter/context-attachment-manager/issues/24) and tracing it to the way the proxy is started.
+
+### Fixed
+
+- **A black window on Windows.** On some Windows computers (reported on Windows 10), starting the local proxy opened a black `node.exe` window showing its startup log. Closing the window stopped the proxy, and the next start opened the window again. The proxy now starts without any console window. It still keeps running when a single Codex task or Claude Code session ends.
+
+### After updating
+
+- If you have version 0.13 or later from GitHub, the plugin updates itself within about a day. Restart Codex or open a new Claude Code session to use the update. The new version replaces the proxy that the old one started, and the old proxy's window closes. From an earlier version, [update by hand once](https://github.com/chipfighter/context-attachment-manager/blob/v0.13.3/INSTALL.md#update).
+
+### How we tested
+
+- On Windows 11 we started the proxy the way the plugin does, before and after the change. Before, it had a console (hidden on that computer). After, it has none, answers its health check and keeps running, also when a Codex thread starts it. We have no Windows 10 computer to test on. The proxy no longer has a console, so no window can open for it.
+- On Windows, the unit tests now check that the proxy has no console. The release checks cover startup, installation, upgrades and removal on Windows, macOS and Linux.
+
+<details>
+<summary>Technical details</summary>
+
+- `startOutsideJob` (`engine.ts`) passes `CreateFlags = 8` (`Detached_Process`) along with `ShowWindow = 0` in `Win32_ProcessStartup`, as the detached child fallback already did. `ShowWindow = 0` alone left a visible console on the reporter's Windows 10 19045. WMI rejects `CREATE_NO_WINDOW` with return value 21. The engine's parent is still `WmiPrvSE.exe`, so it stays outside the plugin service's job.
+- Processes the engine starts already use `windowsHide`. The `where codex` lookup in `findCodexCli` now uses it too.
+
+</details>
+
 ## [0.13.2] - 2026-11-27
 
 Long image-heavy sessions use less memory, and Codex and Claude Code can share the local proxy when several sessions start at once.
