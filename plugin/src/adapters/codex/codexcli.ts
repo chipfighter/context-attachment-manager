@@ -29,7 +29,7 @@ export function findCodexCli(env: NodeJS.ProcessEnv = process.env): string | nul
   if (found) return found;
   try {
     const windows = process.platform === "win32";
-    const onPath = execFileSync(windows ? "where" : "which", ["codex"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const onPath = execFileSync(windows ? "where" : "which", ["codex"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
     // On Windows, npm also leaves an extensionless shell script next to its codex.cmd.
     return onPath.split(/\r?\n/).map((line) => line.trim()).find((line) => line && (!windows || /\.(exe|cmd)$/i.test(line))) ?? null;
   } catch {
