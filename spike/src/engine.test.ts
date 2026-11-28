@@ -73,6 +73,12 @@ test("ensure starts one engine; a second start on the same port leaves it alone"
   t.after(() => { try { process.kill(first.health!.pid); } catch { /* already gone */ } });
   // v0.12: how it was started, for the plugin service's log.
   assert.equal(first.start?.via, process.platform === "win32" && first.start?.wmiError === undefined ? "wmi" : "child");
+  // v0.13.3: started through WMI, it has no console, so no console host to show a window (issue #24: ShowWindow = 0
+  // alone left a visible node.exe console on Windows 10). A process with a console has a conhost.exe child.
+  if (first.start?.via === "wmi") {
+    const children = await new Promise<string>((resolve) => execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Get-CimInstance Win32_Process -Filter 'ParentProcessId=${first.health!.pid}' | ForEach-Object { $_.Name }`], { windowsHide: true }, (_error, stdout) => resolve(stdout)));
+    assert.doesNotMatch(children, /conhost\.exe/i);
+  }
   // v0.6: from now on new tasks and sessions have automatic selection on by default.
   assert.notEqual(autoDefaultSince(join(data, "selection")), null);
   assert.notEqual(autoDefaultSince(join(data, "claude", "selection")), null);

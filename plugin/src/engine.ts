@@ -174,13 +174,17 @@ let lastWmiStart: { ms: number; error?: string } | null = null;
 
 // The new process gets this process's environment explicitly (WMI would give it the user's default one), on stdin, not
 // on a command line. Resolves with its process id, or null when it could not be started this way.
+// v0.13.3: and no console at all (DETACHED_PROCESS, as a detached child gets): ShowWindow = 0 alone left a visible
+// node.exe console on Windows 10 (issue #24); WMI refuses CREATE_NO_WINDOW. What the engine starts itself is
+// started with windowsHide, so it opens no console of its own either.
+const WMI_DETACHED_PROCESS = 8;
 export function startOutsideJob(commandLine: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<number | null> {
   const quote = (text: string) => `'${text.replaceAll("'", "''")}'`;
   const vars = Object.entries(env).filter(([, value]) => value !== undefined).map(([name, value]) => `${name}=${value}`);
   const script = [
     "$ErrorActionPreference = 'Stop'",
     `$vars = ConvertFrom-Json ${quote(JSON.stringify(vars))}`,
-    "$startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0; EnvironmentVariables = [string[]]$vars }",
+    `$startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0; CreateFlags = [uint32]${WMI_DETACHED_PROCESS}; EnvironmentVariables = [string[]]$vars }`,
     `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = ${quote(windowsCommandLine(commandLine))}; CurrentDirectory = ${quote(cwd)}; ProcessStartupInformation = $startup }`,
     "Write-Output \"started $($r.ReturnValue) $($r.ProcessId)\"",
     "",
